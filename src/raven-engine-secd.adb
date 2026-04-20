@@ -1,0 +1,853 @@
+with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Containers.Indefinite_Vectors;
+with Ada.Strings.Equal_Case_Insensitive;
+with Ada.Strings.Hash_Case_Insensitive;
+with Ada.Text_IO;
+
+with Raven.Engine.SECD.Translator;
+with Raven.Instructions;
+with Raven.Objects;
+with Raven.Translator;
+
+package body Raven.Engine.SECD is
+
+   use Raven.Instructions;
+
+   type Stack_Name is (S, E, C, D);
+
+   type Stacks is array (Stack_Name) of Object;
+
+   type Register_Index is range 1 .. 4;
+
+   type Registers is array (Register_Index) of Object;
+
+   type Foreign_Function_Record (Name_Length : Natural) is
+      record
+         Handler   : Foreign_Function_Handler;
+         Arg_Count : Natural;
+         Name      : String (1 .. Name_Length);
+      end record;
+
+   package Foreign_Vectors is
+     new Ada.Containers.Indefinite_Vectors
+       (Raven.Objects.Foreign_Function_Id, Foreign_Function_Record);
+
+   type Macro_Entry is record
+      Params     : Object;
+      Macro_Body : Object;
+   end record;
+
+   package Macro_Maps is
+     new Ada.Containers.Indefinite_Hashed_Maps
+       (Key_Type        => String,
+        Element_Type    => Macro_Entry,
+        Hash            => Ada.Strings.Hash_Case_Insensitive,
+        Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive);
+
+   type Instance is
+     new Raven.Target.Abstraction with
+      record
+         VM         : Raven_VM;
+         St         : Stacks;
+         Rs         : Registers;
+         Syms       : Raven.Symbols.Reference;
+         Memory     : Raven.Memory.Reference;
+         Env        : Raven.Environment.Reference;
+         Foreign    : Foreign_Vectors.Vector;
+         Macros     : Macro_Maps.Map;
+         Trace      : Boolean := False;
+      end record;
+
+   overriding procedure Translate
+     (This   : in out Instance);
+
+   overriding procedure Execute
+     (This   : in out Instance);
+
+   overriding function Append_Lists
+     (This  : in out Instance;
+      List1 : Object;
+      List2 : Object)
+      return Object;
+
+   overriding procedure Bind_Foreign_Function
+     (This           : in out Instance;
+      Name           : String;
+      Handler        : Foreign_Function_Handler;
+      Argument_Count : Natural);
+
+   overriding function Is_Empty
+     (This : Instance)
+      return Boolean
+   is (This.St (S) = Objects.Nil);
+
+   overriding function Car
+     (This : Instance;
+      Cons : Object)
+      return Object
+   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Car);
+
+   overriding function Cdr
+     (This : Instance;
+      Cons : Object)
+      return Object
+   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Cdr);
+
+   overriding procedure Push
+     (This  : in out Instance;
+      Value : Object);
+
+   overriding procedure Pop
+     (This  : in out Instance;
+      Value :    out Object);
+
+   overriding function Top
+     (This : Instance)
+      return Object
+   is (This.Memory.Get (Objects.Get_Address (This.St (S))).Car);
+
+   overriding procedure Cons (This : in out Instance);
+
+   overriding function To_Symbol_Id
+     (This  : in out Instance;
+      Name  : String)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.To_Symbol_Id (Name));
+
+   overriding function To_String
+     (This  : Instance;
+      Id    : Raven.Objects.Symbol_Id)
+      return String
+   is (This.Syms.To_String (Id));
+
+   overriding procedure Report (This : Instance);
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object));
+
+   overriding procedure Set_Parameter
+     (This  : in out Instance;
+      Name  : String;
+      Value : String);
+
+   overriding procedure Swap
+     (This : in out Instance);
+
+   overriding procedure Define_Macro
+     (This        : in out Instance;
+      Name        : String;
+      Params      : Object;
+      Macro_Body  : Object);
+
+   overriding function Is_Macro
+     (This : Instance;
+      Name : String)
+      return Boolean;
+
+   overriding procedure Get_Macro
+     (This        : Instance;
+      Name        : String;
+      Params      : out Object;
+      Macro_Body  : out Object);
+
+   overriding function To_Foreign_Value
+     (This  : Instance;
+      Value : Object)
+      return Foreign_Value_Instance'Class
+   is (This.Memory.To_Foreign_Value (Value));
+
+   function Is_Empty
+     (This : in out Instance'Class;
+      Name : Stack_Name)
+      return Boolean
+   is (This.St (Name) = Raven.Objects.Nil);
+
+   function Pop (This : in out Instance'Class; Name : Stack_Name) return Object
+     with Pre => not Is_Empty (This, Name);
+
+   procedure Push (This : in out Instance'Class; Name : Stack_Name; Value : Object)
+     with Post => not Is_Empty (This, Name);
+
+   procedure Cons (This : in out Instance'Class; Name : Stack_Name);
+
+   function Rplaca
+     (This    : Instance'Class;
+      X       : Object;
+      New_Car : Object)
+      return Object;
+
+   ------------------
+   -- Append_Lists --
+   ------------------
+
+   overriding function Append_Lists
+     (This  : in out Instance;
+      List1 : Object;
+      List2 : Object)
+      return Object
+   is
+      It    : Object  := List1;
+      Acc   : Object  := List2;
+      Count : Natural := 0;
+   begin
+      while It /= Objects.Nil loop
+         This.Rs (1) := It;
+         This.Push (S, This.Car (It));
+         It := This.Cdr (This.Rs (1));
+         Count := Count + 1;
+      end loop;
+      for I in 1 .. Count loop
+         declare
+            Element : constant Object := This.Pop (S);
+         begin
+            Acc := This.Memory.Cons (Element, Acc);
+         end;
+      end loop;
+      return Acc;
+   end Append_Lists;
+
+   ---------------------------
+   -- Bind_Foreign_Function --
+   ---------------------------
+
+   overriding procedure Bind_Foreign_Function
+     (This           : in out Instance;
+      Name           : String;
+      Handler        : Foreign_Function_Handler;
+      Argument_Count : Natural)
+   is
+   begin
+      This.Foreign.Append
+        (Foreign_Function_Record'
+           (Name'Length, Handler, Argument_Count, Name));
+      This.Env.Insert
+        (Name, Raven.Objects.To_Object (This.Foreign.Last_Index));
+      Ada.Text_IO.Put_Line
+        ("foreign function '" & Name & "' bound to"
+         & This.Foreign.Last_Index'Image);
+   end Bind_Foreign_Function;
+
+   ----------
+   -- Cons --
+   ----------
+
+   procedure Cons (This : in out Instance'Class; Name : Stack_Name) is
+      Cdr : constant Object := This.Pop (Name);
+      Car : constant Object := This.Pop (Name);
+   begin
+      This.Push (Name, This.Memory.Cons (Car, Cdr));
+   end Cons;
+
+   ----------
+   -- Cons --
+   ----------
+
+   overriding procedure Cons (This : in out Instance) is
+   begin
+      This.Cons (S);
+   end Cons;
+
+   ------------
+   -- Create --
+   ------------
+
+   function Create
+     (VM      : Raven_VM;
+      Memory  : Raven.Memory.Reference;
+      Env     : Raven.Environment.Reference;
+      Symbols : not null access Raven.Symbols.Abstraction'Class)
+      return Raven.Target.Reference
+   is
+   begin
+      return This : constant Raven.Target.Reference := new Instance'
+        (VM      => VM,
+         St      => [others => Raven.Objects.Nil],
+         Rs      => [others => Raven.Objects.Nil],
+         Syms    => Symbols,
+         Memory  => Memory,
+         Env     => Env,
+         Foreign => <>,
+         Macros  => <>,
+         Trace   => False)
+      do
+         Memory.Add_Container (This);
+      end return;
+   end Create;
+
+   -------------
+   -- Execute --
+   -------------
+
+   overriding procedure Execute
+     (This   : in out Instance)
+   is
+      use Raven.Objects;
+
+      function Nth
+        (L     : Object;
+         Index : Natural)
+         return Object;
+
+      function Nth_Cdr
+        (L     : Object;
+         Index : Natural)
+         return Object;
+
+      function Replace_Nth
+        (L         : Object;
+         Index     : Natural;
+         New_Value : Object)
+        return Object;
+
+      ---------
+      -- Nth --
+      ---------
+
+      function Nth
+        (L     : Object;
+         Index : Natural)
+         return Object
+      is
+         It : Object := L;
+      begin
+         for I in 1 .. Index loop
+            It := This.Cdr (It);
+            if It = Objects.Nil then
+               return It;
+            end if;
+         end loop;
+         return This.Car (It);
+      end Nth;
+
+      -------------
+      -- Nth_Cdr --
+      -------------
+
+      function Nth_Cdr
+        (L     : Object;
+         Index : Natural)
+         return Object
+      is
+         It : Object := L;
+      begin
+         for I in 1 .. Index loop
+            It := This.Cdr (It);
+            if It = Objects.Nil then
+               return It;
+            end if;
+         end loop;
+         return It;
+      end Nth_Cdr;
+
+      -----------------
+      -- Replace_Nth --
+      -----------------
+
+      function Replace_Nth
+        (L         : Object;
+         Index     : Natural;
+         New_Value : Object)
+        return Object
+      is
+         It : Object := L;
+      begin
+         for I in 1 .. Index loop
+            It := This.Cdr (It);
+            if It = Objects.Nil then
+               return It;
+            end if;
+         end loop;
+         return This.Rplaca (It, New_Value);
+      end Replace_Nth;
+
+   begin
+      This.St (C) := This.Pop (S);
+
+      if This.Trace then
+         Ada.Text_IO.Put_Line
+           ("executing: " & This.Show (This.St (C)));
+      end if;
+
+      loop
+
+         if This.Trace then
+            for I in This.St'Range loop
+               Ada.Text_IO.Put_Line
+                 (I'Image & ": " & This.Show (This.St (I)));
+            end loop;
+            if not Is_Instruction (This.Car (This.St (C))) then
+               raise Program_Error with
+                 "not an instruction: "
+                 & This.Show (This.Car (This.St (C)));
+            end if;
+            Ada.Text_IO.Put_Line
+              ("next: " & To_Instruction (This.Car (This.St (C)))'Image);
+         end if;
+
+
+         declare
+            C_Top : constant Object := This.Pop (C);
+            Next  : constant Instruction := To_Instruction (C_Top);
+         begin
+
+            case Next is
+               when AP =>
+                  if Is_Foreign_Function (This.Top) then
+                     declare
+                        FF_Id : constant Foreign_Function_Id :=
+                                  To_Foreign_Function_Id
+                                    (This.Pop);
+                        Args  : Object := This.Pop;
+                        FF    : constant Foreign_Function_Record :=
+                                  This.Foreign.Element (FF_Id);
+                     begin
+                        for I in 1 .. FF.Arg_Count loop
+                           if Args = Objects.Nil then
+                              This.VM.Set_Slot_Nil (Slot_Index (I));
+                           else
+                              This.VM.Set_Slot
+                                (Slot_Index (I),
+                                 This.Car (Args));
+                              Args := This.Cdr (Args);
+                           end if;
+                        end loop;
+                        FF.Handler (This.VM);
+                        This.Push (This.VM.Get_Slot (1));
+                     end;
+                  else
+                     This.Push (D, This.St (C));
+                     This.Push (D, This.St (E));
+                     This.Rs (1) := This.Pop (S);
+
+                     if not Objects.Is_Pair (This.Rs (1)) then
+                        raise Program_Error with
+                          "cannot call: "
+                          & This.Show (This.Rs (1));
+                     end if;
+
+                     This.Rs (2) := This.Pop (S);
+                     This.Push (D, This.St (S));
+                     This.St (E) :=
+                       This.Memory.Cons
+                         (This.Rs (2), This.Cdr (This.Rs (1)));
+                     This.St (C) :=
+                       This.Car (This.Rs (1));
+                     This.St (S) := Objects.Nil;
+                  end if;
+               when APPEND =>
+                  declare
+                     List2  : Object  := This.Pop;
+                     List1  : Object  := This.Pop;
+                     Count  : Natural := 0;
+                  begin
+                     while List1 /= Objects.Nil loop
+                        This.Rs (1) := List1;
+                        This.Push (This.Car (List1));
+                        List1 := This.Cdr (This.Rs (1));
+                        Count := Count + 1;
+                     end loop;
+                     for I in 1 .. Count loop
+                        declare
+                           Element : constant Object := This.Pop;
+                        begin
+                           List2 := This.Memory.Cons (Element, List2);
+                        end;
+                     end loop;
+                     This.Push (List2);
+                  end;
+
+               when ATOM =>
+                  This.Push
+                    (Raven.Objects.To_Object
+                       (Raven.Objects.Is_Atom
+                            (This.Pop)));
+
+               when CAR =>
+                  declare
+                     X : constant Object := This.Pop;
+                  begin
+                     if not Is_Pair (X) then
+                        raise Constraint_Error with
+                          "car applied to non-pair: " & This.Show (X);
+                     end if;
+                     This.Push (This.Car (X));
+                  end;
+               when CDR =>
+                  declare
+                     X : constant Object := This.Pop;
+                  begin
+                     This.Push (This.Cdr (X));
+                  end;
+               when CONS =>
+                  declare
+                     X : constant Object := This.Pop;
+                     Y : constant Object := This.Pop;
+                  begin
+                     This.Push (This.Memory.Cons (X, Y));
+                  end;
+               when DFN =>
+                  declare
+                     Sym   : constant Object := This.Pop (C);
+                     Name  : constant String :=
+                               This.To_String
+                                 (Objects.To_Symbol (Sym));
+                     Value : constant Object :=
+                               This.Pop;
+                  begin
+                     This.Env.Insert (Name, Value);
+                     This.Push (Sym);
+                  end;
+               when DROP =>
+                  declare
+                     X : constant Object := This.Pop (S);
+                  begin
+                     pragma Unreferenced (X);
+                  end;
+               when DUM =>
+                  This.Push (E, Objects.Pending);
+               when EQ =>
+                  declare
+                     Y : constant Object := This.Pop;
+                     X : constant Object := This.Pop;
+                  begin
+                     This.Push (Objects.To_Object (X = Y));
+                  end;
+               when JOIN =>
+                  This.St (C) := This.Pop (D);
+               when LD =>
+                  declare
+                     Ref : constant Object := This.Pop (C);
+                  begin
+                     if Objects.Is_Symbol (Ref) then
+                        declare
+                           Name  : constant String :=
+                                     This.To_String
+                                       (Objects.To_Symbol (Ref));
+                           Value : constant Object :=
+                                     This.Env.Lookup
+                                       (Name);
+                        begin
+                           if Value = Objects.Undefined then
+                              raise Raven.Target.Undefined_Symbol with Name;
+                           end if;
+                           This.Push (Value);
+                        end;
+                     else
+                        declare
+                           I     : constant Natural :=
+                                     Objects.To_Integer
+                                       (This.Car (Ref));
+                           J     : constant Integer :=
+                                     Objects.To_Integer
+                                       (This.Cdr (Ref));
+
+                        begin
+                           if J < 0 then
+                              This.Push
+                                (Nth_Cdr
+                                   (Nth (This.St (E), I), abs J - 1));
+                           else
+                              This.Push (Nth (Nth (This.St (E), I), J));
+                           end if;
+                        end;
+                     end if;
+                  end;
+               when LDC =>
+                  This.Push (S, This.Pop (C));
+               when LDF =>
+                  declare
+                     CC : constant Object := This.Pop (C);
+                  begin
+                     This.Push (S, This.Memory.Cons (CC, This.St (E)));
+                  end;
+               when OP_ADD =>
+                  declare
+                     Y : constant Integer := To_Integer (This.Pop);
+                     X : constant Integer := To_Integer (This.Pop);
+                  begin
+                     This.Push (To_Object (X + Y));
+                  end;
+               when OP_LEQ =>
+                  declare
+                     Y : constant Integer := To_Integer (This.Pop);
+                     X : constant Integer := To_Integer (This.Pop);
+                  begin
+                     This.Push (To_Object (X <= Y));
+                  end;
+               when PAIR =>
+                  This.Push
+                    (Raven.Objects.To_Object
+                       (Raven.Objects.Is_Pair
+                            (This.Pop)));
+               when RAP =>
+                  declare
+                     Omega : constant Object := This.Pop (E);
+                  begin
+                     pragma Assert (Omega = Objects.Pending);
+                  end;
+
+                  This.Push (D, This.St (C));
+                  This.Push (D, This.St (E));
+                  This.Rs (1) := This.Pop (S);
+                  This.Rs (2) := This.Pop (S);
+                  This.St (E) :=
+                    This.Rplaca (This.Cdr (This.Rs (1)), This.Rs (2));
+                  This.St (C) := This.Car (This.Rs (1));
+                  This.St (S) := Objects.Nil;
+
+               when RTN =>
+                  This.Rs (1) := This.Pop;
+                  pragma Assert (This.Is_Empty);
+                  This.St (S) := This.Pop (D);
+                  This.St (E) := This.Pop (D);
+                  This.St (C) := This.Pop (D);
+                  This.Push (This.Rs (1));
+               when SEL =>
+                  declare
+                     Cond : constant Boolean := Objects.Is_Truthy (This.Pop);
+                     T    : constant Object  := This.Pop (C);
+                     F    : constant Object  := This.Pop (C);
+                  begin
+                     This.Rs (1) := (if Cond then T else F);
+                     This.Push (D, This.St (C));
+                     This.St (C) := This.Rs (1);
+                  end;
+               when ST =>
+                  declare
+                     Ref : constant Object := This.Pop (C);
+                     New_Value  : constant Object := This.Pop;
+                  begin
+                     if Objects.Is_Symbol (Ref) then
+                        declare
+                           Name       : constant String :=
+                                          This.To_String
+                                            (Objects.To_Symbol (Ref));
+                           Old_Value  : constant Object :=
+                                          This.Env.Lookup
+                                            (Name);
+                        begin
+                           if Old_Value = Objects.Undefined then
+                              raise Raven.Target.Undefined_Symbol with Name;
+                           end if;
+                           This.Env.Replace (Name, New_Value);
+                           This.Push (New_Value);
+                        end;
+                     else
+                        declare
+                           I     : constant Natural :=
+                                     Objects.To_Integer
+                                       (This.Car (Ref));
+                           J     : constant Integer :=
+                                     Objects.To_Integer
+                                       (This.Cdr (Ref));
+
+                        begin
+                           if J < 0 then
+                              raise Program_Error with
+                                "cannot store to a list argument";
+                           end if;
+                           This.Push
+                             (Replace_Nth
+                                (Nth (This.St (E), I), J, New_Value));
+                        end;
+                     end if;
+                  end;
+               when STOP =>
+                  exit;
+                  when others =>
+                  raise Constraint_Error with
+                    "unimplemented: " & Next'Image;
+            end case;
+         end;
+      end loop;
+   end Execute;
+
+   ----------
+   -- Mark --
+   ----------
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object))
+   is
+   begin
+      for Stack of This.St loop
+         Process (Stack);
+      end loop;
+      for R of This.Rs loop
+         Process (R);
+      end loop;
+      for Position in This.Macros.Iterate loop
+         declare
+            E : Macro_Entry := Macro_Maps.Element (Position);
+         begin
+            Process (E.Params);
+            Process (E.Macro_Body);
+            This.Macros.Replace_Element (Position, E);
+         end;
+      end loop;
+   end Mark;
+
+   ----------
+   -- Swap --
+   ----------
+
+   overriding procedure Swap (This : in out Instance) is
+   begin
+      This.Rs (3) := This.Pop (S);
+      This.Rs (4) := This.Pop (S);
+      This.Push (S, This.Rs (3));
+      This.Push (S, This.Rs (4));
+   end Swap;
+
+   ------------------
+   -- Define_Macro --
+   ------------------
+
+   overriding procedure Define_Macro
+     (This        : in out Instance;
+      Name        : String;
+      Params      : Object;
+      Macro_Body  : Object)
+   is
+   begin
+      This.Macros.Include (Name, Macro_Entry'(Params, Macro_Body));
+   end Define_Macro;
+
+   --------------
+   -- Is_Macro --
+   --------------
+
+   overriding function Is_Macro
+     (This : Instance;
+      Name : String)
+      return Boolean
+   is
+   begin
+      return This.Macros.Contains (Name);
+   end Is_Macro;
+
+   ---------------
+   -- Get_Macro --
+   ---------------
+
+   overriding procedure Get_Macro
+     (This        : Instance;
+      Name        : String;
+      Params      : out Object;
+      Macro_Body  : out Object)
+   is
+      E : constant Macro_Entry := This.Macros (Name);
+   begin
+      Params     := E.Params;
+      Macro_Body := E.Macro_Body;
+   end Get_Macro;
+
+   ---------
+   -- Pop --
+   ---------
+
+   function Pop (This : in out Instance'Class; Name : Stack_Name) return Object is
+      Stack : constant Raven.Memory.Cell_Type :=
+                This.Memory.Get (Objects.Get_Address (This.St (Name)));
+   begin
+      This.St (Name) := Stack.Cdr;
+      return Stack.Car;
+   end Pop;
+
+   ---------
+   -- Pop --
+   ---------
+
+   overriding procedure Pop
+     (This  : in out Instance;
+      Value :    out Object)
+   is
+   begin
+      Value := This.Pop (S);
+   end Pop;
+
+   ----------
+   -- Push --
+   ----------
+
+   procedure Push
+     (This  : in out Instance'Class;
+      Name  : Stack_Name;
+      Value : Object)
+   is
+   begin
+      This.St (Name) := This.Memory.Cons (Value, This.St (Name));
+   end Push;
+
+   ----------
+   -- Push --
+   ----------
+
+   overriding procedure Push
+     (This  : in out Instance;
+      Value : Object)
+   is
+   begin
+      This.Push (S, Value);
+   end Push;
+
+   ------------
+   -- Report --
+   ------------
+
+   overriding procedure Report (This : Instance) is
+   begin
+      This.Memory.Report;
+   end Report;
+
+   ------------
+   -- Rplaca --
+   ------------
+
+   function Rplaca
+     (This    : Instance'Class;
+      X       : Object;
+      New_Car : Object)
+      return Object
+   is
+      Address : constant Address_Type := Objects.Get_Address (X);
+      Cell    : Raven.Memory.Cell_Type :=
+                  This.Memory.Get (Address);
+   begin
+      pragma Assert (Cell.Car = Objects.Pending);
+      Cell.Car := New_Car;
+      This.Memory.Set (Address, Cell);
+      return X;
+   end Rplaca;
+
+   -------------------
+   -- Set_Parameter --
+   -------------------
+
+   overriding procedure Set_Parameter
+     (This  : in out Instance;
+      Name  : String;
+      Value : String)
+   is
+   begin
+      if Name = "trace-execution" then
+         This.Trace := Boolean'Value (Value);
+      end if;
+   end Set_Parameter;
+
+   ---------------
+   -- Translate --
+   ---------------
+
+   overriding procedure Translate
+     (This   : in out Instance)
+   is
+      Translator : Raven.Translator.Abstraction'Class :=
+                     Raven.Engine.SECD.Translator.Create;
+   begin
+      Translator.Translate (This'Unchecked_Access);
+   end Translate;
+
+end Raven.Engine.SECD;
