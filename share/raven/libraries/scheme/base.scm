@@ -86,18 +86,5 @@
 
 (define (newline) (write-char #\newline))
 
-(write (append '(1 2 3) '(4 5 6) '(7 8 9))) (newline)
-
-(write (append '(1 2 3) '(4 5 6)))
-(newline)
-(write (string->list "ABCDEFG"))
-(newline)
-(write (list->string (append (string->list "A") (string->list "B"))))
-(write (string-append "A" "B"))
-(newline)
-
-(begin (write-string (list->string (string->list  "loaded: (scheme base)")))
-       (newline))
-
 (define (sum-list xs) (if (null? xs) 0 (+ (car xs) (sum-list (cdr xs)))))
 (define sum (lambda xs (sum-list xs)))

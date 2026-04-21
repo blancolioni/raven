@@ -10,8 +10,7 @@
           (set! num-tests (+ 1 num-tests))
           (set! passed-tests (+ 1 passed-tests)))
         (begin
-          (write-string (string-append "FAIL  " name ": expected "))
-          (write-string (display expect))
+          (write-string "FAIL  ") (write-string name) (write-string ": expected ") (write-string (display expect))
           (write-string ", got ")
           (write-string (display expr))
           (newline)))
@@ -53,6 +52,10 @@
 (test "cdr-2" '(b c d) (cdr '((a) b c d)))
 (test "car-3" '1 (car '(1 . 2)))
 (test "cdr-3" '2 (cdr '(1 . 2)))
+(test "append-1" '(1 2 3 4 5 6) (append '(1 2 3) '(4 5 6)))
+(test "string-1" "Hello, world!" (string-append "Hello, " "world!"))
+(test "string-2" "abcde" (string-append "a" "b" "c" "d" "e"))
+(test "string-3" "" (string-append ""))
 
 (define x 33)
 (test "define" 33 x)
