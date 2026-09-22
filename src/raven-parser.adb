@@ -93,6 +93,13 @@ package body Raven.Parser is
                      Target.Push (Raven.Objects.If_Obj);
                   elsif Sym = "lambda" then
                      Target.Push (Raven.Objects.Lambda);
+                  elsif Sym = "quote" then
+
+                     --  The translator matches a quotation by object
+                     --  identity, so the written-out name has to reach
+                     --  it as the same object the reader's ' produces.
+
+                     Target.Push (Raven.Objects.Quote);
                   else
                      Target.Push
                        (Raven.Objects.To_Object
