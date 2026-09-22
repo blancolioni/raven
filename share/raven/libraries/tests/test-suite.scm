@@ -19,6 +19,16 @@
 (define (test-production expect expr)
   (test "production" expect expr))
 
+;;  Captured before anything else in the session allocates a string, so
+;;  that they are the first foreign values of the run.  Each one needs
+;;  its own id: if a later value reuses an earlier one's id, both names
+;;  end up denoting the same string.
+
+(define first-append  (string-append "first"  "-append"))
+(define second-append (string-append "second" "-append"))
+(define third-append  (string-append "third"  "-append"))
+(define fourth-append (string-append "fourth" "-append"))
+
 (test "nil is not truthy" #f (boolean? '()))
 (test "false is not truthy" #t (if #f #f #t))
 (test "true is truthy" #t (if #t #t #f))
@@ -55,6 +65,12 @@
 (test "string-1" "Hello, world!" (string-append "Hello, " "world!"))
 (test "string-2" "abcde" (string-append "a" "b" "c" "d" "e"))
 (test "string-3" "" (string-append ""))
+
+(test "first string of a session"  "first-append"  first-append)
+(test "second string of a session" "second-append" second-append)
+(test "third string of a session"  "third-append"  third-append)
+(test "fourth string of a session" "fourth-append" fourth-append)
+(test "distinct strings do not alias" #f (equal? first-append second-append))
 
 (define x 33)
 (test "define" 33 x)
