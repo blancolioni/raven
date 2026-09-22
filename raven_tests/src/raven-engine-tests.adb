@@ -29,9 +29,8 @@ package body Raven.Engine.Tests is
    -- Run_Tests --
    ---------------
 
-   procedure Run_Tests is
+   procedure Run_Tests (VM : Raven_VM) is
       use Raven.Objects;
-      VM     : Raven_VM := New_VM;
       Memory : constant Raven.Memory.Reference :=
                  Raven.Engine.Memory.Create
                    (1024);
@@ -46,7 +45,6 @@ package body Raven.Engine.Tests is
             To_Object (Integer'(1453)), 1453);
       Raven.Engine.SECD.Tests.Run_Tests (Target);
       Memory.Report;
-      Close_VM (VM);
    end Run_Tests;
 
    ----------
