@@ -142,7 +142,7 @@ package body Raven.Engine is
    is
       pragma Unreferenced (Argument_Count);
    begin
-      This.Env.Insert (Name, Value);
+      This.Env.Define (Name, Value);
    end Bind;
 
    -------------------------
