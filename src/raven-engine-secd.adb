@@ -59,19 +59,32 @@ package body Raven.Engine.SECD is
         Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive,
         "="             => Raven.Target."=");
 
+   --  The translators running on this instance, innermost last: a
+   --  macro expansion executes code, and that code can ask for another
+   --  form to be translated.  A translator is a collection root, and it
+   --  is one only while it runs, so the instance marks the ones it
+   --  currently owns rather than the memory keeping them for ever.
+
+   type Translator_Reference is
+     access all Raven.Translator.Abstraction'Class;
+
+   package Translator_Vectors is
+     new Ada.Containers.Vectors (Positive, Translator_Reference);
+
    type Instance is
      new Raven.Target.Abstraction with
       record
-         VM         : Raven_VM;
-         St         : Stacks;
-         Rs         : Registers;
-         Syms       : Raven.Symbols.Reference;
-         Memory     : Raven.Memory.Reference;
-         Env        : Raven.Environment.Reference;
-         Foreign    : Foreign_Vectors.Vector;
-         Macros     : Macro_Vectors.Vector;
-         Global     : Macro_Maps.Map;
-         Trace      : Boolean := False;
+         VM          : Raven_VM;
+         St          : Stacks;
+         Rs          : Registers;
+         Syms        : Raven.Symbols.Reference;
+         Memory      : Raven.Memory.Reference;
+         Env         : Raven.Environment.Reference;
+         Foreign     : Foreign_Vectors.Vector;
+         Macros      : Macro_Vectors.Vector;
+         Global      : Macro_Maps.Map;
+         Translators : Translator_Vectors.Vector;
+         Trace       : Boolean := False;
       end record;
 
    overriding procedure Translate
@@ -290,16 +303,17 @@ package body Raven.Engine.SECD is
    is
    begin
       return This : constant Raven.Target.Reference := new Instance'
-        (VM      => VM,
-         St      => [others => Raven.Objects.Nil],
-         Rs      => [others => Raven.Objects.Nil],
-         Syms    => Symbols,
-         Memory  => Memory,
-         Env     => Env,
-         Foreign => <>,
-         Macros  => <>,
-         Global  => <>,
-         Trace   => False)
+        (VM          => VM,
+         St          => [others => Raven.Objects.Nil],
+         Rs          => [others => Raven.Objects.Nil],
+         Syms        => Symbols,
+         Memory      => Memory,
+         Env         => Env,
+         Foreign     => <>,
+         Macros      => <>,
+         Global      => <>,
+         Translators => <>,
+         Trace       => False)
       do
          Memory.Add_Container (This);
       end return;
@@ -719,6 +733,9 @@ package body Raven.Engine.SECD is
             end if;
          end;
       end loop;
+      for T of This.Translators loop
+         T.Mark (Process);
+      end loop;
    end Mark;
 
    ----------
@@ -925,10 +942,24 @@ package body Raven.Engine.SECD is
    overriding procedure Translate
      (This   : in out Instance)
    is
-      Translator : Raven.Translator.Abstraction'Class :=
+      Translator : aliased Raven.Translator.Abstraction'Class :=
                      Raven.Engine.SECD.Translator.Create;
    begin
-      Translator.Translate (This'Unchecked_Access);
+      --  Everything the translator holds -- the code it is building,
+      --  and the form it is reading -- is reachable only through it,
+      --  and expanding a macro runs the machine, which can collect.  So
+      --  it is a root for as long as it runs, and no longer: it goes
+      --  when this call returns.
+
+      This.Translators.Append (Translator'Unchecked_Access);
+      begin
+         Translator.Translate (This'Unchecked_Access);
+      exception
+         when others =>
+            This.Translators.Delete_Last;
+            raise;
+      end;
+      This.Translators.Delete_Last;
    end Translate;
 
 end Raven.Engine.SECD;
