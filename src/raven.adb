@@ -260,6 +260,19 @@ package body Raven is
       return Handle'(Position => Object_Lists.No_Element);
    end Get_Slot;
 
+   --------------------
+   -- Import_Library --
+   --------------------
+
+   procedure Import_Library
+     (This : Raven_VM'Class;
+      Name : String;
+      Path : String)
+   is
+   begin
+      Raven.Libraries.Import (This.Data.Target, Name, Path);
+   end Import_Library;
+
    -------------
    -- New_VM  --
    -------------
@@ -292,9 +305,6 @@ package body Raven is
       Raven.Libraries.Import
         (This.Data.Target, "(scheme base)",
          Standard_Library_Path & "/scheme/base.scm");
-      Raven.Libraries.Import
-        (This.Data.Target, "(test-suite)",
-         Standard_Library_Path & "/tests/test-suite.scm");
       return This;
    end New_VM;
 

@@ -205,6 +205,16 @@ private
 
    function Standard_Library_Path return String;
 
+   --  Load a scheme source file into an existing VM.  New_VM imports the
+   --  standard library itself; this is for libraries that are not part of
+   --  it, such as the scheme test suite, which belongs to the test
+   --  harness rather than to every VM.
+
+   procedure Import_Library
+     (This : Raven_VM'Class;
+      Name : String;
+      Path : String);
+
    function Encode (T : Wide_Wide_String) return String;
    function Decode (S : String) return Wide_Wide_String;
 

@@ -4,4 +4,7 @@
 /config/
 *~
 .#*#
-/raven_tests/share/
+#  Local copy of the raven library's resources, so that the test
+#  executable can find base.scm next to bin/.  The crate's own
+#  resources live in raven_tests/share/raven_tests and are tracked.
+/raven_tests/share/raven/
