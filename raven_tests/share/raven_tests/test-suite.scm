@@ -184,6 +184,38 @@
 (test "local macro survives collection, reversed copy" '(3 2 1)
       (car (cdr (macro-under-collection))))
 
+;;  An unquote belongs to the innermost quasiquote around it.  A
+;;  quasiquote inside a quasiquote is data, and so is an unquote that
+;;  belongs to it: only an unquote that reaches back out to this level
+;;  is evaluated here.
+
+(define qq-value 4)
+(define qq-list (list 7 8))
+
+(test "quasiquote, one level" '(1 2 3) `(1 ,(+ 1 1) 3))
+(test "quasiquote splices" '(1 7 8) `(1 ,@qq-list))
+(test "nested quasiquote is data" '(a (quasiquote b)) `(a `b))
+(test "unquote one level in is data" '(1 (quasiquote (2 (unquote qq-value))))
+      `(1 `(2 ,qq-value)))
+(test "unquote-splicing one level in is data"
+      '(1 (quasiquote (2 (unquote-splicing qq-list))))
+      `(1 `(2 ,@qq-list)))
+
+;;  Only the innermost unquote belongs to the outer quasiquote: the
+;;  call it sits in is reproduced, and never made.
+
+(test "an unquote inside an unquote reaches back out"
+      '(a (quasiquote (b (unquote (c 4)))))
+      `(a `(b ,(c ,qq-value))))
+
+(test "an unquote two levels in is data twice over"
+      '(a (quasiquote (b (quasiquote (c (unquote qq-value))))))
+      `(a `(b `(c ,qq-value))))
+(test "an unquote of an unquote is evaluated where it lands"
+      '(a (quasiquote (b (unquote 4))))
+      `(a `(b ,,qq-value)))
+(test "an unquote in the tail of a template" '(1 . 4) `(1 . ,qq-value))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")
