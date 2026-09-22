@@ -61,6 +61,21 @@
 (test "cdr-2" '(b c d) (cdr '((a) b c d)))
 (test "car-3" '1 (car '(1 . 2)))
 (test "cdr-3" '2 (cdr '(1 . 2)))
+
+;;  quote written out means what the reader's ' means
+
+(test "quote written out, atom" 5 (quote 5))
+(test "quote written out, symbol" 'a (quote a))
+(test "quote written out, list" '(1 2 3) (quote (1 2 3)))
+(test "quote written out, nil" '() (quote ()))
+(test "quote written out, nested" '(quote a) (quote (quote a)))
+(test "quote and ' agree" #t (equal? '(1 2) (quote (1 2))))
+
+;;  a quotation the reader never saw: the macro builds one
+
+(define-macro (quoting-macro x) (list 'quote x))
+(test "macro builds a quotation" '(a b) (quoting-macro (a b)))
+
 (test "append-1" '(1 2 3 4 5 6) (append '(1 2 3) '(4 5 6)))
 (test "string-1" "Hello, world!" (string-append "Hello, " "world!"))
 (test "string-2" "abcde" (string-append "a" "b" "c" "d" "e"))
