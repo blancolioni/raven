@@ -1,6 +1,7 @@
 with Ada.Text_IO;
 
 with Raven.Engine.Tests;
+with Raven.Tests.Define;
 with Raven.Tests.Library;
 with Raven.Tests.Memory;
 with Raven.Tests.Numbers;
@@ -24,6 +25,7 @@ package body Raven.Tests is
          Raven.Engine.Tests.Run_Tests (VM);
          Raven.Tests.Parser.Run_Tests (VM);
          Raven.Tests.Library.Run_Tests (VM);
+         Raven.Tests.Define.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);
          VM.Report_State;
          VM.Close_VM;

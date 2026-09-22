@@ -432,9 +432,9 @@ package body Raven.Engine.SECD.Translator is
                      Build_Env (Target.Cdar (A));
                      This.Append (LDF);
                      declare
-                        E : constant Object := Target.Cadr (A);
+                        Es : constant Object := Target.Cdr (A);
                      begin
-                        Nested (E, RTN);
+                        Nested_Sequence (Es, RTN);
                      end;
                      Close_Env;
                      This.Append (DFN);
