@@ -273,6 +273,19 @@ package body Raven is
       Raven.Libraries.Import (This.Data.Target, Name, Path);
    end Import_Library;
 
+   ----------------
+   -- New_Symbol --
+   ----------------
+
+   function New_Symbol
+     (This   : Raven_VM'Class;
+      Prefix : String)
+      return Object
+   is
+   begin
+      return This.Data.Target.New_Symbol (Prefix);
+   end New_Symbol;
+
    -------------
    -- New_VM  --
    -------------

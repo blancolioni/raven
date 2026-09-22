@@ -2,6 +2,7 @@ with Ada.Characters.Handling;
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Strings.Equal_Case_Insensitive;
+with Ada.Strings.Fixed;
 with Ada.Strings.Hash_Case_Insensitive;
 
 with Raven.Objects;
@@ -23,7 +24,13 @@ package body Raven.Engine.Symbols is
       record
          Symbol_Map    : Symbol_Maps.Map;
          Symbol_Vector : Symbol_Vectors.Vector;
+         Generated     : Natural := 0;
       end record;
+
+   overriding function New_Symbol_Id
+     (This   : in out Instance;
+      Prefix : String)
+      return Raven.Objects.Symbol_Id;
 
    overriding function To_Symbol_Id
      (This  : in out Instance;
@@ -43,6 +50,30 @@ package body Raven.Engine.Symbols is
    begin
       return new Instance;
    end Create;
+
+   -------------------
+   -- New_Symbol_Id --
+   -------------------
+
+   overriding function New_Symbol_Id
+     (This   : in out Instance;
+      Prefix : String)
+      return Raven.Objects.Symbol_Id
+   is
+      Count : constant String :=
+                Ada.Strings.Fixed.Trim
+                  (Natural'Image (This.Generated + 1),
+                   Ada.Strings.Both);
+   begin
+      --  The name goes in the vector, so that the symbol can be shown,
+      --  and stays out of the map, so that reading it gives a symbol
+      --  of its own.  Nothing but this can hand the name back.
+
+      This.Generated := This.Generated + 1;
+      This.Symbol_Vector.Append
+        (Ada.Characters.Handling.To_Lower (Prefix) & "." & Count);
+      return This.Symbol_Vector.Last_Index;
+   end New_Symbol_Id;
 
    ---------------
    -- To_String --

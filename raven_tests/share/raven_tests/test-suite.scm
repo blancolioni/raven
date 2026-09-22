@@ -219,6 +219,39 @@
       `(a `(b ,,qq-value)))
 (test "an unquote in the tail of a template" '(1 . 4) `(1 . ,qq-value))
 
+;;  symbol? and gensym.  A generated symbol has a name, so that an
+;;  expansion can be read, but it is not the symbol that name reads
+;;  as: nothing written at the call site can capture it.
+
+(test "symbol? of a symbol" #t (symbol? 'a))
+(test "symbol? of a number" #f (symbol? 1))
+(test "symbol? of a list" #f (symbol? '(a)))
+(test "symbol? of nil" #f (symbol? '()))
+(test "symbol? of a generated symbol" #t (symbol? (gensym)))
+
+(test "a generated symbol is not another" #f (eq? (gensym) (gensym)))
+(test "a generated symbol is itself"
+      #t ((lambda (g) (eq? g g)) (gensym)))
+(test "a generated symbol is not the name it was made from"
+      #f (eq? (gensym 'a) 'a))
+
+;;  The name a macro introduces does not take over a name the caller
+;;  is using: the macro binds a generated symbol, and the x in its
+;;  template still means the caller's x.
+
+(define captured-x 10)
+(define-macro (add-to-captured-x y)
+  ((lambda (tmp) `((lambda (,tmp) (+ ,tmp captured-x)) ,y))
+   (gensym 'captured-x)))
+(test "a generated name does not capture" 13 (add-to-captured-x 3))
+
+;;  There are more symbols to be had than the few hundred a session
+;;  interns, which is what generating one per expansion needs.
+
+(define (generate-symbols n)
+  (if (= n 0) '() (cons (gensym) (generate-symbols (- n 1)))))
+(test "a thousand generated symbols" 1000 (length (generate-symbols 1000)))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")

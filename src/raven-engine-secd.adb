@@ -143,6 +143,12 @@ package body Raven.Engine.SECD is
       return Raven.Objects.Symbol_Id
    is (This.Syms.To_Symbol_Id (Name));
 
+   overriding function New_Symbol_Id
+     (This   : in out Instance;
+      Prefix : String)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.New_Symbol_Id (Prefix));
+
    overriding function To_String
      (This  : Instance;
       Id    : Raven.Objects.Symbol_Id)
