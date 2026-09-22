@@ -58,24 +58,60 @@ private package Raven.Target is
       return Object
    is abstract;
 
-   procedure Define_Macro
+   --  Macro definitions are stored here rather than in the translator
+   --  because their Params and Macro_Body are collectable objects, and
+   --  only a container the collector walks can keep them alive.  Scope
+   --  is the translator's business: it holds the ids, which are not
+   --  objects, in its lexical chain.
+
+   type Macro_Id is new Natural;
+
+   No_Macro : constant Macro_Id := 0;
+
+   subtype Real_Macro_Id is Macro_Id range 1 .. Macro_Id'Last;
+
+   function Store_Macro
      (This        : in out Abstraction;
-      Name        : String;
       Params      : Object;
       Macro_Body  : Object)
-   is abstract;
-
-   function Is_Macro
-     (This : Abstraction;
-      Name : String)
-      return Boolean
+      return Real_Macro_Id
    is abstract;
 
    procedure Get_Macro
      (This        : Abstraction;
-      Name        : String;
+      Id          : Real_Macro_Id;
       Params      : out Object;
       Macro_Body  : out Object)
+   is abstract;
+
+   --  Gives a definition back: it becomes collectable and its id may be
+   --  reused.  Only the translator knows when that is safe, so only the
+   --  translator calls it -- naming or unnaming a macro does not.
+
+   procedure Release_Macro
+     (This : in out Abstraction;
+      Id   : Real_Macro_Id)
+   is abstract;
+
+   --  The global scope is the one macro scope that outlives a single
+   --  translation, so the translator cannot hold it: each top level
+   --  form gets a fresh translator, and with it a fresh lexical chain.
+
+   procedure Define_Global_Macro
+     (This : in out Abstraction;
+      Name : String;
+      Id   : Real_Macro_Id)
+   is abstract;
+
+   procedure Undefine_Global_Macro
+     (This : in out Abstraction;
+      Name : String)
+   is abstract;
+
+   function Global_Macro
+     (This : Abstraction;
+      Name : String)
+      return Macro_Id
    is abstract;
 
 end Raven.Target;

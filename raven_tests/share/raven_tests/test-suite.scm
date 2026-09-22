@@ -105,6 +105,70 @@
 (test "unless true"  #f (unless #t 42))
 (test "unless multi" 2  (unless #f 1 2))
 
+;;  A lexical binding shadows a macro of the same name: the innermost
+;;  binding wins, whichever kind it is.
+
+(test "parameter shadows macro" 3
+      ((lambda (when) (when 1 2)) (lambda (a b) (+ a b))))
+(test "rest parameter shadows macro" '(1 2)
+      ((lambda and and) 1 2))
+(test "macro still works outside the shadow" 42 (when #t 42))
+
+;;  define-macro defines in the region it appears in, not in the whole
+;;  program: a branch that is never reached defines nothing outside it.
+
+(if #f (define-macro (dead-macro x) '99) '())
+(test "unreachable define-macro does not leak" 7
+      ((lambda (dead-macro) (dead-macro 7)) (lambda (v) v)))
+
+(define (local-macro-host)
+  (define-macro (inner-macro x) '55)
+  (inner-macro 1))
+(test "local macro works in its own body" 55 (local-macro-host))
+(test "local macro does not escape" 8
+      ((lambda (inner-macro) (inner-macro 8)) (lambda (v) v)))
+
+(define (shadowing-host)
+  (define-macro (when test . body) ''shadowed)
+  (when #t 'ignored))
+(test "local macro shadows global" 'shadowed (shadowing-host))
+(test "global macro survives the shadow" 42 (when #t 42))
+
+(define (outer-host)
+  (define-macro (m x) ''outer)
+  (define (inner-host)
+    (define-macro (m x) ''inner)
+    (m 1))
+  (cons (m 1) (inner-host)))
+(test "nested macro scopes" '(outer . inner) (outer-host))
+
+;;  A macro defined at top level is still in scope inside a body.
+
+(define-macro (doubled x) `(+ ,x ,x))
+(define (uses-global-macro n) (doubled n))
+(test "global macro reaches into a body" 10 (uses-global-macro 5))
+
+;;  Defining a name takes it back from the macro that held it.
+
+(define-macro (takeable x) ''macro-version)
+(test "macro before define" 'macro-version (takeable 1))
+(define (takeable x) 'procedure-version)
+(test "define undefines the macro" 'procedure-version (takeable 1))
+
+;;  Expanding a macro allocates, so a definition has to survive a
+;;  collection that happens while its own region is being translated.
+
+(define (macro-under-collection)
+  (define-macro (build a b c) `(list (list ,a ,b ,c) (list ,c ,b ,a)))
+  (append (build 1 2 3) (build 4 5 6) (build 7 8 9)
+          (build 1 2 3) (build 4 5 6) (build 7 8 9)
+          (build 1 2 3) (build 4 5 6) (build 7 8 9)
+          (build 1 2 3) (build 4 5 6) (build 7 8 9)))
+(test "local macro survives collection" '(1 2 3)
+      (car (macro-under-collection)))
+(test "local macro survives collection, reversed copy" '(3 2 1)
+      (car (cdr (macro-under-collection))))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")
