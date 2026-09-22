@@ -297,7 +297,8 @@ package body Raven.Engine.SECD.Translator is
       procedure Close_Scope;
 
       procedure Compile_QQ
-        (Template : Object);
+        (Template : Object;
+         Level    : Positive);
 
       procedure Emit (Level : Positive);
 
@@ -436,7 +437,10 @@ package body Raven.Engine.SECD.Translator is
       -- Compile_QQ --
       ----------------
 
-      procedure Compile_QQ (Template : Object) is
+      procedure Compile_QQ
+        (Template : Object;
+         Level    : Positive)
+      is
          use Raven.Objects;
          T : constant Root := Hold (Table, Template);
       begin
@@ -450,17 +454,46 @@ package body Raven.Engine.SECD.Translator is
                Tail : constant Root :=
                         Hold (Table, Target.Cdr (Get (T)));
             begin
-               if Get (Head) = S_Unquote then
-                  Go (Target.Car (Get (Tail)));
-               elsif Is_Pair (Get (Head))
+               if Get (Head) = S_Unquote
+                 or else Get (Head) = S_Unquote_Splicing
+               then
+                  --  An unquote belongs to the innermost quasiquote
+                  --  around it.  At the level this one is building it
+                  --  is evaluated; further in it is data like any
+                  --  other, and what it holds is a template one level
+                  --  out.
+
+                  if Level > 1 then
+                     Compile_QQ (Get (Tail), Level - 1);
+                     Compile_QQ (Get (Head), Level - 1);
+                     This.Append (CONS);
+                  elsif Get (Head) = S_Unquote then
+                     Go (Target.Car (Get (Tail)));
+                  else
+                     raise Raven.Target.Translation_Error with
+                       "unquote-splicing: nothing to splice it into";
+                  end if;
+               elsif Get (Head) = S_Quasiquote then
+                  --  A quasiquote inside a quasiquote is data, and
+                  --  everything within it is one level further in.
+
+                  Compile_QQ (Get (Tail), Level + 1);
+                  Compile_QQ (Get (Head), Level + 1);
+                  This.Append (CONS);
+               elsif Level = 1
+                 and then Is_Pair (Get (Head))
                  and then Target.Car (Get (Head)) = S_Unquote_Splicing
                then
-                  Compile_QQ (Get (Tail));
+                  --  The rest of the list first and the spliced value
+                  --  on top, as the CONS below takes its head from the
+                  --  top: what is on top goes in front.
+
+                  Compile_QQ (Get (Tail), Level);
                   Go (Target.Cadr (Get (Head)));
                   This.Append (APPEND);
                else
-                  Compile_QQ (Get (Tail));
-                  Compile_QQ (Get (Head));
+                  Compile_QQ (Get (Tail), Level);
+                  Compile_QQ (Get (Head), Level);
                   This.Append (CONS);
                end if;
             end;
@@ -674,7 +707,7 @@ package body Raven.Engine.SECD.Translator is
                   Go (Target.Car (Get (A)));
                   This.Append (PAIR);
                elsif Get (F) = S_Quasiquote then
-                  Compile_QQ (Target.Car (Get (A)));
+                  Compile_QQ (Target.Car (Get (A)), 1);
                elsif Get (F) = S_Define then
                   if Raven.Objects.Is_Symbol (Target.Car (Get (A))) then
                      Undefine_Macro (Target.Car (Get (A)));

@@ -501,25 +501,32 @@ package body Raven.Engine.SECD is
                      This.St (S) := Objects.Nil;
                   end if;
                when APPEND =>
+
+                  --  The list on top goes in front, as the object on
+                  --  top becomes the car for CONS.  Both lists are
+                  --  held in registers: taking one apart and building
+                  --  it back onto the other allocates, and neither
+                  --  would survive that in a variable of ours.
+
                   declare
-                     List2  : Object  := This.Pop;
-                     List1  : Object  := This.Pop;
-                     Count  : Natural := 0;
+                     Count : Natural := 0;
                   begin
-                     while List1 /= Objects.Nil loop
-                        This.Rs (1) := List1;
-                        This.Push (This.Car (List1));
-                        List1 := This.Cdr (This.Rs (1));
+                     This.Rs (1) := This.Pop;
+                     This.Rs (2) := This.Pop;
+                     while This.Rs (1) /= Objects.Nil loop
+                        This.Push (This.Car (This.Rs (1)));
+                        This.Rs (1) := This.Cdr (This.Rs (1));
                         Count := Count + 1;
                      end loop;
                      for I in 1 .. Count loop
                         declare
                            Element : constant Object := This.Pop;
                         begin
-                           List2 := This.Memory.Cons (Element, List2);
+                           This.Rs (2) :=
+                             This.Memory.Cons (Element, This.Rs (2));
                         end;
                      end loop;
-                     This.Push (List2);
+                     This.Push (This.Rs (2));
                   end;
 
                when ATOM =>
