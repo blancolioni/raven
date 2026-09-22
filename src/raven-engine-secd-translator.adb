@@ -1,6 +1,7 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
+with Ada.Finalization;
 with Ada.Strings.Equal_Case_Insensitive;
 with Ada.Strings.Hash_Case_Insensitive;
 with Ada.Text_IO;
@@ -24,6 +25,54 @@ package body Raven.Engine.SECD.Translator is
    package Object_List_Vectors is
      new Ada.Containers.Vectors
        (Positive, Object_Lists.List, Object_Lists."=");
+
+   package Root_Vectors is
+     new Ada.Containers.Vectors (Positive, Object);
+
+   type Root_Table is access all Root_Vectors.Vector;
+
+   --  An object the translator has taken out of the form it is
+   --  translating, and will use again after a call that can allocate,
+   --  is held in a Root.  A collection can happen in the middle of a
+   --  translation, because expanding a macro runs the machine: the
+   --  collector keeps only what a container marks, and moves what it
+   --  keeps without being able to reach into an Ada variable and
+   --  correct it.  So the object lives in a table the translator marks,
+   --  and Get reads the address it has now.  Roots belong to the scopes
+   --  that declare them, and scopes nest, so the table is a stack: a
+   --  Root gives back its slot, and every slot above it, when it goes.
+
+   package Roots is
+
+      type Root is new Ada.Finalization.Limited_Controlled with private;
+
+      function Hold
+        (Table : Root_Table;
+         Value : Object)
+         return Root;
+
+      function Get (This : Root) return Object;
+
+      procedure Set
+        (This  : Root;
+         Value : Object);
+
+   private
+
+      type Root is new Ada.Finalization.Limited_Controlled with
+         record
+            Table : Root_Table;
+            Index : Positive := 1;
+         end record;
+
+      overriding procedure Finalize (This : in out Root);
+
+      function Get (This : Root) return Object
+      is (This.Table.all (This.Index));
+
+   end Roots;
+
+   use Roots;
 
    --  A name is bound either to a run time location, which LD and ST
    --  reach through a frame index and an offset, or to a macro, which
@@ -66,19 +115,20 @@ package body Raven.Engine.SECD.Translator is
    package Env_Lists is
      new Ada.Containers.Doubly_Linked_Lists (Env_Frame);
 
-   package Macro_Id_Lists is
-     new Ada.Containers.Doubly_Linked_Lists
-       (Raven.Target.Real_Macro_Id, Raven.Target."=");
-
    type Instance is new Raven.Translator.Abstraction with
       record
          Current : Positive := 1;
          Code    : Object_List_Vectors.Vector;
+         Roots   : aliased Root_Vectors.Vector;
       end record;
 
    overriding procedure Translate
      (This   : in out Instance;
       Target : Raven.Target.Reference);
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object));
 
    procedure Append
      (This : in out Instance'Class;
@@ -125,6 +175,82 @@ package body Raven.Engine.SECD.Translator is
       return Instance'(others => <>);
    end Create;
 
+   ----------
+   -- Mark --
+   ----------
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object))
+   is
+   begin
+      --  The code lists hold the constants lifted out of the form,
+      --  which nothing else names until Emit pushes them onto the
+      --  machine's stack.
+
+      for Level of This.Code loop
+         for X of Level loop
+            Process (X);
+         end loop;
+      end loop;
+
+      for X of This.Roots loop
+         Process (X);
+      end loop;
+   end Mark;
+
+   -----------
+   -- Roots --
+   -----------
+
+   package body Roots is
+
+      --------------
+      -- Finalize --
+      --------------
+
+      overriding procedure Finalize (This : in out Root) is
+      begin
+         if This.Table /= null
+           and then This.Table.Last_Index >= This.Index
+         then
+            This.Table.Set_Length
+              (Ada.Containers.Count_Type (This.Index - 1));
+         end if;
+         This.Table := null;
+      end Finalize;
+
+      ----------
+      -- Hold --
+      ----------
+
+      function Hold
+        (Table : Root_Table;
+         Value : Object)
+         return Root
+      is
+      begin
+         Table.Append (Value);
+         return This : Root do
+            This.Table := Table;
+            This.Index := Table.Last_Index;
+         end return;
+      end Hold;
+
+      ---------
+      -- Set --
+      ---------
+
+      procedure Set
+        (This  : Root;
+         Value : Object)
+      is
+      begin
+         This.Table.all (This.Index) := Value;
+      end Set;
+
+   end Roots;
+
    ---------------
    -- Show_Code --
    ---------------
@@ -154,12 +280,12 @@ package body Raven.Engine.SECD.Translator is
    is
       Env : Env_Lists.List;
 
-      --  Global definitions this form has displaced.  They are given
-      --  back only once the form has been emitted: until Emit runs, a
-      --  constant lifted out of a macro body sits in This.Code, where
-      --  the collector cannot see it.
+      --  Everything this translation is working with lives here, so
+      --  that a collection provoked by a macro expansion neither takes
+      --  it nor leaves the translator holding an address it has moved
+      --  away from.
 
-      Pending_Release : Macro_Id_Lists.List;
+      Table : constant Root_Table := This.Roots'Unchecked_Access;
 
       procedure Bind_Macro
         (Name : String;
@@ -181,7 +307,7 @@ package body Raven.Engine.SECD.Translator is
          Ent   : out Env_Entry);
 
       procedure Go
-        (X : Object);
+        (Form : Object);
 
       function Head_Macro
         (F : Object)
@@ -198,9 +324,6 @@ package body Raven.Engine.SECD.Translator is
          Last : Instruction);
 
       procedure Open_Scope;
-
-      procedure Release_Later
-        (Id : Raven.Target.Real_Macro_Id);
 
       procedure Undefine_Macro
         (Sym : Object);
@@ -230,7 +353,19 @@ package body Raven.Engine.SECD.Translator is
       is
          Frame : constant Env_Lists.Reference_Type :=
                    Env.Reference (Env.Last);
+         Position : constant Env_Maps.Cursor :=
+                      Frame.Bindings.Find (Name);
       begin
+         --  A second definition of the same name in the same region
+         --  takes the name from the first, which nothing can name
+         --  again, so the first is given back here.
+
+         if Env_Maps.Has_Element (Position)
+           and then Env_Maps.Element (Position).Kind = Macro_Binding
+         then
+            Target.Release_Macro (Env_Maps.Element (Position).Macro);
+         end if;
+
          Frame.Bindings.Include (Name, Env_Entry'(Macro_Binding, Id));
       end Bind_Macro;
 
@@ -281,15 +416,18 @@ package body Raven.Engine.SECD.Translator is
       -----------------
 
       procedure Close_Scope is
+         Frame : constant Env_Frame := Env.Last_Element;
       begin
          --  The region is finished, so nothing can name a macro it
-         --  defined any more, but the definition is not given back.  A
-         --  region scoped macro feeds the translation it appears in, and
-         --  the constants lifted out of its body sit in This.Code, which
-         --  the collector cannot see: releasing it here, or even after
-         --  the whole form is emitted, lets objects the translation
-         --  still depends on be collected.  Until the code lists are a
-         --  root, these definitions have to stay alive.
+         --  defined any more, and the definition goes with it.  What
+         --  the definition shares with the form being translated stays
+         --  alive, because the form is a root of its own.
+
+         for Ent of Frame.Bindings loop
+            if Ent.Kind = Macro_Binding then
+               Target.Release_Macro (Ent.Macro);
+            end if;
+         end loop;
 
          Env.Delete_Last;
       end Close_Scope;
@@ -300,26 +438,29 @@ package body Raven.Engine.SECD.Translator is
 
       procedure Compile_QQ (Template : Object) is
          use Raven.Objects;
+         T : constant Root := Hold (Table, Template);
       begin
-         if Is_Atom (Template) then
+         if Is_Atom (Get (T)) then
             This.Append (LDC);
-            This.Append (Template);
+            This.Append (Get (T));
          else
             declare
-               Head : constant Object := Target.Car (Template);
-               Tail : constant Object := Target.Cdr (Template);
+               Head : constant Root :=
+                        Hold (Table, Target.Car (Get (T)));
+               Tail : constant Root :=
+                        Hold (Table, Target.Cdr (Get (T)));
             begin
-               if Head = S_Unquote then
-                  Go (Target.Car (Tail));
-               elsif Is_Pair (Head)
-                 and then Target.Car (Head) = S_Unquote_Splicing
+               if Get (Head) = S_Unquote then
+                  Go (Target.Car (Get (Tail)));
+               elsif Is_Pair (Get (Head))
+                 and then Target.Car (Get (Head)) = S_Unquote_Splicing
                then
-                  Compile_QQ (Tail);
-                  Go (Target.Cadr (Head));
+                  Compile_QQ (Get (Tail));
+                  Go (Target.Cadr (Get (Head)));
                   This.Append (APPEND);
                else
-                  Compile_QQ (Tail);
-                  Compile_QQ (Head);
+                  Compile_QQ (Get (Tail));
+                  Compile_QQ (Get (Head));
                   This.Append (CONS);
                end if;
             end;
@@ -407,8 +548,10 @@ package body Raven.Engine.SECD.Translator is
       --------
 
       procedure Go
-        (X     : Object)
+        (Form  : Object)
       is
+         X : constant Root := Hold (Table, Form);
+
          procedure Load_Constant (K : Object);
 
          procedure Load_Macro_Args (Args : Object);
@@ -450,123 +593,120 @@ package body Raven.Engine.SECD.Translator is
          end Load_Macro_Args;
 
       begin
-         if Raven.Objects.Is_Atom (X) then
-            if Raven.Objects.Is_Symbol (X) then
+         if Raven.Objects.Is_Atom (Get (X)) then
+            if Raven.Objects.Is_Symbol (Get (X)) then
                This.Append (LD);
-               Locate (X);
+               Locate (Get (X));
             else
                This.Append (LDC);
-               This.Append (X);
+               This.Append (Get (X));
             end if;
-         elsif Raven.Objects.Is_Pair (X) then
+         elsif Raven.Objects.Is_Pair (Get (X)) then
             declare
-               F     : constant Object := Target.Car (X);
-               A     : constant Object := Target.Cdr (X);
-               Macro : constant Raven.Target.Macro_Id := Head_Macro (F);
+               F     : constant Root :=
+                         Hold (Table, Target.Car (Get (X)));
+               A     : constant Root :=
+                         Hold (Table, Target.Cdr (Get (X)));
+               Macro : constant Raven.Target.Macro_Id :=
+                         Head_Macro (Get (F));
             begin
-               if F = Raven.Objects.Quote then
-                  Load_Constant (Target.Cadr (X));
-               elsif F = Raven.Objects.If_Obj then
+               if Get (F) = Raven.Objects.Quote then
+                  Load_Constant (Target.Cadr (Get (X)));
+               elsif Get (F) = Raven.Objects.If_Obj then
                   declare
-                     Args : Object := A;
+                     Args : constant Root := Hold (Table, Get (A));
                   begin
-                     Go (Target.Car (Args));
+                     Go (Target.Car (Get (Args)));
                      This.Append (SEL);
-                     Args := Target.Cdr (Args);
-                     Nested (Target.Car (Args), JOIN);
-                     if Objects.Is_Pair (Args) then
-                        Nested (Target.Cadr (Args), JOIN);
+                     Set (Args, Target.Cdr (Get (Args)));
+                     Nested (Target.Car (Get (Args)), JOIN);
+                     if Objects.Is_Pair (Get (Args)) then
+                        Nested (Target.Cadr (Get (Args)), JOIN);
                      else
                         Nested (Objects.Nil, JOIN);
                      end if;
                   end;
-               elsif F = S_Begin then
+               elsif Get (F) = S_Begin then
                   declare
                      use Raven.Objects;
-                     Arg : Object := A;
+                     Arg : constant Root := Hold (Table, Get (A));
                   begin
-                     while Is_Pair (Arg) loop
-                        Go (Target.Car (Arg));
-                        Arg := Target.Cdr (Arg);
-                        if Is_Pair (Arg) then
+                     while Is_Pair (Get (Arg)) loop
+                        Go (Target.Car (Get (Arg)));
+                        Set (Arg, Target.Cdr (Get (Arg)));
+                        if Is_Pair (Get (Arg)) then
                            This.Append (DROP);
                         end if;
                      end loop;
                   end;
-               elsif F = Raven.Objects.Lambda then
-                  Build_Env (Target.Car (A));
+               elsif Get (F) = Raven.Objects.Lambda then
+                  Build_Env (Target.Car (Get (A)));
                   This.Append (LDF);
-                  declare
-                     Es : constant Object := Target.Cdr (A);
-                  begin
-                     Nested_Sequence (Es, RTN);
-                  end;
+                  Nested_Sequence (Target.Cdr (Get (A)), RTN);
                   Close_Scope;
-               elsif F = S_Set then
-                  if not Raven.Objects.Is_Symbol (Target.Car (A)) then
+               elsif Get (F) = S_Set then
+                  if not Raven.Objects.Is_Symbol (Target.Car (Get (A)))
+                  then
                      raise Raven.Target.Translation_Error with
                        "set! requires a symbol as its first argument";
                   end if;
-                  Go (Target.Cadr (A));
+                  Go (Target.Cadr (Get (A)));
                   This.Append (ST);
-                  Locate (Target.Car (A));
-               elsif F = S_Eq then
-                  Go (Target.Car (A));
-                  Go (Target.Cadr (A));
+                  Locate (Target.Car (Get (A)));
+               elsif Get (F) = S_Eq then
+                  Go (Target.Car (Get (A)));
+                  Go (Target.Cadr (Get (A)));
                   This.Append (EQ);
-               elsif F = S_Car then
-                  Go (Target.Car (A));
+               elsif Get (F) = S_Car then
+                  Go (Target.Car (Get (A)));
                   This.Append (CAR);
-               elsif F = S_Cdr then
-                  Go (Target.Car (A));
+               elsif Get (F) = S_Cdr then
+                  Go (Target.Car (Get (A)));
                   This.Append (CDR);
-               elsif F = S_Cons then
-                  Go (Target.Cadr (A));
-                  Go (Target.Car (A));
+               elsif Get (F) = S_Cons then
+                  Go (Target.Cadr (Get (A)));
+                  Go (Target.Car (Get (A)));
                   This.Append (CONS);
-               elsif F = S_Atom then
-                  Go (Target.Car (A));
+               elsif Get (F) = S_Atom then
+                  Go (Target.Car (Get (A)));
                   This.Append (ATOM);
-               elsif F = S_Pair then
-                  Go (Target.Car (A));
+               elsif Get (F) = S_Pair then
+                  Go (Target.Car (Get (A)));
                   This.Append (PAIR);
-               elsif F = S_Quasiquote then
-                  Compile_QQ (Target.Car (A));
-               elsif F = S_Define then
-                  if Raven.Objects.Is_Symbol (Target.Car (A)) then
-                     Undefine_Macro (Target.Car (A));
-                     Go (Target.Cadr (A));
+               elsif Get (F) = S_Quasiquote then
+                  Compile_QQ (Target.Car (Get (A)));
+               elsif Get (F) = S_Define then
+                  if Raven.Objects.Is_Symbol (Target.Car (Get (A))) then
+                     Undefine_Macro (Target.Car (Get (A)));
+                     Go (Target.Cadr (Get (A)));
                      This.Append (DFN);
-                     This.Append (Target.Car (A));
-                  elsif Raven.Objects.Is_Pair (Target.Car (A)) then
-                     Undefine_Macro (Target.Caar (A));
-                     Build_Env (Target.Cdar (A));
+                     This.Append (Target.Car (Get (A)));
+                  elsif Raven.Objects.Is_Pair (Target.Car (Get (A))) then
+                     Undefine_Macro (Target.Caar (Get (A)));
+                     Build_Env (Target.Cdar (Get (A)));
                      This.Append (LDF);
-                     declare
-                        Es : constant Object := Target.Cdr (A);
-                     begin
-                        Nested_Sequence (Es, RTN);
-                     end;
+                     Nested_Sequence (Target.Cdr (Get (A)), RTN);
                      Close_Scope;
                      This.Append (DFN);
-                     This.Append (Target.Caar (A));
+                     This.Append (Target.Caar (Get (A)));
                   else
                      raise Program_Error with "invalid define";
                   end if;
-               elsif F = S_Define_Macro then
-                  if not Raven.Objects.Is_Pair (Target.Car (A))
-                    or else not Raven.Objects.Is_Symbol (Target.Caar (A))
+               elsif Get (F) = S_Define_Macro then
+                  if not Raven.Objects.Is_Pair (Target.Car (Get (A)))
+                    or else not Raven.Objects.Is_Symbol
+                                  (Target.Caar (Get (A)))
                   then
                      raise Raven.Target.Translation_Error with
                        "define-macro: first argument must be (name params ...)";
                   end if;
                   declare
-                     Name_Sym   : constant Object := Target.Caar (A);
+                     Name_Sym   : constant Object := Target.Caar (Get (A));
                      Name       : constant String :=
                                     Target.To_String
                                       (Raven.Objects.To_Symbol (Name_Sym));
-                     Params     : constant Object := Target.Cdar (A);
-                     Macro_Body : constant Object := Target.Cdr (A);
+                     Params     : constant Object := Target.Cdar (Get (A));
+                     Macro_Body : constant Object := Target.Cdr (Get (A));
                      Id         : constant Raven.Target.Real_Macro_Id :=
                                     Target.Store_Macro (Params, Macro_Body);
                   begin
@@ -586,25 +726,34 @@ package body Raven.Engine.SECD.Translator is
                else
                   if Macro /= Raven.Target.No_Macro then
                      declare
-                        Params          : Object;
-                        Macro_Body_Obj  : Object;
+                        Params_Obj      : Object;
+                        Body_Obj        : Object;
                         Old_Current     : constant Positive := This.Current;
                         Expansion_Level : Positive;
                      begin
-                        Target.Get_Macro (Macro, Params, Macro_Body_Obj);
-                        This.Code.Append (Object_Lists.Empty_List);
-                        Expansion_Level := This.Code.Last_Index;
-                        This.Current    := Expansion_Level;
-                        Load_Macro_Args (A);
-                        Build_Env (Params);
-                        This.Append (LDF);
-                        Nested_Sequence (Macro_Body_Obj, RTN);
-                        Close_Scope;
-                        This.Append (AP);
-                        This.Append (STOP);
-                        This.Current := Old_Current;
-                        Emit (Expansion_Level);
-                        Target.Execute;
+                        Target.Get_Macro (Macro, Params_Obj, Body_Obj);
+
+                        declare
+                           Params     : constant Root :=
+                                          Hold (Table, Params_Obj);
+                           Macro_Body : constant Root :=
+                                          Hold (Table, Body_Obj);
+                        begin
+                           This.Code.Append (Object_Lists.Empty_List);
+                           Expansion_Level := This.Code.Last_Index;
+                           This.Current    := Expansion_Level;
+                           Load_Macro_Args (Get (A));
+                           Build_Env (Get (Params));
+                           This.Append (LDF);
+                           Nested_Sequence (Get (Macro_Body), RTN);
+                           Close_Scope;
+                           This.Append (AP);
+                           This.Append (STOP);
+                           This.Current := Old_Current;
+                           Emit (Expansion_Level);
+                           Target.Execute;
+                        end;
+
                         Go (Target.Pop);
                      end;
                   else
@@ -616,20 +765,21 @@ package body Raven.Engine.SECD.Translator is
                         ------------------
 
                         procedure Compile_Args (Args : Object) is
+                           Arg : constant Root := Hold (Table, Args);
                         begin
-                           if Args = Objects.Nil then
+                           if Get (Arg) = Objects.Nil then
                               This.Append (LDC);
                               This.Append (Objects.Nil);
                            else
-                              Compile_Args (Target.Cdr (Args));
-                              Go (Target.Car (Args));
+                              Compile_Args (Target.Cdr (Get (Arg)));
+                              Go (Target.Car (Get (Arg)));
                               This.Append (CONS);
                            end if;
                         end Compile_Args;
 
                      begin
-                        Compile_Args (Target.Cdr (X));
-                        Go (F);
+                        Compile_Args (Get (A));
+                        Go (Get (F));
                         This.Append (AP);
                      end;
                   end if;
@@ -749,16 +899,16 @@ package body Raven.Engine.SECD.Translator is
          use Raven.Objects;
          Old_Level : constant Natural := This.Current;
          New_Level : Natural;
-         It        : Object := X;
+         It        : constant Root := Hold (Table, X);
       begin
          This.Code.Append (Object_Lists.Empty_List);
          This.Current := This.Code.Last_Index;
          New_Level := This.Current;
          Open_Scope;
-         while Is_Pair (It) loop
-            Go (Target.Car (It));
-            It := Target.Cdr (It);
-            if Is_Pair (It) then
+         while Is_Pair (Get (It)) loop
+            Go (Target.Car (Get (It)));
+            Set (It, Target.Cdr (Get (It)));
+            if Is_Pair (Get (It)) then
                This.Append (DROP);
             end if;
          end loop;
@@ -781,17 +931,6 @@ package body Raven.Engine.SECD.Translator is
          Env.Append (Env_Frame'(Scope_Frame, Env_Maps.Empty_Map));
       end Open_Scope;
 
-      -------------------
-      -- Release_Later --
-      -------------------
-
-      procedure Release_Later
-        (Id : Raven.Target.Real_Macro_Id)
-      is
-      begin
-         Pending_Release.Append (Id);
-      end Release_Later;
-
       --------------------
       -- Undefine_Macro --
       --------------------
@@ -799,7 +938,9 @@ package body Raven.Engine.SECD.Translator is
       procedure Undefine_Macro (Sym : Object) is
       begin
          --  Defining a name takes it back from any macro that held it,
-         --  which is the only way to undefine one.
+         --  which is the only way to undefine one.  The definition it
+         --  displaces belongs to an earlier translation, and this one
+         --  roots whatever it took from it, so it goes now.
 
          if Env.Is_Empty
            and then Raven.Objects.Is_Symbol (Sym)
@@ -811,8 +952,8 @@ package body Raven.Engine.SECD.Translator is
                         Target.Global_Macro (Name);
             begin
                if Old /= Raven.Target.No_Macro then
-                  Release_Later (Old);
                   Target.Undefine_Global_Macro (Name);
+                  Target.Release_Macro (Old);
                end if;
             end;
          end if;
@@ -823,19 +964,8 @@ package body Raven.Engine.SECD.Translator is
       Go (Target.Pop);
       This.Append (STOP);
       Emit (1);
-
-      --  Emit has pushed every object the code refers to onto the
-      --  machine's stack, so the definitions dropped along the way are
-      --  no longer holding anything up.
-
-      for Id of Pending_Release loop
-         Target.Release_Macro (Id);
-      end loop;
    exception
       when E : others =>
-         for Id of Pending_Release loop
-            Target.Release_Macro (Id);
-         end loop;
          Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Message (E));
          for I in 1 .. This.Code.Last_Index loop
             Ada.Text_IO.Put (I'Image);

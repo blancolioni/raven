@@ -4,6 +4,7 @@ with Ada.Text_IO;
 with Raven.Engine.Tests;
 with Raven.Tests.Define;
 with Raven.Tests.Library;
+with Raven.Tests.Macros;
 with Raven.Tests.Memory;
 with Raven.Tests.Numbers;
 with Raven.Tests.Objects;
@@ -49,6 +50,7 @@ package body Raven.Tests is
          Raven.Tests.Parser.Run_Tests (VM);
          Raven.Tests.Library.Run_Tests (VM);
          Raven.Tests.Define.Run_Tests (VM);
+         Raven.Tests.Macros.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);
          Raven.Tests.Strings.Run_Tests (VM);
          Report_Scheme_Suite (VM);
