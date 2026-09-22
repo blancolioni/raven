@@ -21,12 +21,10 @@ package body Raven.Tests is
       declare
          VM : Raven_VM := New_VM;
       begin
-         if False then
-            Raven.Engine.Tests.Run_Tests;
-            Raven.Tests.Parser.Run_Tests (VM);
-            Raven.Tests.Library.Run_Tests (VM);
-            Raven.Tests.Numbers.Run_Tests (VM);
-         end if;
+         Raven.Engine.Tests.Run_Tests (VM);
+         Raven.Tests.Parser.Run_Tests (VM);
+         Raven.Tests.Library.Run_Tests (VM);
+         Raven.Tests.Numbers.Run_Tests (VM);
          VM.Report_State;
          VM.Close_VM;
       end;
