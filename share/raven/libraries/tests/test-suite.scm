@@ -7,15 +7,14 @@
         (begin
           (write-string (string-append "PASS  " name))
           (newline)
-          (set! num-tests (+ 1 num-tests))
           (set! passed-tests (+ 1 passed-tests)))
         (begin
           (write-string "FAIL  ") (write-string name) (write-string ": expected ") (write-string (display expect))
           (write-string ", got ")
           (write-string (display expr))
-          (newline)))
-          (set! num-tests (+ 1 num-tests)
+          (newline)
           (set! failed-tests (+ 1 failed-tests))))
+  (set! num-tests (+ 1 num-tests)))
 
 (define (test-production expect expr)
   (test "production" expect expr))

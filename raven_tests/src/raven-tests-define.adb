@@ -1,0 +1,123 @@
+with Ada.Exceptions;
+with Ada.Text_IO;
+
+package body Raven.Tests.Define is
+
+   procedure Evaluate
+     (VM         : Raven_VM;
+      Expression : String);
+
+   procedure Test_Define
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : Integer);
+
+   --------------
+   -- Evaluate --
+   --------------
+
+   procedure Evaluate
+     (VM         : Raven_VM;
+      Expression : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+   exception
+      when E : others =>
+         Ada.Text_IO.Put (Expression);
+         Ada.Text_IO.Set_Col (74);
+         Ada.Text_IO.Put (Ada.Exceptions.Exception_Message (E));
+         Ada.Text_IO.New_Line;
+         raise;
+   end Evaluate;
+
+   ---------------
+   -- Run_Tests --
+   ---------------
+
+   procedure Run_Tests (VM : Raven_VM) is
+   begin
+      --  A procedure body is an implicit begin: every form is compiled,
+      --  and the value of the last one is returned.
+
+      Evaluate (VM, "(define (three-forms) 1 2 3)");
+      Test_Define (VM, "(three-forms)", 3);
+
+      --  Leading body forms must actually run, not just the last one.
+
+      Evaluate (VM, "(define counter 0)");
+      Evaluate (VM,
+                "(define (bump)"
+                & " (set! counter (+ counter 1))"
+                & " (set! counter (+ counter 10))"
+                & " counter)");
+      Test_Define (VM, "(bump)", 11);
+      Test_Define (VM, "counter", 11);
+
+      --  Every intermediate form runs, not only the first and the last.
+
+      Evaluate (VM, "(define total 0)");
+      Evaluate (VM,
+                "(define (add-four)"
+                & " (set! total (+ total 1))"
+                & " (set! total (+ total 2))"
+                & " (set! total (+ total 4))"
+                & " (set! total (+ total 8))"
+                & " total)");
+      Test_Define (VM, "(add-four)", 15);
+
+      --  Body forms see the procedure's parameters.
+
+      Evaluate (VM, "(define accumulator 0)");
+      Evaluate (VM,
+                "(define (accumulate x y)"
+                & " (set! accumulator (+ accumulator x))"
+                & " (set! accumulator (+ accumulator y))"
+                & " accumulator)");
+      Test_Define (VM, "(accumulate 3 4)", 7);
+      Test_Define (VM, "(accumulate 10 20)", 37);
+
+      --  A multi-form body behaves the same as the equivalent lambda,
+      --  which already compiles its body as a sequence.
+
+      Evaluate (VM, "(define lambda-counter 0)");
+      Evaluate (VM,
+                "(define lambda-bump"
+                & " (lambda ()"
+                & " (set! lambda-counter (+ lambda-counter 1))"
+                & " (set! lambda-counter (+ lambda-counter 10))"
+                & " lambda-counter))");
+      Test_Define (VM, "(lambda-bump)", 11);
+
+      --  A single form body still works.
+
+      Evaluate (VM, "(define (one-form x) (+ x 1))");
+      Test_Define (VM, "(one-form 41)", 42);
+
+      --  Recursion still works with a multi-form body.
+
+      Evaluate (VM, "(define call-count 0)");
+      Evaluate (VM,
+                "(define (count-down n)"
+                & " (set! call-count (+ call-count 1))"
+                & " (if (eq? n 0) call-count (count-down (- n 1))))");
+      Test_Define (VM, "(count-down 4)", 5);
+   end Run_Tests;
+
+   -----------------
+   -- Test_Define --
+   -----------------
+
+   procedure Test_Define
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : Integer)
+   is
+   begin
+      Evaluate (VM, Expression);
+      Test ("evaluate: " & Expression,
+            Integer'Image (VM.Get_Slot (1)),
+            Integer'Image (Expected));
+   end Test_Define;
+
+end Raven.Tests.Define;
