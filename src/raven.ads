@@ -170,6 +170,11 @@ private
       Index : Slot_Index;
       Value : Object);
 
+   function New_Symbol
+     (This   : Raven_VM'Class;
+      Prefix : String)
+      return Object;
+
    function Car (This : Raven_VM'Class;
                  Pair : Object)
                  return Object;

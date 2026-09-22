@@ -54,7 +54,12 @@ private package Raven.Objects is
        (To_Instruction (To_Object'Result),
         Instruction);
 
-   type Symbol_Id is range 1 .. 999;
+   --  As many symbols as an object can name.  Generated symbols are
+   --  minted one per expansion of a macro that introduces a name, and
+   --  nothing takes a symbol back, so the room to do that is the whole
+   --  of what the payload can hold.
+
+   type Symbol_Id is range 1 .. 2 ** Object_Payload_Bits - 1;
 
    function Is_Symbol (X : Object) return Boolean;
    function To_Symbol (X : Object) return Symbol_Id
