@@ -259,15 +259,36 @@ package body Raven.Engine.SECD is
       Handler        : Foreign_Function_Handler;
       Argument_Count : Natural)
    is
+      use Raven.Objects;
+      New_Entry : constant Foreign_Function_Record :=
+                    (Name'Length, Handler, Argument_Count, Name);
+      Id        : Foreign_Function_Id := Foreign_Function_Id'First;
+      Found     : Boolean := False;
    begin
-      This.Foreign.Append
-        (Foreign_Function_Record'
-           (Name'Length, Handler, Argument_Count, Name));
-      This.Env.Insert
-        (Name, Raven.Objects.To_Object (This.Foreign.Last_Index));
+      --  A name bound again takes back the slot it had.  There are
+      --  only so many foreign function ids, and rebinding must not
+      --  spend one each time.
+
+      for I in 1 .. This.Foreign.Last_Index loop
+         if Ada.Strings.Equal_Case_Insensitive
+           (This.Foreign (I).Name, Name)
+         then
+            This.Foreign (I) := New_Entry;
+            Id := I;
+            Found := True;
+            exit;
+         end if;
+      end loop;
+
+      if not Found then
+         This.Foreign.Append (New_Entry);
+         Id := This.Foreign.Last_Index;
+      end if;
+
+      This.Env.Define (Name, To_Object (Id));
       Ada.Text_IO.Put_Line
         ("foreign function '" & Name & "' bound to"
-         & This.Foreign.Last_Index'Image);
+         & Id'Image);
    end Bind_Foreign_Function;
 
    ----------
@@ -539,7 +560,7 @@ package body Raven.Engine.SECD is
                      Value : constant Object :=
                                This.Pop;
                   begin
-                     This.Env.Insert (Name, Value);
+                     This.Env.Define (Name, Value);
                      This.Push (Sym);
                   end;
                when DROP =>

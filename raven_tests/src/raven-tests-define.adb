@@ -102,6 +102,30 @@ package body Raven.Tests.Define is
                 & " (set! call-count (+ call-count 1))"
                 & " (if (eq? n 0) call-count (count-down (- n 1))))");
       Test_Define (VM, "(count-down 4)", 5);
+
+      --  A name can be defined again, and the second definition wins.
+      --  A definition is not a promise that the name is new.
+
+      Evaluate (VM, "(define probe-name 1)");
+      Test_Define (VM, "probe-name", 1);
+      Evaluate (VM, "(define probe-name 2)");
+      Test_Define (VM, "probe-name", 2);
+
+      Evaluate (VM, "(define (probe-f) 1)");
+      Test_Define (VM, "(probe-f)", 1);
+      Evaluate (VM, "(define (probe-f) 2)");
+      Test_Define (VM, "(probe-f)", 2);
+
+      --  A definition can take a name the base library defined, and
+      --  the library can be loaded again over it: xcons is left as the
+      --  library has it, which is how the second load shows.
+
+      Evaluate (VM, "(define (xcons xs x) 99)");
+      Test_Define (VM, "(xcons '(2 3) 1)", 99);
+      VM.Import_Library
+        ("(scheme base)",
+         Standard_Library_Path & "/scheme/base.scm");
+      Test_Define (VM, "(car (xcons '(2 3) 1))", 1);
    end Run_Tests;
 
    -----------------

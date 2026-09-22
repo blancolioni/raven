@@ -34,6 +34,11 @@ package body Raven.Engine.Environment is
       Name : String)
       return Object;
 
+   overriding procedure Define
+     (This  : in out Instance;
+      Name  : String;
+      Value : Object);
+
    overriding procedure Insert
      (This  : in out Instance;
       Name  : String;
@@ -81,6 +86,19 @@ package body Raven.Engine.Environment is
    begin
       return new Instance'(Parent => Parent, others => <>);
    end Create;
+
+   ------------
+   -- Define --
+   ------------
+
+   overriding procedure Define
+     (This  : in out Instance;
+      Name  : String;
+      Value : Object)
+   is
+   begin
+      This.Map.Include (Name, Value);
+   end Define;
 
    ------------
    -- Insert --
