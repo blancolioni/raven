@@ -194,6 +194,9 @@
 
 (test "quasiquote, one level" '(1 2 3) `(1 ,(+ 1 1) 3))
 (test "quasiquote splices" '(1 7 8) `(1 ,@qq-list))
+(test "quasiquote splices in the middle" '(1 7 8 9) `(1 ,@qq-list 9))
+(test "quasiquote splices twice" '(7 8 7 8) `(,@qq-list ,@qq-list))
+(test "quasiquote splices an empty list" '(1 9) `(1 ,@'() 9))
 (test "nested quasiquote is data" '(a (quasiquote b)) `(a `b))
 (test "unquote one level in is data" '(1 (quasiquote (2 (unquote qq-value))))
       `(1 `(2 ,qq-value)))

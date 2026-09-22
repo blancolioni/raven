@@ -484,6 +484,10 @@ package body Raven.Engine.SECD.Translator is
                  and then Is_Pair (Get (Head))
                  and then Target.Car (Get (Head)) = S_Unquote_Splicing
                then
+                  --  The rest of the list first and the spliced value
+                  --  on top, as the CONS below takes its head from the
+                  --  top: what is on top goes in front.
+
                   Compile_QQ (Get (Tail), Level);
                   Go (Target.Cadr (Get (Head)));
                   This.Append (APPEND);
