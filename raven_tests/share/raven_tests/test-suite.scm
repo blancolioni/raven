@@ -252,6 +252,103 @@
   (if (= n 0) '() (cons (gensym) (generate-symbols (- n 1)))))
 (test "a thousand generated symbols" 1000 (length (generate-symbols 1000)))
 
+;;  define-syntax and syntax-rules.  A pattern is matched against the
+;;  form that used the macro, and the first rule that matches gives the
+;;  template that takes its place.
+
+(define-syntax unless-not
+  (syntax-rules ()
+    ((_ test then otherwise) (if test otherwise then))))
+(test "syntax-rules, a fixed pattern" 'yes (unless-not #f 'yes 'no))
+
+(define-syntax listing
+  (syntax-rules ()
+    ((_ x ...) (list x ...))))
+(test "syntax-rules, an ellipsis" '(1 2 3) (listing 1 2 3))
+(test "syntax-rules, an ellipsis over nothing" '() (listing))
+
+(define-syntax second-of
+  (syntax-rules ()
+    ((_ _ y) y)))
+(test "syntax-rules, a wildcard" 2 (second-of 1 2))
+
+(define-syntax went
+  (syntax-rules (to from)
+    ((_ to x) (list 'went-to x))
+    ((_ from x) (list 'came-from x))))
+(test "syntax-rules, a literal" '(went-to 1) (went to 1))
+(test "syntax-rules, another literal" '(came-from 2) (went from 2))
+
+(define-syntax any-of
+  (syntax-rules ()
+    ((_) #f)
+    ((_ a) a)
+    ((_ a b ...) (if a a (any-of b ...)))))
+(test "syntax-rules, the first rule that matches" #f (any-of))
+(test "syntax-rules, a rule that uses its own macro" 3 (any-of #f #f 3))
+
+(define-syntax unzip
+  (syntax-rules ()
+    ((_ (a b) ...) (list (list a ...) (list b ...)))))
+(test "syntax-rules, an ellipsis over a pattern" '((1 3) (2 4))
+      (unzip (1 2) (3 4)))
+
+(define-syntax first-and-last
+  (syntax-rules ()
+    ((_ a b ... c) (list a c))))
+(test "syntax-rules, a pattern after an ellipsis" '(1 4)
+      (first-and-last 1 2 3 4))
+
+;;  let-syntax binds macros for a body and no further, and the macros
+;;  it binds are in scope for each other.
+
+(test "let-syntax binds for its body" 42
+      (let-syntax ((twice-of (syntax-rules () ((_ x) (+ x x)))))
+        (twice-of 21)))
+(test "let-syntax does not escape" 5
+      ((lambda (twice-of) (twice-of 5)) (lambda (v) v)))
+(test "letrec-syntax, one macro using another" 12
+      (letrec-syntax ((double (syntax-rules () ((_ x) (+ x x))))
+                      (quadruple (syntax-rules () ((_ x) (double (double x))))))
+        (quadruple 3)))
+
+;;  define-syntax is a define-macro, so it takes the scope define-macro
+;;  takes: one written in a body belongs to that body.
+
+(define (uses-local-syntax)
+  (define-syntax twice (syntax-rules () ((_ x) (+ x x))))
+  (twice 21))
+(test "define-syntax in a body" 42 (uses-local-syntax))
+(test "define-syntax in a body does not escape" 5
+      ((lambda (twice) (twice 5)) (lambda (v) v)))
+
+;;  A name under two ellipses holds a list of lists, and repeats twice
+;;  over on the way out.
+
+(define-syntax rows
+  (syntax-rules ()
+    ((_ (a ...) ...) (list (list a ...) ...))))
+(test "syntax-rules, an ellipsis inside an ellipsis" '((1 2) (3 4))
+      (rows (1 2) (3 4)))
+
+;;  Two names repeating together, which is what a binding form needs.
+
+(define-syntax my-let
+  (syntax-rules ()
+    ((_ ((name value) ...) body ...)
+     ((lambda (name ...) body ...) value ...))))
+(test "syntax-rules, two names repeating together" 3
+      (my-let ((x 1) (y 2)) (+ x y)))
+(test "syntax-rules, a body of more than one form" 2 (my-let ((x 1)) 9 2))
+
+;;  A pattern can end in a name, which takes whatever is left.
+
+(define-syntax with-rest
+  (syntax-rules ()
+    ((_ a . rest) (list a (list . rest)))))
+(test "syntax-rules, a pattern that ends in a name" '(1 (2 3))
+      (with-rest 1 2 3))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")

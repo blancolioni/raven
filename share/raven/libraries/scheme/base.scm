@@ -88,3 +88,273 @@
 
 (define (sum-list xs) (if (null? xs) 0 (+ (car xs) (sum-list (cdr xs)))))
 (define sum (lambda xs (sum-list xs)))
+
+;;  Odds and ends the macro expander needs, and that a base library
+;;  wants in any case.
+
+;;  car, cdr and cons are forms the translator knows, which compiles
+;;  them to an instruction, so the names have no value to pass to
+;;  anything.  Defining them gives the name a procedure as well: a call
+;;  written out still compiles to the instruction, and (map car xs) now
+;;  has a car to map.
+
+(define (car x) (car x))
+(define (cdr x) (cdr x))
+(define (cons x y) (cons x y))
+
+(define (caar x) (car (car x)))
+(define (cadr x) (car (cdr x)))
+(define (cdar x) (cdr (car x)))
+(define (cddr x) (cdr (cdr x)))
+(define (caddr x) (car (cddr x)))
+
+;;  let is a define-macro rather than a define-syntax because the
+;;  expander below is written with it.  It is the plain let: a named
+;;  let, which binds a procedure to loop with, is not here yet.
+
+(define-macro (let bindings . body)
+  `((lambda ,(map car bindings) ,@body) ,@(map cadr bindings)))
+
+(define (assq key alist)
+  (if (null? alist)
+      #f
+      (if (eq? (caar alist) key)
+          (car alist)
+          (assq key (cdr alist)))))
+
+(define (memq x xs)
+  (if (null? xs)
+      #f
+      (if (eq? (car xs) x)
+          xs
+          (memq x (cdr xs)))))
+
+;;  syntax-rules
+;;
+;;  (define-syntax name (syntax-rules (literal ...) (pattern template) ...))
+;;
+;;  Each pattern is matched against the form that used the macro, and
+;;  the first one that matches gives the template that takes its place.
+;;  The head of a pattern is not matched, _ matches anything without
+;;  binding it, a literal matches only itself, and a pattern followed by
+;;  ... matches any number of forms in a row.
+;;
+;;  A match is a list of (name depth value).  At depth zero the value is
+;;  what the name matched; at depth n it is a list of depth n-1 values,
+;;  one for each repetition, which is what a name under n ellipses holds.
+;;
+;;  define-syntax is a define-macro, so it inherits what define-macro
+;;  guarantees, which is nothing: a name a template introduces means
+;;  whatever it means where the macro is used.  Generate one with gensym
+;;  where that matters.
+
+(define sr-none (gensym 'no-match))
+
+(define (sr-ellipsis? x)
+  (if (pair? x) (eq? (car x) '...) #f))
+
+(define (sr-vars pattern literals)
+  (if (symbol? pattern)
+      (if (eq? pattern '_)
+          '()
+          (if (eq? pattern '...)
+              '()
+              (if (eq? (memq pattern literals) #f)
+                  (list pattern)
+                  '())))
+      (if (pair? pattern)
+          (append (sr-vars (car pattern) literals)
+                  (sr-vars (cdr pattern) literals))
+          '())))
+
+;;  Splitting a form for an ellipsis, without counting: step a lead
+;;  pointer as far into the form as the pattern after the ellipsis
+;;  reaches, then walk both until the lead runs out.  What the first
+;;  pointer passed over is what repeats.
+
+(define (sr-advance xs n)
+  (if (pair? n)
+      (if (pair? xs)
+          (sr-advance (cdr xs) (cdr n))
+          sr-none)
+      xs))
+
+(define (sr-walk xs lead)
+  (if (pair? lead)
+      (let ((rest (sr-walk (cdr xs) (cdr lead))))
+        (cons (cons (car xs) (car rest)) (cdr rest)))
+      (cons '() xs)))
+
+(define (sr-split form tail)
+  (let ((lead (sr-advance form tail)))
+    (if (eq? lead sr-none)
+        sr-none
+        (sr-walk form lead))))
+
+(define (sr-match pattern form literals depth bindings)
+  (if (eq? bindings sr-none)
+      sr-none
+      (if (symbol? pattern)
+          (sr-match-name pattern form literals depth bindings)
+          (if (pair? pattern)
+              (if (sr-ellipsis? (cdr pattern))
+                  (sr-match-repeated (car pattern) (cddr pattern) form
+                                     literals depth bindings)
+                  (if (pair? form)
+                      (sr-match (cdr pattern) (cdr form) literals depth
+                                (sr-match (car pattern) (car form)
+                                          literals depth bindings))
+                      sr-none))
+              (if (equal? pattern form) bindings sr-none)))))
+
+(define (sr-match-name pattern form literals depth bindings)
+  (if (eq? pattern '_)
+      bindings
+      (if (eq? (memq pattern literals) #f)
+          (cons (list pattern depth form) bindings)
+          (if (eq? form pattern) bindings sr-none))))
+
+(define (sr-match-repeated sub tail form literals depth bindings)
+  (let ((split (sr-split form tail)))
+    (if (eq? split sr-none)
+        sr-none
+        (let ((matches (sr-match-each sub (car split) literals depth)))
+          (if (eq? matches sr-none)
+              sr-none
+              (sr-match tail (cdr split) literals depth
+                        (append (sr-gather (sr-vars sub literals)
+                                           sub matches depth)
+                                bindings)))))))
+
+(define (sr-match-each sub forms literals depth)
+  (if (null? forms)
+      '()
+      (let ((first (sr-match sub (car forms) literals depth '())))
+        (if (eq? first sr-none)
+            sr-none
+            (let ((rest (sr-match-each sub (cdr forms) literals depth)))
+              (if (eq? rest sr-none)
+                  sr-none
+                  (cons first rest)))))))
+
+;;  How many ellipses of a pattern a name sits under.  That is what its
+;;  depth goes up by when the pattern it is in repeats: a name two deep
+;;  holds a list of lists.
+
+(define (sr-under name pattern)
+  (if (pair? pattern)
+      (if (eq? (memq name (sr-vars (car pattern) '())) #f)
+          (if (sr-ellipsis? (cdr pattern))
+              (sr-under name (cddr pattern))
+              (sr-under name (cdr pattern)))
+          (if (sr-ellipsis? (cdr pattern))
+              (+ 1 (sr-under name (car pattern)))
+              (sr-under name (car pattern))))
+      0))
+
+(define (sr-gather names sub matches depth)
+  (if (null? names)
+      '()
+      (cons (list (car names)
+                  (+ depth 1 (sr-under (car names) sub))
+                  (map (lambda (m) (caddr (assq (car names) m))) matches))
+            (sr-gather (cdr names) sub matches depth))))
+
+(define (sr-instantiate template bindings)
+  (if (symbol? template)
+      (let ((found (assq template bindings)))
+        (if (eq? found #f)
+            template
+            (caddr found)))
+      (if (pair? template)
+          (if (sr-ellipsis? (cdr template))
+              (append (sr-repeat (car template) bindings)
+                      (sr-instantiate (cddr template) bindings))
+              (cons (sr-instantiate (car template) bindings)
+                    (sr-instantiate (cdr template) bindings)))
+          template)))
+
+(define (sr-repeat sub bindings)
+  (let ((names (sr-repeated (sr-vars sub '()) bindings)))
+    (if (null? names)
+        (error "syntax-rules: ... follows nothing that repeats")
+        (sr-repeat-each sub names bindings))))
+
+(define (sr-repeated names bindings)
+  (if (null? names)
+      '()
+      (let ((found (assq (car names) bindings)))
+        (if (eq? found #f)
+            (sr-repeated (cdr names) bindings)
+            (if (= (cadr found) 0)
+                (sr-repeated (cdr names) bindings)
+                (cons (car names) (sr-repeated (cdr names) bindings)))))))
+
+;;  A repetition is over when any of the names it runs through has
+;;  nothing left.
+
+(define (sr-spent? names bindings)
+  (if (null? names)
+      #f
+      (if (null? (caddr (assq (car names) bindings)))
+          #t
+          (sr-spent? (cdr names) bindings))))
+
+(define (sr-heads names bindings)
+  (map (lambda (b)
+         (if (eq? (memq (car b) names) #f)
+             b
+             (list (car b) (- (cadr b) 1) (car (caddr b)))))
+       bindings))
+
+(define (sr-rests names bindings)
+  (map (lambda (b)
+         (if (eq? (memq (car b) names) #f)
+             b
+             (list (car b) (cadr b) (cdr (caddr b)))))
+       bindings))
+
+(define (sr-repeat-each sub names bindings)
+  (if (sr-spent? names bindings)
+      '()
+      (cons (sr-instantiate sub (sr-heads names bindings))
+            (sr-repeat-each sub names (sr-rests names bindings)))))
+
+(define (sr-expand literals rules args)
+  (if (null? rules)
+      (error "syntax-rules: no rule matches this form")
+      (let ((rule (car rules)))
+        (let ((bindings (sr-match (cdr (car rule)) args literals 0 '())))
+          (if (eq? bindings sr-none)
+              (sr-expand literals (cdr rules) args)
+              (sr-instantiate (cadr rule) bindings))))))
+
+(define (sr-syntax-rules? spec)
+  (if (pair? spec) (eq? (car spec) 'syntax-rules) #f))
+
+;;  define-syntax writes a define-macro that hands the form it was used
+;;  on to the expander, along with the literals and the rules.  So a
+;;  macro defined this way is a macro like any other: it takes the scope
+;;  define-macro takes, and it is expanded where it stands.
+
+;;  let-syntax binds macros for a body and no further.  A body is a
+;;  region, and a macro defined in one belongs to it, so the body of a
+;;  procedure that is applied on the spot is all it takes.  The macros
+;;  are in scope for each other, which is what letrec-syntax asks for
+;;  and more than let-syntax promises, so one serves for both.
+
+(define-macro (let-syntax sr-bindings . sr-body)
+  `((lambda ()
+      ,@(map (lambda (b) `(define-syntax ,(car b) ,(cadr b))) sr-bindings)
+      ,@sr-body)))
+
+(define-macro (letrec-syntax sr-bindings . sr-body)
+  `(let-syntax ,sr-bindings ,@sr-body))
+
+(define-macro (define-syntax sr-name sr-rules)
+  (if (sr-syntax-rules? sr-rules)
+      (if (symbol? (cadr sr-rules))
+          (error "define-syntax: syntax-rules with an ellipsis of its own is not here yet")
+          `(define-macro (,sr-name . sr-form)
+             (sr-expand ',(cadr sr-rules) ',(cddr sr-rules) sr-form)))
+      (error "define-syntax: expected (syntax-rules (literal ...) rule ...)")))
