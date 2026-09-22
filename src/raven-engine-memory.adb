@@ -248,6 +248,7 @@ package body Raven.Engine.Memory is
 
       if not Found then
          This.Value_Ids.Append (No_Element);
+         Id := This.Value_Ids.Last_Index;
       end if;
 
       This.Value_List.Append (Value);

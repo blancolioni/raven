@@ -7,6 +7,7 @@ with Raven.Tests.Memory;
 with Raven.Tests.Numbers;
 with Raven.Tests.Objects;
 with Raven.Tests.Parser;
+with Raven.Tests.Strings;
 
 package body Raven.Tests is
 
@@ -27,6 +28,7 @@ package body Raven.Tests is
          Raven.Tests.Library.Run_Tests (VM);
          Raven.Tests.Define.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);
+         Raven.Tests.Strings.Run_Tests (VM);
          VM.Report_State;
          VM.Close_VM;
       end;
