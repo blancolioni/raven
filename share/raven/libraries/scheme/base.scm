@@ -1,28 +1,6 @@
 (define (eq? x y) (raven-eq? x y))
 (define (null? x) (eq? x '()))
 
-(define-macro (when test . body)
-  `(if ,test (begin ,@body) #f))
-
-(define-macro (unless test . body)
-  `(if ,test #f (begin ,@body)))
-
-(define-macro (and . args)
-  (if (null? args)
-      #t
-      (if (null? (cdr args))
-          (car args)
-          `(if ,(car args) (and ,@(cdr args)) #f))))
-
-(define-macro (or . args)
-  (if (null? args)
-      #f
-      (if (null? (cdr args))
-          (car args)
-          `(if ,(car args) ,(car args) (or ,@(cdr args))))))
-
-(define (boolean? x) (or (eq? x #t) (eq? x #f)))
-
 (define (list . xs) xs)
 (define (xcons xs x) (cons x xs))
 
@@ -108,13 +86,6 @@
 (define (cddr x) (cdr (cdr x)))
 (define (caddr x) (car (cddr x)))
 
-;;  let is a define-macro rather than a define-syntax because the
-;;  expander below is written with it.  It is the plain let: a named
-;;  let, which binds a procedure to loop with, is not here yet.
-
-(define-macro (let bindings . body)
-  `((lambda ,(map car bindings) ,@body) ,@(map cadr bindings)))
-
 (define (assq key alist)
   (if (null? alist)
       #f
@@ -181,15 +152,17 @@
 
 (define (sr-walk xs lead)
   (if (pair? lead)
-      (let ((rest (sr-walk (cdr xs) (cdr lead))))
-        (cons (cons (car xs) (car rest)) (cdr rest)))
+      ((lambda (rest)
+         (cons (cons (car xs) (car rest)) (cdr rest)))
+       (sr-walk (cdr xs) (cdr lead)))
       (cons '() xs)))
 
 (define (sr-split form tail)
-  (let ((lead (sr-advance form tail)))
-    (if (eq? lead sr-none)
-        sr-none
-        (sr-walk form lead))))
+  ((lambda (lead)
+     (if (eq? lead sr-none)
+         sr-none
+         (sr-walk form lead)))
+   (sr-advance form tail)))
 
 (define (sr-match pattern form literals depth bindings)
   (if (eq? bindings sr-none)
@@ -215,27 +188,31 @@
           (if (eq? form pattern) bindings sr-none))))
 
 (define (sr-match-repeated sub tail form literals depth bindings)
-  (let ((split (sr-split form tail)))
-    (if (eq? split sr-none)
-        sr-none
-        (let ((matches (sr-match-each sub (car split) literals depth)))
-          (if (eq? matches sr-none)
-              sr-none
-              (sr-match tail (cdr split) literals depth
-                        (append (sr-gather (sr-vars sub literals)
-                                           sub matches depth)
-                                bindings)))))))
+  ((lambda (split)
+     (if (eq? split sr-none)
+         sr-none
+         ((lambda (matches)
+            (if (eq? matches sr-none)
+                sr-none
+                (sr-match tail (cdr split) literals depth
+                          (append (sr-gather (sr-vars sub literals)
+                                             sub matches depth)
+                                  bindings))))
+          (sr-match-each sub (car split) literals depth))))
+   (sr-split form tail)))
 
 (define (sr-match-each sub forms literals depth)
   (if (null? forms)
       '()
-      (let ((first (sr-match sub (car forms) literals depth '())))
-        (if (eq? first sr-none)
-            sr-none
-            (let ((rest (sr-match-each sub (cdr forms) literals depth)))
-              (if (eq? rest sr-none)
-                  sr-none
-                  (cons first rest)))))))
+      ((lambda (first)
+         (if (eq? first sr-none)
+             sr-none
+             ((lambda (rest)
+                (if (eq? rest sr-none)
+                    sr-none
+                    (cons first rest)))
+              (sr-match-each sub (cdr forms) literals depth))))
+       (sr-match sub (car forms) literals depth '()))))
 
 ;;  How many ellipses of a pattern a name sits under.  That is what its
 ;;  depth goes up by when the pattern it is in repeats: a name two deep
@@ -325,11 +302,13 @@
 
 (define (sr-instantiate template bindings renames)
   (if (symbol? template)
-      (let ((found (assq template bindings)))
-        (if (eq? found #f)
-            (let ((renamed (assq template renames)))
-              (if (eq? renamed #f) template (cdr renamed)))
-            (caddr found)))
+      ((lambda (found)
+         (if (eq? found #f)
+             ((lambda (renamed)
+                (if (eq? renamed #f) template (cdr renamed)))
+              (assq template renames))
+             (caddr found)))
+       (assq template bindings))
       (if (pair? template)
           (if (eq? (car template) 'quote)
 
@@ -345,20 +324,22 @@
           template)))
 
 (define (sr-repeat sub bindings renames)
-  (let ((names (sr-repeated (sr-vars sub '()) bindings)))
-    (if (null? names)
-        (error "syntax-rules: ... follows nothing that repeats")
-        (sr-repeat-each sub names bindings renames))))
+  ((lambda (names)
+     (if (null? names)
+         (error "syntax-rules: ... follows nothing that repeats")
+         (sr-repeat-each sub names bindings renames)))
+   (sr-repeated (sr-vars sub '()) bindings)))
 
 (define (sr-repeated names bindings)
   (if (null? names)
       '()
-      (let ((found (assq (car names) bindings)))
-        (if (eq? found #f)
-            (sr-repeated (cdr names) bindings)
-            (if (= (cadr found) 0)
-                (sr-repeated (cdr names) bindings)
-                (cons (car names) (sr-repeated (cdr names) bindings)))))))
+      ((lambda (found)
+         (if (eq? found #f)
+             (sr-repeated (cdr names) bindings)
+             (if (= (cadr found) 0)
+                 (sr-repeated (cdr names) bindings)
+                 (cons (car names) (sr-repeated (cdr names) bindings)))))
+       (assq (car names) bindings))))
 
 ;;  A repetition is over when any of the names it runs through has
 ;;  nothing left.
@@ -393,12 +374,14 @@
 (define (sr-expand literals rules args)
   (if (null? rules)
       (error "syntax-rules: no rule matches this form")
-      (let ((rule (car rules)))
-        (let ((bindings (sr-match (cdr (car rule)) args literals 0 '())))
-          (if (eq? bindings sr-none)
-              (sr-expand literals (cdr rules) args)
-              (sr-instantiate (cadr rule) bindings
-                              (sr-renames (cadr rule) bindings)))))))
+      ((lambda (rule)
+         ((lambda (bindings)
+            (if (eq? bindings sr-none)
+                (sr-expand literals (cdr rules) args)
+                (sr-instantiate (cadr rule) bindings
+                                (sr-renames (cadr rule) bindings))))
+          (sr-match (cdr (car rule)) args literals 0 '())))
+       (car rules))))
 
 (define (sr-syntax-rules? spec)
   (if (pair? spec) (eq? (car spec) 'syntax-rules) #f))
@@ -407,20 +390,12 @@
 ;;  on to the expander, along with the literals and the rules.  So a
 ;;  macro defined this way is a macro like any other: it takes the scope
 ;;  define-macro takes, and it is expanded where it stands.
-
-;;  let-syntax binds macros for a body and no further.  A body is a
-;;  region, and a macro defined in one belongs to it, so the body of a
-;;  procedure that is applied on the spot is all it takes.  The macros
-;;  are in scope for each other, which is what letrec-syntax asks for
-;;  and more than let-syntax promises, so one serves for both.
-
-(define-macro (let-syntax sr-bindings . sr-body)
-  `((lambda ()
-      ,@(map (lambda (b) `(define-syntax ,(car b) ,(cadr b))) sr-bindings)
-      ,@sr-body)))
-
-(define-macro (letrec-syntax sr-bindings . sr-body)
-  `(let-syntax ,sr-bindings ,@sr-body))
+;;
+;;  This is the one macro here that is not written with syntax-rules,
+;;  and it is the one that cannot be: a rule of its own is what it
+;;  would have to be read by.  Everything above it is written without
+;;  the macros it defines, for the same reason -- the expander cannot
+;;  use what only it can expand.
 
 (define-macro (define-syntax sr-name sr-rules)
   (if (sr-syntax-rules? sr-rules)
@@ -429,3 +404,55 @@
           `(define-macro (,sr-name . sr-form)
              (sr-expand ',(cadr sr-rules) ',(cddr sr-rules) sr-form)))
       (error "define-syntax: expected (syntax-rules (literal ...) rule ...)")))
+
+;;  The forms above are all define-syntax has to be written with.  What
+;;  follows is written with it, and is what R7RS asks for rather than
+;;  what was quickest to write by hand: or no longer evaluates the
+;;  argument it answers with twice, because it can hold it in a name of
+;;  its own and trust the name to stay its own.
+
+(define-syntax let
+  (syntax-rules ()
+    ((_ ((name value) ...) body ...)
+     ((lambda (name ...) body ...) value ...))))
+
+;;  let-syntax binds macros for a body and no further.  A body is a
+;;  region and a macro defined in one belongs to it, so the body of a
+;;  procedure applied on the spot is all it takes.  The macros are in
+;;  scope for each other, which is what letrec-syntax asks for and more
+;;  than let-syntax promises, so one template serves for both.
+
+(define-syntax let-syntax
+  (syntax-rules ()
+    ((_ ((name spec) ...) body ...)
+     ((lambda () (define-syntax name spec) ... body ...)))))
+
+(define-syntax letrec-syntax
+  (syntax-rules ()
+    ((_ ((name spec) ...) body ...)
+     ((lambda () (define-syntax name spec) ... body ...)))))
+
+(define-syntax when
+  (syntax-rules ()
+    ((_ test body ...) (if test (begin body ...) #f))))
+
+(define-syntax unless
+  (syntax-rules ()
+    ((_ test body ...) (if test #f (begin body ...)))))
+
+(define-syntax and
+  (syntax-rules ()
+    ((_) #t)
+    ((_ a) a)
+    ((_ a b ...) (if a (and b ...) #f))))
+
+(define-syntax or
+  (syntax-rules ()
+    ((_) #f)
+    ((_ a) a)
+    ((_ a b ...) (let ((value a)) (if value value (or b ...))))))
+
+;;  boolean? waits here for or rather than sitting with the other
+;;  predicates, because or is now one of the forms above.
+
+(define (boolean? x) (or (eq? x #t) (eq? x #f)))

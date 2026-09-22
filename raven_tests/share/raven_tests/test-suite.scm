@@ -334,6 +334,20 @@
     ((_ x) (list 'caught x))))
 (test "a quoted name in a template is data" '(caught 9) (quotes-a-name caught))
 
+;;  The library's own macros are written with syntax-rules now.  or
+;;  holds what it tests in a name of its own, which it could not do
+;;  while a name a template binds was the caller's.
+
+(test "let binds" 3 (let ((a 1) (b 2)) (+ a b)))
+(test "let takes a body of several forms" 2 (let ((a 1)) 9 2))
+
+(define or-calls 0)
+(define (counted v)
+  (set! or-calls (+ or-calls 1))
+  v)
+(test "or answers with the first argument that holds" 7 (or (counted 7) 9))
+(test "or asked for it once" 1 or-calls)
+
 ;;  let-syntax binds macros for a body and no further, and the macros
 ;;  it binds are in scope for each other.
 
