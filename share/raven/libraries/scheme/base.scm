@@ -260,25 +260,95 @@
                   (map (lambda (m) (caddr (assq (car names) m))) matches))
             (sr-gather (cdr names) sub matches depth))))
 
-(define (sr-instantiate template bindings)
+;;  The names a template binds are renamed, each to a symbol nothing
+;;  can write, so that what the caller hands the macro keeps its own
+;;  meaning inside them.  Only what the template binds is renamed: a
+;;  name it merely refers to still means whatever it means where the
+;;  macro is used, which is what define-macro means and no more.
+;;
+;;  A name that came from the pattern is the caller's own and is left
+;;  alone.  lambda and let are the forms looked at: a binding the
+;;  expander does not recognise is left alone too, which costs the
+;;  caller nothing it had before.
+;;
+;;  A name written inside a quasiquote in a template is renamed as
+;;  though it were code, where hygiene would hand back the name as
+;;  written.  A quote is read properly; a quasiquote is not, yet.
+
+(define (sr-names x)
+  (if (symbol? x)
+      (if (eq? x '...)
+          '()
+          (if (eq? x '_) '() (list x)))
+      (if (pair? x)
+          (append (sr-names (car x)) (sr-names (cdr x)))
+          '())))
+
+(define (sr-let-names bindings)
+  (if (pair? bindings)
+      (if (pair? (car bindings))
+          (if (symbol? (caar bindings))
+              (cons (caar bindings) (sr-let-names (cdr bindings)))
+              (sr-let-names (cdr bindings)))
+          (sr-let-names (cdr bindings)))
+      '()))
+
+(define (sr-bound-here template)
+  (if (eq? (car template) 'lambda)
+      (if (pair? (cdr template)) (sr-names (cadr template)) '())
+      (if (eq? (car template) 'let)
+          (if (pair? (cdr template)) (sr-let-names (cadr template)) '())
+          '())))
+
+(define (sr-binders template)
+  (if (pair? template)
+      (append (sr-bound-here template)
+              (append (sr-binders (car template))
+                      (sr-binders (cdr template))))
+      '()))
+
+(define (sr-introduced names bindings)
+  (if (null? names)
+      '()
+      (if (eq? (assq (car names) bindings) #f)
+          (cons (car names) (sr-introduced (cdr names) bindings))
+          (sr-introduced (cdr names) bindings))))
+
+(define (sr-fresh names)
+  (if (null? names)
+      '()
+      (cons (cons (car names) (gensym (car names)))
+            (sr-fresh (cdr names)))))
+
+(define (sr-renames template bindings)
+  (sr-fresh (sr-introduced (sr-binders template) bindings)))
+
+(define (sr-instantiate template bindings renames)
   (if (symbol? template)
       (let ((found (assq template bindings)))
         (if (eq? found #f)
-            template
+            (let ((renamed (assq template renames)))
+              (if (eq? renamed #f) template (cdr renamed)))
             (caddr found)))
       (if (pair? template)
-          (if (sr-ellipsis? (cdr template))
-              (append (sr-repeat (car template) bindings)
-                      (sr-instantiate (cddr template) bindings))
-              (cons (sr-instantiate (car template) bindings)
-                    (sr-instantiate (cdr template) bindings)))
+          (if (eq? (car template) 'quote)
+
+              ;;  Quoted names are data, and stay as they were written.
+              ;;  What the pattern bound still goes in.
+
+              (cons 'quote (sr-instantiate (cdr template) bindings '()))
+              (if (sr-ellipsis? (cdr template))
+                  (append (sr-repeat (car template) bindings renames)
+                          (sr-instantiate (cddr template) bindings renames))
+                  (cons (sr-instantiate (car template) bindings renames)
+                        (sr-instantiate (cdr template) bindings renames))))
           template)))
 
-(define (sr-repeat sub bindings)
+(define (sr-repeat sub bindings renames)
   (let ((names (sr-repeated (sr-vars sub '()) bindings)))
     (if (null? names)
         (error "syntax-rules: ... follows nothing that repeats")
-        (sr-repeat-each sub names bindings))))
+        (sr-repeat-each sub names bindings renames))))
 
 (define (sr-repeated names bindings)
   (if (null? names)
@@ -314,11 +384,11 @@
              (list (car b) (cadr b) (cdr (caddr b)))))
        bindings))
 
-(define (sr-repeat-each sub names bindings)
+(define (sr-repeat-each sub names bindings renames)
   (if (sr-spent? names bindings)
       '()
-      (cons (sr-instantiate sub (sr-heads names bindings))
-            (sr-repeat-each sub names (sr-rests names bindings)))))
+      (cons (sr-instantiate sub (sr-heads names bindings) renames)
+            (sr-repeat-each sub names (sr-rests names bindings) renames))))
 
 (define (sr-expand literals rules args)
   (if (null? rules)
@@ -327,7 +397,8 @@
         (let ((bindings (sr-match (cdr (car rule)) args literals 0 '())))
           (if (eq? bindings sr-none)
               (sr-expand literals (cdr rules) args)
-              (sr-instantiate (cadr rule) bindings))))))
+              (sr-instantiate (cadr rule) bindings
+                              (sr-renames (cadr rule) bindings)))))))
 
 (define (sr-syntax-rules? spec)
   (if (pair? spec) (eq? (car spec) 'syntax-rules) #f))

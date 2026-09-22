@@ -299,6 +299,41 @@
 (test "syntax-rules, a pattern after an ellipsis" '(1 4)
       (first-and-last 1 2 3 4))
 
+;;  A name a template binds is renamed, so a form the caller hands the
+;;  macro keeps its own meaning inside it.  Each of these answers the
+;;  other thing if the binder takes the caller's name over.
+
+(define caught 9)
+
+(define-syntax holds-a-lambda
+  (syntax-rules ()
+    ((_ e) ((lambda (caught) (list caught e)) 1))))
+(test "a lambda in a template does not capture" '(1 9) (holds-a-lambda caught))
+
+(define-syntax holds-a-let
+  (syntax-rules ()
+    ((_ e) (let ((caught 1)) (list caught e)))))
+(test "a let in a template does not capture" '(1 9) (holds-a-let caught))
+
+;;  or, written the way R7RS writes it, which needs both: a name to
+;;  hold the value it tests, and that name not to be the caller's.
+
+(define-syntax an-or
+  (syntax-rules ()
+    ((_) #f)
+    ((_ a) a)
+    ((_ a b ...) (let ((caught a)) (if caught caught (an-or b ...))))))
+(test "or over a name the template also binds" 9 (an-or #f caught))
+(test "or takes the first of its arguments that holds" 2 (an-or #f 2 3))
+
+;;  A name the template only refers to is left alone, and a quoted name
+;;  is data.
+
+(define-syntax quotes-a-name
+  (syntax-rules ()
+    ((_ x) (list 'caught x))))
+(test "a quoted name in a template is data" '(caught 9) (quotes-a-name caught))
+
 ;;  let-syntax binds macros for a body and no further, and the macros
 ;;  it binds are in scope for each other.
 
