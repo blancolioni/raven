@@ -2,7 +2,7 @@ with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 with Raven.Engine;
 with Raven.Evaluator;
 with Raven.IO;
-with Raven.Libraries;
+with Raven.Loader;
 with Raven.Memory;
 with Raven.Objects;
 with Raven.Parser;
@@ -270,7 +270,7 @@ package body Raven is
       Path : String)
    is
    begin
-      Raven.Libraries.Import (This.Data.Target, Name, Path);
+      Raven.Loader.Import (This.Data.Target, Name, Path);
    end Import_Library;
 
    ----------------
@@ -315,7 +315,7 @@ package body Raven is
         ("raven-write-char", Write_Character'Access, 1);
       This.Data.Target    := This.Data.Evaluator.Target;
 
-      Raven.Libraries.Import
+      Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
          Standard_Library_Path & "/scheme/base.scm");
       return This;

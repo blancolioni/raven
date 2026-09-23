@@ -3,7 +3,7 @@ with Ada.Text_IO;
 with Ada.Strings.Unbounded;
 with Raven.Parser;
 
-package body Raven.Libraries is
+package body Raven.Loader is
 
    function Load_File (Name : String) return String;
 
@@ -17,8 +17,30 @@ package body Raven.Libraries is
       Path   : String)
    is
       Source : constant String := Load_File (Path);
+      Reader : Raven.Parser.Instance;
    begin
-      Raven.Parser.Load_Module (Name, Source, Target);
+      Reader.Open (Name, Source);
+
+      while not Reader.At_End loop
+
+         --  A form that names something undefined is reported and the
+         --  rest of the file is read anyway.  Anything else stops the
+         --  load, and is reported by the handler below.
+
+         begin
+            Reader.Parse_Next (Target);
+            Target.Translate;
+            Target.Execute;
+            Target.Drop;
+         exception
+            when E : Raven.Target.Undefined_Symbol =>
+               Ada.Text_IO.Put_Line
+                 (Ada.Text_IO.Standard_Error,
+                  "undefined: " & Ada.Exceptions.Exception_Message (E));
+         end;
+      end loop;
+
+      Reader.Close;
    exception
       when E : Raven.Target.Undefined_Symbol =>
          Ada.Text_IO.Put_Line
@@ -56,4 +78,4 @@ package body Raven.Libraries is
       return To_String (Buf);
    end Load_File;
 
-end Raven.Libraries;
+end Raven.Loader;
