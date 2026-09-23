@@ -10,6 +10,8 @@ package body Raven.Scheme is
 
    procedure Is_Symbol (VM : Raven_VM);
 
+   procedure Raise_Error (VM : Raven_VM);
+
    ---------------
    -- Are_Equal --
    ---------------
@@ -62,8 +64,21 @@ package body Raven.Scheme is
       Evaluator.Bind_Foreign_Function
         ("gensym", Generate_Symbol'Access, 1);
 
+      Evaluator.Bind_Foreign_Function
+        ("error", Raise_Error'Access, 1);
+
       Raven.Scheme.Numerics.Load_Numeric_Library (Evaluator);
       Raven.Strings.Load_String_Library (Evaluator);
    end Load_Base_Primitives;
+
+   -----------------
+   -- Raise_Error --
+   -----------------
+
+   procedure Raise_Error (VM : Raven_VM) is
+   begin
+      raise Constraint_Error with
+        Encode (VM.Display (VM.Get_Slot (1)));
+   end Raise_Error;
 
 end Raven.Scheme;
