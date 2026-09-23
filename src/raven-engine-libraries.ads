@@ -36,11 +36,6 @@ private package Raven.Engine.Libraries is
       Name : String)
       return Raven.Target.Library_Id;
 
-   function Name
-     (This : Instance;
-      Id   : Raven.Target.Real_Library_Id)
-      return String;
-
    function Environment
      (This : Instance;
       Id   : Raven.Target.Real_Library_Id)
@@ -194,12 +189,6 @@ private
          Table : Library_Vectors.Vector;
          Paths : Path_Vectors.Vector;
       end record;
-
-   function Name
-     (This : Instance;
-      Id   : Raven.Target.Real_Library_Id)
-      return String
-   is (To_String (This.Table (Id).Name));
 
    function Environment
      (This : Instance;

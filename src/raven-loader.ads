@@ -8,26 +8,11 @@ with Raven.Target;
 
 private package Raven.Loader is
 
-   --  A library asked for by name is looked for on the target's
-   --  library path.  One that is loaded already is not read again,
-   --  which is also what stops a cycle of imports.
-
-   function Load
-     (Target : Raven.Target.Reference;
-      Name   : String)
-      return Raven.Target.Library_Id;
-
-   --  A file given a path is read whether or not a library of this
-   --  name is loaded, into that library if there is one.
-
-   function Load_File
-     (Target : Raven.Target.Reference;
-      Name   : String;
-      Path   : String)
-      return Raven.Target.Library_Id;
-
-   --  Reads a file as above and imports it into the library the host's
-   --  own forms are translated in.
+   --  Reads a file as a library of this name, whether or not a
+   --  library of the name is loaded, and imports it into the library
+   --  the host's own forms are translated in.  A library asked for by
+   --  name, rather than given a path, is what an import declaration
+   --  asks for, and the loader looks after that itself.
 
    procedure Import
      (Target : Raven.Target.Reference;

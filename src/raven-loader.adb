@@ -38,6 +38,24 @@ package body Raven.Loader is
       Spec   : Object)
       return String;
 
+   --  A library asked for by name is looked for on the target's
+   --  library path.  One that is loaded already is not read again,
+   --  which is also what stops a cycle of imports.
+
+   function Load
+     (Target : Raven.Target.Reference;
+      Name   : String)
+      return Raven.Target.Library_Id;
+
+   --  A file given a path is read whether or not a library of this
+   --  name is loaded, into that library if there is one.
+
+   function Load_File
+     (Target : Raven.Target.Reference;
+      Name   : String;
+      Path   : String)
+      return Raven.Target.Library_Id;
+
    procedure Read_Begin
      (Target  : Raven.Target.Reference;
       Library : Raven.Target.Real_Library_Id);
