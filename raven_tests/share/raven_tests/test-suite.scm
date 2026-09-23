@@ -400,6 +400,22 @@
 (test "syntax-rules, a pattern that ends in a name" '(1 (2 3))
       (with-rest 1 2 3))
 
+;;  A name the base library keeps to itself is not this library's to
+;;  take.  The expander its macros are written with is the case that
+;;  matters: before there were libraries, defining sr-expand here made
+;;  every syntax-rules macro expand to whatever it answered.  A macro
+;;  is read in the library it was written in, so it still finds the
+;;  expander, and the definition below is ours and only ours.
+
+(define (sr-expand a b c) 42)
+
+(define-syntax probe-still-expands
+  (syntax-rules ()
+    ((_ x) (+ x 1))))
+
+(test "a private expander cannot be taken" 8 (probe-still-expands 7))
+(test "and the name is still ours" 42 (sr-expand 1 2 3))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")

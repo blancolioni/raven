@@ -62,6 +62,21 @@ private package Raven.Engine.Libraries is
       Library  : Raven.Target.Real_Library_Id;
       Imported : Raven.Target.Real_Library_Id);
 
+   --  A library that says what it is offers nothing until it says
+   --  what it offers, and then exactly that.  A file that does not say
+   --  is a library that offers everything it defines, which is what a
+   --  program is and what every library was before there was a way to
+   --  say otherwise.
+
+   procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
    --  Which library holds what a name written in Library means: the
    --  one that wrote it, or the last one it was imported from, or
    --  Library itself, whether or not it has the name yet.  A name
@@ -163,6 +178,8 @@ private
          Defined     : Name_Sets.Set;
          Imports     : Import_Vectors.Vector;
          Macros      : Macro_Maps.Map;
+         Exports     : Name_Sets.Set;
+         Exports_All : Boolean := True;
       end record;
 
    package Library_Vectors is

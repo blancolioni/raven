@@ -106,6 +106,15 @@ package body Raven.Engine.SECD is
       Library  : Raven.Target.Real_Library_Id;
       Imported : Raven.Target.Real_Library_Id);
 
+   overriding procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
    overriding procedure Define_Name
      (This    : in out Instance;
       Library : Raven.Target.Real_Library_Id;
@@ -320,6 +329,31 @@ package body Raven.Engine.SECD is
    begin
       This.Libraries.Add_Import (Library, Imported);
    end Add_Import;
+
+   ----------------
+   -- Add_Export --
+   ----------------
+
+   overriding procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Add_Export (Library, Name);
+   end Add_Export;
+
+   ---------------------
+   -- Set_Export_List --
+   ---------------------
+
+   overriding procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Libraries.Set_Export_List (Library);
+   end Set_Export_List;
 
    ----------------------
    -- Add_Library_Path --

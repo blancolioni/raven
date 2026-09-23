@@ -62,6 +62,21 @@ private package Raven.Target is
       Imported : Real_Library_Id)
    is abstract;
 
+   --  A library that says what it offers offers exactly that.  One
+   --  that says nothing -- a file that is not written as a library --
+   --  offers everything it defines.
+
+   procedure Set_Export_List
+     (This    : in out Abstraction;
+      Library : Real_Library_Id)
+   is abstract;
+
+   procedure Add_Export
+     (This    : in out Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+   is abstract;
+
    --  A library has defined this name.  Said while the form that
    --  defines it is translated, because that is when what comes after
    --  it starts meaning it.

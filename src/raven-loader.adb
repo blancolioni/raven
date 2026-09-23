@@ -10,6 +10,8 @@ with Raven.Parser;
 
 package body Raven.Loader is
 
+   use type Raven.Target.Library_Id;
+
    package String_Vectors is
      new Ada.Containers.Indefinite_Vectors (Positive, String);
 
@@ -26,8 +28,9 @@ package body Raven.Loader is
       Name   : String)
       return String;
 
-   function Is_Import
-     (Target : Raven.Target.Reference)
+   function Is_Head
+     (Target : Raven.Target.Reference;
+      Name   : String)
       return Boolean;
 
    function Library_Name
@@ -35,11 +38,49 @@ package body Raven.Loader is
       Spec   : Object)
       return String;
 
-   procedure Read_Imports
-     (Target : Raven.Target.Reference;
-      Names  : out String_Vectors.Vector);
+   procedure Read_Begin
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
+
+   procedure Read_Declaration
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String);
+
+   procedure Read_Export
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
 
    function Read_File (Path : String) return String;
+
+   procedure Read_Forms
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Name      : String;
+      Source    : String;
+      Directory : String);
+
+   procedure Read_Import
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
+
+   procedure Read_Include
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String);
+
+   procedure Read_Library
+     (Target    : Raven.Target.Reference;
+      Directory : String);
+
+   function Read_Names
+     (Target : Raven.Target.Reference)
+      return String_Vectors.Vector;
+
+   function Read_Text
+     (Target : Raven.Target.Reference;
+      Form   : Object)
+      return String;
 
    procedure Report (Message : String);
 
@@ -107,7 +148,6 @@ package body Raven.Loader is
       Name   : String;
       Path   : String)
    is
-      use type Raven.Target.Library_Id;
       Library : constant Raven.Target.Library_Id :=
                   Load_File (Target, Name, Path);
    begin
@@ -116,19 +156,20 @@ package body Raven.Loader is
       end if;
    end Import;
 
-   ---------------
-   -- Is_Import --
-   ---------------
+   -------------
+   -- Is_Head --
+   -------------
 
-   function Is_Import
-     (Target : Raven.Target.Reference)
+   function Is_Head
+     (Target : Raven.Target.Reference;
+      Name   : String)
       return Boolean
    is
       Form : constant Object := Target.Top;
    begin
       return Raven.Objects.Is_Pair (Form)
-        and then Target.Car (Form) = Target.To_Symbol ("import");
-   end Is_Import;
+        and then Target.Car (Form) = Target.To_Symbol (Name);
+   end Is_Head;
 
    ------------------
    -- Library_Name --
@@ -167,7 +208,6 @@ package body Raven.Loader is
       Name   : String)
       return Raven.Target.Library_Id
    is
-      use type Raven.Target.Library_Id;
       Loaded : constant Raven.Target.Library_Id := Target.Library (Name);
    begin
       if Loading.Contains (Name) then
@@ -198,7 +238,6 @@ package body Raven.Loader is
       Path   : String)
       return Raven.Target.Library_Id
    is
-      use type Raven.Target.Library_Id;
       Found   : constant Raven.Target.Library_Id := Target.Library (Name);
       Library : constant Raven.Target.Real_Library_Id :=
                   (if Found = Raven.Target.No_Library
@@ -207,57 +246,9 @@ package body Raven.Loader is
    begin
       Loading.Append (Name);
 
-      declare
-         Source : constant String := Read_File (Path);
-         Reader : Raven.Parser.Instance;
-      begin
-         Reader.Open (Name, Source);
-
-         while not Reader.At_End loop
-
-            --  A form that names something undefined is reported and
-            --  the rest of the file is read anyway.  Anything else
-            --  stops the load, and is reported by the handler below.
-
-            begin
-               Reader.Parse_Next (Target);
-
-               if Is_Import (Target) then
-                  declare
-                     Names : String_Vectors.Vector;
-                  begin
-                     --  Everything the declaration asks for is taken
-                     --  out of it before anything is loaded: loading
-                     --  runs the machine, and nothing here could hold
-                     --  an object across that.
-
-                     Read_Imports (Target, Names);
-                     Target.Drop;
-
-                     for Imported of Names loop
-                        declare
-                           Id : constant Raven.Target.Library_Id :=
-                                  Load (Target, Imported);
-                        begin
-                           if Id /= Raven.Target.No_Library then
-                              Target.Add_Import (Library, Id);
-                           end if;
-                        end;
-                     end loop;
-                  end;
-               else
-                  Target.Translate (Library);
-                  Target.Execute;
-                  Target.Drop;
-               end if;
-            exception
-               when E : Raven.Target.Undefined_Symbol =>
-                  Report ("undefined: " & Ada.Exceptions.Exception_Message (E));
-            end;
-         end loop;
-
-         Reader.Close;
-      end;
+      Read_Forms
+        (Target, Library, Name, Read_File (Path),
+         Ada.Directories.Containing_Directory (Path));
 
       Loading.Delete_Last;
       return Library;
@@ -270,6 +261,74 @@ package body Raven.Loader is
          end if;
          return Library;
    end Load_File;
+
+   ----------------
+   -- Read_Begin --
+   ----------------
+
+   procedure Read_Begin
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
+   is
+   begin
+      --  What is left to read stays on the stack, which the collector
+      --  walks.  Translating a form runs the machine, and nothing here
+      --  could hold the rest of the list across that.
+
+      Target.Push (Target.Cdr (Target.Pop));
+
+      while Raven.Objects.Is_Pair (Target.Top) loop
+         Target.Push (Target.Car (Target.Top));
+         Target.Translate (Library);
+         Target.Execute;
+         Target.Drop;
+         Target.Push (Target.Cdr (Target.Pop));
+      end loop;
+
+      Target.Drop;
+   end Read_Begin;
+
+   ----------------------
+   -- Read_Declaration --
+   ----------------------
+
+   procedure Read_Declaration
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String)
+   is
+   begin
+      if Is_Head (Target, "export") then
+         Read_Export (Target, Library);
+      elsif Is_Head (Target, "import") then
+         Read_Import (Target, Library);
+      elsif Is_Head (Target, "begin") then
+         Read_Begin (Target, Library);
+      elsif Is_Head (Target, "include") then
+         Read_Include (Target, Library, Directory);
+      else
+         Report
+           ("define-library: not a declaration: "
+            & Target.Show (Target.Top));
+         Target.Drop;
+      end if;
+   end Read_Declaration;
+
+   -----------------
+   -- Read_Export --
+   -----------------
+
+   procedure Read_Export
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
+   is
+      Names : constant String_Vectors.Vector := Read_Names (Target);
+   begin
+      Target.Drop;
+      for Name of Names loop
+         Target.Add_Export (Library, Name);
+      end loop;
+   end Read_Export;
 
    ---------------
    -- Read_File --
@@ -297,17 +356,64 @@ package body Raven.Loader is
       return To_String (Buf);
    end Read_File;
 
-   ------------------
-   -- Read_Imports --
-   ------------------
+   ----------------
+   -- Read_Forms --
+   ----------------
 
-   procedure Read_Imports
-     (Target : Raven.Target.Reference;
-      Names  : out String_Vectors.Vector)
+   procedure Read_Forms
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Name      : String;
+      Source    : String;
+      Directory : String)
    is
-      It : Object := Target.Cdr (Target.Top);
+      Reader : Raven.Parser.Instance;
    begin
-      Names.Clear;
+      Reader.Open (Name, Source);
+
+      while not Reader.At_End loop
+
+         --  A form that names something undefined is reported and the
+         --  rest of the file is read anyway.  Anything else stops the
+         --  read, and is reported where the file was opened.
+
+         begin
+            Reader.Parse_Next (Target);
+
+            if Is_Head (Target, "import") then
+               Read_Import (Target, Library);
+            elsif Is_Head (Target, "define-library") then
+               Read_Library (Target, Directory);
+            else
+               Target.Translate (Library);
+               Target.Execute;
+               Target.Drop;
+            end if;
+         exception
+            when E : Raven.Target.Undefined_Symbol =>
+               Report
+                 ("undefined: " & Ada.Exceptions.Exception_Message (E));
+         end;
+      end loop;
+
+      Reader.Close;
+   end Read_Forms;
+
+   -----------------
+   -- Read_Import --
+   -----------------
+
+   procedure Read_Import
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
+   is
+      Names : String_Vectors.Vector;
+      It    : Object := Target.Cdr (Target.Top);
+   begin
+      --  Everything the declaration asks for is taken out of it before
+      --  anything is loaded: loading runs the machine, and nothing
+      --  here could hold a form across that.
+
       while Raven.Objects.Is_Pair (It) loop
          declare
             Spec : constant Object := Target.Car (It);
@@ -322,7 +428,155 @@ package body Raven.Loader is
          end;
          It := Target.Cdr (It);
       end loop;
-   end Read_Imports;
+
+      Target.Drop;
+
+      for Name of Names loop
+         declare
+            Id : constant Raven.Target.Library_Id := Load (Target, Name);
+         begin
+            if Id /= Raven.Target.No_Library then
+               Target.Add_Import (Library, Id);
+            end if;
+         end;
+      end loop;
+   end Read_Import;
+
+   ------------------
+   -- Read_Include --
+   ------------------
+
+   procedure Read_Include
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String)
+   is
+      Files : String_Vectors.Vector;
+      It    : Object := Target.Cdr (Target.Top);
+   begin
+      while Raven.Objects.Is_Pair (It) loop
+         Files.Append (Read_Text (Target, Target.Car (It)));
+         It := Target.Cdr (It);
+      end loop;
+
+      Target.Drop;
+
+      for File of Files loop
+
+         --  Beside the library that includes it, which is the only
+         --  place a library can say where its own text is.
+
+         Read_Forms
+           (Target, Library, File, Read_File (Directory & "/" & File),
+            Directory);
+      end loop;
+   end Read_Include;
+
+   ------------------
+   -- Read_Library --
+   ------------------
+
+   procedure Read_Library
+     (Target    : Raven.Target.Reference;
+      Directory : String)
+   is
+      Name    : constant String :=
+                  Library_Name (Target, Target.Cadr (Target.Top));
+      Found   : constant Raven.Target.Library_Id := Target.Library (Name);
+      Library : constant Raven.Target.Real_Library_Id :=
+                  (if Found = Raven.Target.No_Library
+                   then Target.Create_Library (Name)
+                   else Found);
+   begin
+      --  A library that says what it is offers nothing until it says
+      --  what it offers.  A file that does not say is a library that
+      --  offers everything it defines.
+
+      Target.Set_Export_List (Library);
+
+      --  The declarations are left on the stack, which the collector
+      --  walks: reading one runs the machine, and nothing here could
+      --  hold a form across that.
+
+      Target.Push (Target.Cddr (Target.Pop));
+
+      while Raven.Objects.Is_Pair (Target.Top) loop
+         Target.Push (Target.Car (Target.Top));
+         Read_Declaration (Target, Library, Directory);
+         Target.Push (Target.Cdr (Target.Pop));
+      end loop;
+
+      Target.Drop;
+   end Read_Library;
+
+   ----------------
+   -- Read_Names --
+   ----------------
+
+   function Read_Names
+     (Target : Raven.Target.Reference)
+      return String_Vectors.Vector
+   is
+      Names : String_Vectors.Vector;
+      It    : Object := Target.Cdr (Target.Top);
+   begin
+      while Raven.Objects.Is_Pair (It) loop
+         declare
+            Name : constant Object := Target.Car (It);
+         begin
+            if Raven.Objects.Is_Symbol (Name) then
+               Names.Append
+                 (Target.To_String (Raven.Objects.To_Symbol (Name)));
+            else
+               Report ("expected a name, not " & Target.Show (Name));
+            end if;
+         end;
+         It := Target.Cdr (It);
+      end loop;
+      return Names;
+   end Read_Names;
+
+   ---------------
+   -- Read_Text --
+   ---------------
+
+   function Read_Text
+     (Target : Raven.Target.Reference;
+      Form   : Object)
+      return String
+   is
+      use Ada.Strings.Unbounded;
+      Result : Unbounded_String := Null_Unbounded_String;
+      It     : Object;
+   begin
+      --  The reader gives a written string as the form that builds
+      --  it, so a string in a declaration has to be read back out of
+      --  one: (list->string (quote (#\a ...))).
+
+      if not Raven.Objects.Is_Pair (Form)
+        or else Target.Car (Form) /= Target.To_Symbol ("list->string")
+      then
+         Report ("expected a string, not " & Target.Show (Form));
+         return "";
+      end if;
+
+      It := Target.Cadr (Target.Cadr (Form));
+
+      while Raven.Objects.Is_Pair (It) loop
+         declare
+            Ch : constant Object := Target.Car (It);
+         begin
+            if Raven.Objects.Is_Character (Ch) then
+               Append
+                 (Result,
+                  Encode ([1 => Raven.Objects.To_Character (Ch)]));
+            end if;
+         end;
+         It := Target.Cdr (It);
+      end loop;
+
+      return To_String (Result);
+   end Read_Text;
 
    ------------
    -- Report --
