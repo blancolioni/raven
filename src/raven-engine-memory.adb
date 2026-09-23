@@ -27,6 +27,13 @@ package body Raven.Engine.Memory is
        (Raven.Objects.Foreign_Value_Id,
         Foreign_Value_Lists.Cursor, Foreign_Value_Lists."=");
 
+   --  The ids the collector has given back, so that finding one is
+   --  taking the last rather than looking through all of them.
+
+   package Free_Id_Vectors is
+     new Ada.Containers.Vectors
+       (Positive, Raven.Objects.Foreign_Value_Id, Raven.Objects."=");
+
    type Instance (Last : Address_Type) is new Raven.Memory.Abstraction with
       record
          Top               : Address_Type;
@@ -48,6 +55,7 @@ package body Raven.Engine.Memory is
          GC_Count          : Natural := 0;
          Value_List        : Foreign_Value_Lists.List;
          Value_Ids         : Foreign_Value_Vectors.Vector;
+         Free_Ids          : Free_Id_Vectors.Vector;
 
          Core              : Cell_Array (0 .. Last);
       end record;
@@ -235,24 +243,53 @@ package body Raven.Engine.Memory is
    is
       use Raven.Objects;
       use Foreign_Value_Lists;
-      Id : Foreign_Value_Id := Foreign_Value_Id'First;
-      Found : Boolean := False;
-   begin
-      for I in 1 .. This.Value_Ids.Last_Index loop
-         if not Has_Element (This.Value_Ids (I)) then
-            Id := I;
-            Found := True;
-            exit;
-         end if;
-      end loop;
 
-      if not Found then
-         This.Value_Ids.Append (No_Element);
-         Id := This.Value_Ids.Last_Index;
+      function Take_Id (Id : out Foreign_Value_Id) return Boolean;
+
+      -------------
+      -- Take_Id --
+      -------------
+
+      function Take_Id (Id : out Foreign_Value_Id) return Boolean is
+      begin
+         if not This.Free_Ids.Is_Empty then
+            Id := This.Free_Ids.Last_Element;
+            This.Free_Ids.Delete_Last;
+            return True;
+         elsif This.Value_Ids.Last_Index < Foreign_Value_Id'Last then
+            This.Value_Ids.Append (No_Element);
+            Id := This.Value_Ids.Last_Index;
+            return True;
+         else
+            Id := Foreign_Value_Id'First;
+            return False;
+         end if;
+      end Take_Id;
+
+      Id : Foreign_Value_Id;
+   begin
+      --  Running out is worth a collection before it is worth an
+      --  error: nothing else collects on account of foreign values,
+      --  and the ids a program is finished with are given back there.
+
+      if not Take_Id (Id) then
+         GC (This);
+
+         if not Take_Id (Id) then
+            --  Short enough to survive: an exception message is cut
+            --  off at two hundred characters.
+
+            raise Constraint_Error with
+              "out of foreign values: all"
+              & Foreign_Value_Id'Last'Image
+              & " live after a collection."
+              & "  Every string is one -- a literal, or the result of"
+              & " string-append, list->string or display.";
+         end if;
       end if;
 
       This.Value_List.Append (Value);
-      This.Value_Ids (Id) := This.Value_LIst.Last;
+      This.Value_Ids (Id) := This.Value_List.Last;
 
       return To_Object (Id);
 
@@ -336,13 +373,18 @@ package body Raven.Engine.Memory is
          Container.After_Collection;
       end loop;
 
-      for Val of This.Value_Ids loop
-         if Foreign_Value_Lists.Has_Element (Val)
-           and then not Foreign_Value_Lists.Element (Val).Marked
-         then
-            This.Value_List.Delete (Val);
-            Val := Foreign_Value_Lists.No_Element;
-         end if;
+      for Id in 1 .. This.Value_Ids.Last_Index loop
+         declare
+            Val : Foreign_Value_Lists.Cursor := This.Value_Ids (Id);
+         begin
+            if Foreign_Value_Lists.Has_Element (Val)
+              and then not Foreign_Value_Lists.Element (Val).Marked
+            then
+               This.Value_List.Delete (Val);
+               This.Value_Ids (Id) := Foreign_Value_Lists.No_Element;
+               This.Free_Ids.Append (Id);
+            end if;
+         end;
       end loop;
 
       if This.Trace_GC then

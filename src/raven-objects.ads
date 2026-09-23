@@ -80,7 +80,12 @@ private package Raven.Objects is
      and then Has_Address (To_Pair'Result)
      and then Get_Address (To_Pair'Result) = Address;
 
-   type Foreign_Value_Id is range 1 .. 99;
+   --  How many foreign values can be live at once.  An id is given
+   --  back when the collector finds nothing naming the value, so this
+   --  is not how many a program may make; it is how many it may hold.
+   --  Every string is one.
+
+   type Foreign_Value_Id is range 1 .. 9_999;
 
    function Is_Foreign_Value (X : Object) return Boolean;
    function To_Foreign_Value_Id (X : Object) return Foreign_Value_Id
