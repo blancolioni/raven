@@ -1,4 +1,4 @@
-(import (scheme base))
+(import (scheme base) (scheme cxr))
 
 (define num-tests 0)
 (define passed-tests 0)
@@ -415,6 +415,48 @@
 
 (test "a private expander cannot be taken" 8 (probe-still-expands 7))
 (test "and the name is still ours" 42 (sr-expand 1 2 3))
+
+;;  (scheme cxr): every composition of car and cdr three and four
+;;  deep.  cxr-tree is four deep and its sixteen leaves are all
+;;  different, so each accessor has an answer of its own and one
+;;  that reaches the wrong place shows it.
+
+(define cxr-tree
+  '((((1 . 2) . (3 . 4)) . ((5 . 6) . (7 . 8)))
+    .
+    (((9 . 10) . (11 . 12)) . ((13 . 14) . (15 . 16)))))
+
+(test "caaar" '(1 . 2) (caaar cxr-tree))
+(test "caadr" '(9 . 10) (caadr cxr-tree))
+(test "cadar" '(5 . 6) (cadar cxr-tree))
+(test "caddr" '(13 . 14) (caddr cxr-tree))
+(test "cdaar" '(3 . 4) (cdaar cxr-tree))
+(test "cdadr" '(11 . 12) (cdadr cxr-tree))
+(test "cddar" '(7 . 8) (cddar cxr-tree))
+(test "cdddr" '(15 . 16) (cdddr cxr-tree))
+(test "caaaar" 1 (caaaar cxr-tree))
+(test "caaadr" 9 (caaadr cxr-tree))
+(test "caadar" 5 (caadar cxr-tree))
+(test "caaddr" 13 (caaddr cxr-tree))
+(test "cadaar" 3 (cadaar cxr-tree))
+(test "cadadr" 11 (cadadr cxr-tree))
+(test "caddar" 7 (caddar cxr-tree))
+(test "cadddr" 15 (cadddr cxr-tree))
+(test "cdaaar" 2 (cdaaar cxr-tree))
+(test "cdaadr" 10 (cdaadr cxr-tree))
+(test "cdadar" 6 (cdadar cxr-tree))
+(test "cdaddr" 14 (cdaddr cxr-tree))
+(test "cddaar" 4 (cddaar cxr-tree))
+(test "cddadr" 12 (cddadr cxr-tree))
+(test "cdddar" 8 (cdddar cxr-tree))
+(test "cddddr" 16 (cddddr cxr-tree))
+
+;;  The same names on a proper list, which is what they are for.
+
+(test "caddr of a list" 3 (caddr '(1 2 3)))
+(test "cadddr of a list" 4 (cadddr '(1 2 3 4)))
+(test "cdddr of a list" '(4) (cdddr '(1 2 3 4)))
+(test "cddddr of a list" '(5) (cddddr '(1 2 3 4 5)))
 
 (write-string "Tests: ")
 (write-string (display num-tests))

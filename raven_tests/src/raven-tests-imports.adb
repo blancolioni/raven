@@ -111,6 +111,16 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "ring-a-name", "ring-a");
       Evaluate (VM, "(import (probe ring-b))");
       Test_Name (VM, "ring-b-name", "ring-b");
+
+      --  A standard library asked for by name, off the same path the
+      --  base library came from.  caddr is (scheme cxr)'s: R7RS takes
+      --  the base library two deep and no further, so this is what a
+      --  program that wants it has to say.
+
+      Test_Undefined (VM, "(caddr '(1 2 3))");
+      Evaluate (VM, "(import (scheme cxr))");
+      Test_Number (VM, "(caddr '(1 2 3))", 3);
+      Test_Number (VM, "(cadddr '(1 2 3 4))", 4);
    end Run_Tests;
 
    ---------------
