@@ -732,6 +732,208 @@
 (test "cdddr of a list" '(4) (cdddr '(1 2 3 4)))
 (test "cddddr of a list" '(5) (cddddr '(1 2 3 4 5)))
 
+;;  Primitives the machine could always do and offered no name for.
+
+;;  set-car! and set-cdr! write a cell, which is what RAP has always
+;;  done.  The pair is written in place, so every name for it sees the
+;;  writing.
+
+(define mutable-pair (cons 1 2))
+(test "set-car! answers with the pair" #t
+      (eq? mutable-pair (set-car! mutable-pair 9)))
+(test "set-car!" 9 (car mutable-pair))
+(set-cdr! mutable-pair 8)
+(test "set-cdr!" 8 (cdr mutable-pair))
+(test "the pair is the pair it was" '(9 . 8) mutable-pair)
+
+(define shared-pair (cons 1 2))
+(define another-name-for-it shared-pair)
+(set-car! shared-pair 42)
+(test "a writing is seen through another name" 42 (car another-name-for-it))
+(test "and it is the same pair" #t (eq? shared-pair another-name-for-it))
+
+(define grows (list 1))
+(set-cdr! grows (list 2 3))
+(test "set-cdr! makes a list longer" '(1 2 3) grows)
+(test "and length says so" 3 (length grows))
+
+;;  list-set! is what set-car! was wanted for: list-ref with the
+;;  reading replaced by a writing.
+
+(define settable (list 1 2 3))
+(list-set! settable 1 'two)
+(test "list-set!" '(1 two 3) settable)
+(list-set! settable 0 'one)
+(test "list-set! at the front" '(one two 3) settable)
+(list-set! settable 2 'three)
+(test "list-set! at the end" '(one two three) settable)
+
+;;  And what set-cdr! makes possible for the first time: a list that
+;;  runs back into itself.  list? has to come back from one, which is
+;;  why it walks twice over at two speeds; before set-cdr! there was
+;;  no way to build one and a single walk was the whole of it.
+
+(define circular (list 1 2 3))
+(set-cdr! (cddr circular) circular)
+(test "list? of a list that runs back into itself" #f (list? circular))
+
+(define self-loop (list 1))
+(set-cdr! self-loop self-loop)
+(test "list? of a one element loop" #f (list? self-loop))
+
+(define loops-after-two (list 1 2 3 4))
+(set-cdr! (cdddr loops-after-two) (cdr loops-after-two))
+(test "list? of a list with a tail that loops" #f (list? loops-after-two))
+
+(test "list? still says yes to a list" #t (list? '(1 2 3)))
+(test "list? still says yes to nothing" #t (list? '()))
+(test "list? still says no to an improper list" #f (list? '(1 2 . 3)))
+
+;;  symbol->string and string->symbol.  The symbol table already read
+;;  a name both ways; these are the two directions of it.
+
+(test "symbol->string" "abc" (symbol->string 'abc))
+(test "string->symbol" 'abc (string->symbol "abc"))
+(test "string->symbol reads the name" #t (eq? 'abc (string->symbol "abc")))
+(test "a symbol survives the round trip" #t
+      (eq? 'hello (string->symbol (symbol->string 'hello))))
+(test "the same name twice is the same symbol" #t
+      (eq? (string->symbol "probe-interned") (string->symbol "probe-interned")))
+(test "different names are different symbols" #f
+      (eq? (string->symbol "probe-a") (string->symbol "probe-b")))
+(test "symbol->string of a name with punctuation" "set-car!"
+      (symbol->string 'set-car!))
+
+;;  A generated symbol has a name so that it can be shown, and is not
+;;  the symbol that name reads as.  string->symbol is what finally
+;;  lets that be asked.
+
+(test "a generated symbol is not what its name reads as" #f
+      ((lambda (g) (eq? g (string->symbol (symbol->string g))))
+       (gensym 'probe-gen)))
+
+;;  char->integer and integer->char.  A character is an immediate
+;;  holding its own code point, so these two are that, said.
+
+(test "char->integer" 65 (char->integer #\A))
+(test "integer->char" #\A (integer->char 65))
+(test "char->integer of a lower case letter" 97 (char->integer #\a))
+(test "a character survives the round trip" #t
+      (eq? #\z (integer->char (char->integer #\z))))
+(test "char->integer of a newline" 10 (char->integer #\newline))
+(test "integer->char of a newline" #\newline (integer->char 10))
+(test "integer->char of a space" #\space (integer->char 32))
+(test "characters order by code point" #t
+      (< (char->integer #\a) (char->integer #\b)))
+
+;;  char=? and the rest of the character comparisons are scheme now
+;;  that these two are here, which is what they were wanted for.
+
+(define (char=? a b) (= (char->integer a) (char->integer b)))
+(define (char<? a b) (< (char->integer a) (char->integer b)))
+(test "a char=? written in scheme" #t (char=? #\a #\a))
+(test "a char=? that says no" #f (char=? #\a #\b))
+(test "a char<? written in scheme" #t (char<? #\a #\b))
+
+;;  The questions that go with them.  string? and symbol? were bound
+;;  already and are the shape these follow.
+
+(test "char? of a character" #t (char? #\a))
+(test "char? of the number it holds" #f (char? 97))
+(test "char? of a string" #f (char? "a"))
+(test "char? of a symbol" #f (char? 'a))
+(test "char? of nil" #f (char? '()))
+
+(test "integer? of an integer" #t (integer? 42))
+(test "integer? of a negative integer" #t (integer? -42))
+(test "integer? of zero" #t (integer? 0))
+(test "integer? of a character" #f (integer? #\a))
+(test "integer? of a symbol" #f (integer? 'a))
+(test "integer? of a string" #f (integer? "42"))
+(test "integer? of nil" #f (integer? '()))
+(test "integer? of a boolean" #f (integer? #t))
+
+(test "number? of an integer" #t (number? 42))
+(test "number? of a character" #f (number? #\a))
+(test "number? of a symbol" #f (number? 'a))
+(test "number? of a string" #f (number? "42"))
+
+(test "exact-integer? of an integer" #t (exact-integer? 42))
+(test "exact-integer? of a negative integer" #t (exact-integer? -42))
+(test "exact-integer? of a character" #f (exact-integer? #\a))
+(test "exact-integer? of a symbol" #f (exact-integer? 'a))
+
+;;  A float is the one thing integer? and exact-integer? answer
+;;  differently for.  Nothing here makes one -- there is no float
+;;  arithmetic -- but the reader reads one, so the question can be put.
+
+(test "number? of a float" #t (number? 2.5))
+(test "integer? of a float with a fraction" #f (integer? 2.5))
+(test "integer? of a float without one" #t (integer? 2.0))
+(test "exact-integer? of a float without one" #f (exact-integer? 2.0))
+
+;;  Both of these have to survive a collection.  A writing puts a new
+;;  object into a cell that is already old, which is the case a
+;;  generational collector wants a write barrier for; this one copies
+;;  everything every time, so it wants nothing, and that is worth
+;;  saying out loud rather than assuming.  A list that runs back into
+;;  itself is the other case: the collector has to come back from one
+;;  too, and it does, because a cell it has already copied leaves a
+;;  forwarding pointer behind.
+
+(define (probe-churn n) (if (= n 0) '() (cons n (probe-churn (- n 1)))))
+
+(define written-into (cons 'before '()))
+(set-car! written-into (probe-churn 200))
+(probe-churn 2000)
+(test "what was written survives a collection" 200
+      (length (car written-into)))
+
+(define loops-through-collection (list 1 2 3))
+(set-cdr! (cddr loops-through-collection) loops-through-collection)
+(probe-churn 2000)
+(test "a list that loops survives a collection" #f
+      (list? loops-through-collection))
+(test "and is the list it was" 1 (car loops-through-collection))
+(test "and still runs back to its own first pair" #t
+      (eq? loops-through-collection (cdddr loops-through-collection)))
+
+;;  apply.  A call already builds a list of its arguments and hands AP
+;;  the list, so a call whose list is built already is that same
+;;  sequence with the building left out.
+
+(test "apply" 6 (apply + '(1 2 3)))
+(test "apply over nothing" 0 (apply + '()))
+(test "apply of a lambda" 3 (apply (lambda (a b) (+ a b)) '(1 2)))
+(test "apply of a name that is a list" '(1 2 3) (apply list '(1 2 3)))
+(test "apply over a list held in a name" 6
+      ((lambda (xs) (apply + xs)) (list 1 2 3)))
+
+;;  R7RS lets arguments be written in front of the list, and they go
+;;  on the front of it.
+
+(test "apply with one leading argument" 6 (apply + 1 '(2 3)))
+(test "apply with two leading arguments" 10 (apply + 1 2 '(3 4)))
+(test "apply with leading arguments and nothing else" 3 (apply + 1 2 '()))
+(test "apply keeps the order it was written" '(1 2 3 4)
+      (apply list 1 2 '(3 4)))
+
+;;  apply is a form the translator knows, like car and cons, so the
+;;  name is defined as well and can be handed to something.
+
+(test "apply passed as a value" 6 ((lambda (f) (f + '(1 2 3))) apply))
+(test "apply applied to itself" 6 (apply apply (list + '(1 2 3))))
+(test "apply mapped over a list of argument lists" '(3 7)
+      (map (lambda (xs) (apply + xs)) '((1 2) (3 4))))
+
+;;  What apply is for: a procedure that takes any number of arguments,
+;;  called with a list of however many there turn out to be.
+
+(define (call-with-all f xs) (apply f xs))
+(test "a list of arguments decided at run time" 15
+      (call-with-all + (list 1 2 3 4 5)))
+(test "and none of them" 0 (call-with-all + '()))
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there

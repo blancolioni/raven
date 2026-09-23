@@ -149,6 +149,31 @@ package body Raven.Tests.Imports is
       Test_Number (VM, "(max 3 1 2)", 3);
       Test_Number (VM, "(gcd 32 -36)", 4);
 
+      --  list? walks twice over at two speeds so that it comes back
+      --  from a list that runs back into itself.  The second walk is
+      --  how it is written and not a name a program may take.
+
+      Test_Undefined (VM, "(list-walk? '(1) '(1))");
+
+      --  The primitives the machine could always do and had no name
+      --  for.  Each answers here, which is also where a host's own
+      --  forms are translated, so they are the library's and not
+      --  something only the suite can see.
+
+      Test_Number (VM, "(char->integer #\A)", 65);
+      Test_Name (VM, "(symbol->string 'probe-name)", "probe-name");
+      Test_Number (VM, "(apply + '(1 2 3))", 6);
+      Test_Number (VM, "(apply + 1 2 '(3 4))", 10);
+      Test_Number (VM, "(car (list-set! (list 1 2) 0 7))", 7);
+      Test_Number (VM, "(if (char? #\a) 1 0)", 1);
+      Test_Number (VM, "(if (exact-integer? 1) 1 0)", 1);
+
+      --  (apply +) is refused by the translator, and there is no
+      --  asserting that here: Translate reports what it raised and
+      --  returns, so Execute is handed the code that was emitted
+      --  before the refusal and fails on it.  Nothing of this issue
+      --  can fix that, and a test of it would take the harness down.
+
       --  A standard library asked for by name, off the same path the
       --  base library came from.  caddr is (scheme cxr)'s: R7RS takes
       --  the base library two deep and no further, so this is what a

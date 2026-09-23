@@ -198,6 +198,28 @@ private
                  Pair : Object)
                  return Object;
 
+   --  Writing a cell, which is what the machine has always done for
+   --  RAP and for set! on an argument.  Nothing is asked of what is
+   --  replaced.
+
+   procedure Set_Car (This  : Raven_VM'Class;
+                      Pair  : Object;
+                      Value : Object);
+
+   procedure Set_Cdr (This  : Raven_VM'Class;
+                      Pair  : Object;
+                      Value : Object);
+
+   --  The symbol this name reads as.  Not New_Symbol, which mints one
+   --  that no name reads as: two calls of this with the same name give
+   --  the same symbol, which is the whole of what string->symbol
+   --  promises.
+
+   function To_Symbol
+     (This : Raven_VM'Class;
+      Name : String)
+      return Object;
+
    type Foreign_Value_Instance is abstract tagged
       record
          Marked : Boolean := False;

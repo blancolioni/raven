@@ -359,6 +359,7 @@ package body Raven.Engine.SECD.Translator is
       procedure Undefine_Macro
         (Sym : Object);
 
+      S_Apply             : constant Object := Target.To_Symbol ("apply");
       S_Atom              : constant Object := Target.To_Symbol ("atom?");
       S_Begin             : constant Object := Target.To_Symbol ("begin");
       S_Car               : constant Object := Target.To_Symbol ("car");
@@ -803,6 +804,53 @@ package body Raven.Engine.SECD.Translator is
                elsif Get (F) = S_Atom then
                   Go (Target.Car (Get (A)));
                   This.Append (ATOM);
+               elsif Get (F) = S_Apply then
+
+                  --  apply needs nothing of the machine that a call
+                  --  does not already need.  A call builds a list of
+                  --  its arguments, pushes what it is calling on top
+                  --  of it and says AP, and AP takes the list off the
+                  --  stack; so a call whose argument list is already
+                  --  built is that same sequence with the building
+                  --  left out.
+                  --
+                  --  (apply f xs) is therefore xs pushed, then f on
+                  --  top of it, then AP.  R7RS lets arguments be written in
+                  --  front of the list, and those are consed onto it
+                  --  here, innermost first, which is the order
+                  --  Compile_Args uses for an ordinary call.
+
+                  declare
+                     procedure Compile_Spread (Args : Object);
+
+                     --------------------
+                     -- Compile_Spread --
+                     --------------------
+
+                     procedure Compile_Spread (Args : Object) is
+                        Arg : constant Root := Hold (Table, Args);
+                     begin
+                        if Target.Cdr (Get (Arg)) = Objects.Nil then
+                           Go (Target.Car (Get (Arg)));
+                        else
+                           Compile_Spread (Target.Cdr (Get (Arg)));
+                           Go (Target.Car (Get (Arg)));
+                           This.Append (CONS);
+                        end if;
+                     end Compile_Spread;
+
+                  begin
+                     if Get (A) = Objects.Nil
+                       or else Target.Cdr (Get (A)) = Objects.Nil
+                     then
+                        raise Raven.Target.Translation_Error with
+                          "apply requires a procedure and a list of arguments";
+                     end if;
+
+                     Compile_Spread (Target.Cdr (Get (A)));
+                     Go (Target.Car (Get (A)));
+                     This.Append (AP);
+                  end;
                elsif Get (F) = S_Pair then
                   Go (Target.Car (Get (A)));
                   This.Append (PAIR);
