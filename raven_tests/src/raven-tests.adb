@@ -24,7 +24,29 @@ package body Raven.Tests is
    package Raven_Tests_Resources is
      new Resources (Raven_Tests_Config.Crate_Name);
 
+   --  The raven library's resources as this executable can see them.
+   --  raven_tests/bin is two directories below the one that holds the
+   --  library's share, so the harness reads share/raven where it is
+   --  written.  An installed raven is one directory up, which is what
+   --  the library's own instantiation says and why it cannot serve
+   --  here; this harness is never installed.
+   --
+   --  There used to be a copy of share/raven beside bin instead, which
+   --  nothing refreshed: every run read whatever the library had been
+   --  when someone last copied it.
+
+   package Raven_Library_Resources is
+     new Resources (Crate_Name       => "raven",
+                    Module_To_Prefix => "../..");
+
    procedure Report_Scheme_Suite (VM : Raven_VM);
+
+   ------------------
+   -- Library_Path --
+   ------------------
+
+   function Library_Path return String
+   is (Raven_Library_Resources.Resource_Path & "/libraries");
 
    ---------------
    -- Run_Tests --
@@ -36,7 +58,7 @@ package body Raven.Tests is
       Raven.Tests.Memory.Run_Tests;
 
       declare
-         VM : Raven_VM := New_VM;
+         VM : Raven_VM := New_VM (Library_Path => Library_Path);
       begin
          --  The harness's own libraries, which a program asks for by
          --  name.  The standard library's directory is on the path

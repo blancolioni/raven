@@ -318,9 +318,15 @@ package body Raven is
      (Text_Writer   : Write_Text_Handler := null;
       File_Reader   : Read_File_Handler  := null;
       User_Data     : access User_Data_Interface'Class := null;
-      Configuration : String := "")
+      Configuration : String := "";
+      Library_Path  : String := "")
       return Raven_VM
    is
+      Libraries : constant String :=
+                    (if Library_Path = ""
+                     then Standard_Library_Path
+                     else Library_Path);
+
       Memory : constant Raven.Memory.Reference :=
                  Raven.Engine.Create_Memory (65536);
 
@@ -339,11 +345,11 @@ package body Raven is
         ("raven-write-char", Write_Character'Access, 1);
       This.Data.Target    := This.Data.Evaluator.Target;
 
-      This.Add_Library_Path (Standard_Library_Path);
+      This.Add_Library_Path (Libraries);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
-         Standard_Library_Path & "/scheme/base.scm");
+         Libraries & "/scheme/base.scm");
       return This;
    end New_VM;
 

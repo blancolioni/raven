@@ -28,7 +28,7 @@
 
 
 (define (+ . xs) (fold raven-add 0 xs))
-(define (* . xs) (fold raven-mul 0 xs))
+(define (* . xs) (fold raven-mul 1 xs))
 
 (define (- . xs) (apply-subtract xs))
 (define (apply-subtract xs) (if (null? xs) 0
