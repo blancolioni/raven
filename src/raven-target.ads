@@ -142,6 +142,16 @@ private package Raven.Target is
       is abstract
      with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
 
+   --  A string object holding this text.  The reader asks for one when
+   --  it reads a string written in the source, so that the string is
+   --  an object the code carries rather than a form the code runs.
+
+   function Create_String
+     (This : in out Abstraction;
+      Text : Wide_Wide_String)
+      return Object
+   is abstract;
+
    function Show (This : Abstraction'Class;
                   X    : Object)
                   return String;

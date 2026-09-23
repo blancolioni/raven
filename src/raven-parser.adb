@@ -153,23 +153,13 @@ package body Raven.Parser is
                Lex.Scan;
 
             when Tok_String =>
-               Target.Push
-                 (Raven.Objects.To_Object
-                    (Target.To_Symbol_Id ("list->string")));
-               Target.Push (Raven.Objects.Quote);
-               for Ch of Lex.Tok_Text loop
-                  Target.Push (Raven.Objects.To_Object (Ch));
-               end loop;
-               Target.Push_Nil;
-               for I in 1 .. Lex.Tok_Text'Length loop
-                  Target.Cons;
-               end loop;
-               Target.Push_Nil;
-               Target.Cons;
-               Target.Cons;
-               Target.Push_Nil;
-               Target.Cons;
-               Target.Cons;
+
+               --  One object, made here.  This used to read as the
+               --  form that builds a string, which made another every
+               --  time it was evaluated -- so a literal in a loop
+               --  spent a foreign value on every turn.
+
+               Target.Push (Target.Create_String (Lex.Tok_Text));
                Lex.Scan;
 
             when Tok_Quote =>

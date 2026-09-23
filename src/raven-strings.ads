@@ -8,6 +8,21 @@ private package Raven.Strings is
    procedure Load_String_Library
      (Evaluator : not null access Raven.Evaluator.Abstraction'Class);
 
+   --  A string object holding this text.  The reader makes one when it
+   --  reads a string, so that a string written in the source is an
+   --  object rather than a form that builds one every time it is
+   --  evaluated.
+
+   function To_Value (Text : Wide_Wide_String) return Instance;
+
+   --  Whether a foreign value is a string, and the characters of one
+   --  without the quotation marks Show puts round them.
+
+   function Is_String (From : Foreign_Value_Instance'Class) return Boolean;
+
+   function Text (From : Foreign_Value_Instance'Class) return String
+     with Pre => Is_String (From);
+
    procedure Write_String
      (VM   : Raven_VM;
       Slot : Slot_Index;

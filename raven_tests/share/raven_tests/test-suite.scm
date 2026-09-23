@@ -458,6 +458,27 @@
 (test "cdddr of a list" '(4) (cdddr '(1 2 3 4)))
 (test "cddddr of a list" '(5) (cddddr '(1 2 3 4 5)))
 
+;;  A string written in the source is one object, made when it is
+;;  read.  It used to read as the form that builds a string, so every
+;;  evaluation of a literal spent another of the foreign values there
+;;  are a limited number of -- which is what made a loop holding
+;;  strings run out so quickly.
+
+(define (probe-literal) "shared")
+
+(test "a literal is one object" #t (eq? (probe-literal) (probe-literal)))
+(test "two literals are two" #f (eq? "a" "a"))
+
+;;  And there is room for more than a handful of them.  Five hundred
+;;  strings, all live at once because the list holds them: this was an
+;;  error, out of the machine and past anything scheme could do about
+;;  it, once there were ninety-nine.
+
+(define (probe-strings n)
+  (if (= n 0) '() (cons (display n) (probe-strings (- n 1)))))
+
+(test "five hundred live strings" 500 (length (probe-strings 500)))
+
 (write-string "Tests: ")
 (write-string (display num-tests))
 (write-string ", Passed: ")

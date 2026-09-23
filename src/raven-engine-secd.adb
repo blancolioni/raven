@@ -7,6 +7,7 @@ with Raven.Engine.Libraries;
 with Raven.Engine.SECD.Translator;
 with Raven.Instructions;
 with Raven.Objects;
+with Raven.Strings;
 with Raven.Translator;
 
 package body Raven.Engine.SECD is
@@ -274,6 +275,12 @@ package body Raven.Engine.SECD is
       Value : Object)
       return Foreign_Value_Instance'Class
    is (This.Memory.To_Foreign_Value (Value));
+
+   overriding function Create_String
+     (This : in out Instance;
+      Text : Wide_Wide_String)
+      return Object
+   is (This.Memory.Create_Foreign_Value (Raven.Strings.To_Value (Text)));
 
    function Is_Empty
      (This : in out Instance'Class;
