@@ -379,6 +379,36 @@ package body Raven is
             This.Data.Evaluator.Get_Slot (Index)));
    end Slot_Cons;
 
+   -------------
+   -- Set_Car --
+   -------------
+
+   procedure Set_Car (This  : Raven_VM'Class;
+                      Pair  : Object;
+                      Value : Object)
+   is
+      Address : constant Address_Type := Objects.Get_Address (Pair);
+      Cell    : Raven.Memory.Cell_Type := This.Data.Memory.Get (Address);
+   begin
+      Cell.Car := Value;
+      This.Data.Memory.Set (Address, Cell);
+   end Set_Car;
+
+   -------------
+   -- Set_Cdr --
+   -------------
+
+   procedure Set_Cdr (This  : Raven_VM'Class;
+                      Pair  : Object;
+                      Value : Object)
+   is
+      Address : constant Address_Type := Objects.Get_Address (Pair);
+      Cell    : Raven.Memory.Cell_Type := This.Data.Memory.Get (Address);
+   begin
+      Cell.Cdr := Value;
+      This.Data.Memory.Set (Address, Cell);
+   end Set_Cdr;
+
    -------------------
    -- Set_Parameter --
    -------------------
@@ -493,6 +523,19 @@ package body Raven is
    begin
       return This.Data.Memory.To_Foreign_Value (Value);
    end To_Foreign_Value;
+
+   ---------------
+   -- To_Symbol --
+   ---------------
+
+   function To_Symbol
+     (This : Raven_VM'Class;
+      Name : String)
+      return Object
+   is
+   begin
+      return This.Data.Target.To_Symbol (Name);
+   end To_Symbol;
 
    ---------------
    -- User_Data --

@@ -29,6 +29,12 @@
 (define (list-tail xs k) (if (= k 0) xs (list-tail (cdr xs) (- k 1))))
 (define (list-ref xs k) (car (list-tail xs k)))
 
+;;  list-set! waited for set-car!, which the machine could always do
+;;  and had no name for.  It is list-ref with the reading replaced by
+;;  a writing, and walks to the same pair.
+
+(define (list-set! xs k value) (set-car! (list-tail xs k) value))
+
 ;;  list-copy copies the pairs and nothing else: what the last cdr is
 ;;  is what it stays, and something that is not a pair at all is its
 ;;  own copy.
@@ -36,15 +42,32 @@
 (define (list-copy x) (if (pair? x) (cons (car x) (list-copy (cdr x))) x))
 
 ;;  Whether something is a list is decided by the last cdr, so there
-;;  is no answering it without walking to the end.  What matters is
-;;  stopping when the walk leaves the pairs, rather than taking the
-;;  cdr of whatever it found there.
+;;  is no answering it without walking to the end.  Two things can
+;;  stop the walk short of one: leaving the pairs, and never leaving
+;;  them at all.
 ;;
-;;  R7RS asks for #f on a list that runs back into itself, and there
-;;  is nothing to do about that here: set-cdr! is what would make one
-;;  and the machine does not offer it, so a walk that gets going ends.
+;;  The second is why this is two walks rather than one.  There used
+;;  to be no way to make a list that runs back into itself, so a walk
+;;  that got going ended and the plain recursion was the whole of it;
+;;  set-cdr! is the way, and now a list? that only looked for the end
+;;  would not come back.  So a slow walk and a fast one go together,
+;;  the fast one two pairs at a time, and the fast one catches the
+;;  slow one exactly when the list has no end to find.
 
-(define (list? x) (if (null? x) #t (if (pair? x) (list? (cdr x)) #f)))
+(define (list? x) (list-walk? x x))
+
+(define (list-walk? slow fast)
+  (if (null? fast)
+      #t
+      (if (pair? fast)
+          (if (null? (cdr fast))
+              #t
+              (if (pair? (cdr fast))
+                  (if (eq? (cddr fast) (cdr slow))
+                      #f
+                      (list-walk? (cdr slow) (cddr fast)))
+                  #f))
+          #f)))
 
 (define (not x) (if x #f #t))
 (define (xor x y) (if x (not y) y))
@@ -214,6 +237,15 @@
 (define (car x) (car x))
 (define (cdr x) (cdr x))
 (define (cons x y) (cons x y))
+
+;;  apply is one of those forms too, for the same reason and with the
+;;  same remedy.  A call already builds a list of its arguments and
+;;  hands AP the list, so a call whose list is built already is that
+;;  sequence with the building left out, and the translator writes it
+;;  without a procedure to call.  This gives the name one, so that
+;;  apply can be passed to something.
+
+(define (apply f args) (apply f args))
 
 (define (caar x) (car (car x)))
 (define (cadr x) (car (cdr x)))
