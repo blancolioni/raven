@@ -21,11 +21,18 @@ package Raven is
      function (VM        : Raven_VM;
                File_Name : String) return String;
 
+   --  Library_Path is where the scheme library this VM is built with
+   --  is read from, and the first place (import ...) looks.  Empty is
+   --  the one installed beside the executable, which is what a program
+   --  that ships with raven wants; a host that keeps the library
+   --  somewhere of its own says where.
+
    function New_VM
      (Text_Writer   : Write_Text_Handler := null;
       File_Reader   : Read_File_Handler  := null;
       User_Data     : access User_Data_Interface'Class := null;
-      Configuration : String := "")
+      Configuration : String := "";
+      Library_Path  : String := "")
       return Raven_VM;
 
    procedure Close_VM (This : in out Raven_VM);

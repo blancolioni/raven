@@ -138,7 +138,7 @@ package body Raven.Tests.Define is
       Test_Define (VM, "(xcons '(2 3) 1)", 99);
       VM.Import_Library
         ("(scheme base)",
-         Standard_Library_Path & "/scheme/base.scm");
+         Library_Path & "/scheme/base.scm");
       Test_Define (VM, "(xcons '(2 3) 1)", 99);
 
       --  The library itself still has its own, and loading it a second
