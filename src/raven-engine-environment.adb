@@ -143,14 +143,14 @@ package body Raven.Engine.Environment is
      (This : in out Instance;
       Process : not null access procedure (Value : in out Object))
    is
-      use type Raven.Environment.Reference;
    begin
+      --  What this holds, and no more.  A parent is marked by whoever
+      --  holds it: every library shares one, and following it here
+      --  would walk it once for each of them.
+
       for Item of This.Map loop
          Process (Item);
       end loop;
-      if This.Parent /= null then
-         This.Parent.Mark (Process);
-      end if;
    end Mark;
 
    -------------

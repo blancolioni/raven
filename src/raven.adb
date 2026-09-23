@@ -168,7 +168,8 @@ package body Raven is
       Raven.Parser.Parse_Expression
         (Expression, This.Data.Target);
 
-      This.Data.Target.Translate;
+      This.Data.Target.Translate
+        (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;
 
       This.Set_Slot (1, This.Data.Target.Pop);
@@ -186,7 +187,8 @@ package body Raven is
       Fn : constant Object := Object_Lists.Element (Value.Position);
    begin
       This.Data.Target.Push (Fn);
-      This.Data.Target.Translate;
+      This.Data.Target.Translate
+        (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;
       This.Set_Slot (1, This.Data.Target.Pop);
    end Evaluate;

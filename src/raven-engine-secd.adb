@@ -5,6 +5,7 @@ with Ada.Strings.Equal_Case_Insensitive;
 with Ada.Strings.Hash_Case_Insensitive;
 with Ada.Text_IO;
 
+with Raven.Engine.Libraries;
 with Raven.Engine.SECD.Translator;
 with Raven.Instructions;
 with Raven.Objects;
@@ -83,12 +84,23 @@ package body Raven.Engine.SECD is
          Foreign     : Foreign_Vectors.Vector;
          Macros      : Macro_Vectors.Vector;
          Global      : Macro_Maps.Map;
+         Libraries   : Raven.Engine.Libraries.Instance;
+         Interaction : Raven.Target.Library_Id :=
+                         Raven.Target.No_Library;
          Translators : Translator_Vectors.Vector;
          Trace       : Boolean := False;
       end record;
 
+   type Instance_Reference is access all Instance'Class;
+
    overriding procedure Translate
-     (This   : in out Instance);
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding function Interaction_Library
+     (This : Instance)
+      return Raven.Target.Real_Library_Id
+   is (This.Interaction);
 
    overriding procedure Execute
      (This   : in out Instance);
@@ -225,6 +237,31 @@ package body Raven.Engine.SECD is
       New_Car : Object)
       return Object;
 
+   --  The operand of LD, ST and DFN is one pair: a library and a
+   --  symbol for a name the library holds, a frame and an offset for
+   --  one the machine built when it applied a closure.  A symbol in
+   --  the cdr is what tells them apart.
+
+   function Is_Library_Reference
+     (This : Instance'Class;
+      Ref  : Object)
+      return Boolean
+   is (Raven.Objects.Is_Symbol (This.Cdr (Ref)));
+
+   function Referenced_Environment
+     (This : Instance'Class;
+      Ref  : Object)
+      return Raven.Environment.Reference
+   is (This.Libraries.Environment
+         (Raven.Target.Real_Library_Id
+            (Raven.Objects.To_Integer (This.Car (Ref)))));
+
+   function Referenced_Name
+     (This : Instance'Class;
+      Ref  : Object)
+      return String
+   is (This.To_String (Raven.Objects.To_Symbol (This.Cdr (Ref))));
+
    ------------------
    -- Append_Lists --
    ------------------
@@ -328,8 +365,7 @@ package body Raven.Engine.SECD is
       Symbols : not null access Raven.Symbols.Abstraction'Class)
       return Raven.Target.Reference
    is
-   begin
-      return This : constant Raven.Target.Reference := new Instance'
+      This : constant Instance_Reference := new Instance'
         (VM          => VM,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
@@ -339,11 +375,21 @@ package body Raven.Engine.SECD is
          Foreign     => <>,
          Macros      => <>,
          Global      => <>,
+         Libraries   => <>,
+         Interaction => Raven.Target.No_Library,
          Translators => <>,
-         Trace       => False)
-      do
-         Memory.Add_Container (This);
-      end return;
+         Trace       => False);
+   begin
+      Memory.Add_Container (This);
+
+      --  Where a form the host hands the machine is translated.  Env
+      --  is its parent rather than its own, so that what the engine
+      --  and the host bind stays visible to every library.
+
+      This.Interaction :=
+        This.Libraries.Create ("(raven user)", Env);
+
+      return Raven.Target.Reference (This);
    end Create;
 
    -------------
@@ -566,15 +612,13 @@ package body Raven.Engine.SECD is
                   end;
                when DFN =>
                   declare
-                     Sym   : constant Object := This.Pop (C);
-                     Name  : constant String :=
-                               This.To_String
-                                 (Objects.To_Symbol (Sym));
+                     Ref   : constant Object := This.Pop (C);
                      Value : constant Object :=
                                This.Pop;
                   begin
-                     This.Env.Define (Name, Value);
-                     This.Push (Sym);
+                     This.Referenced_Environment (Ref).Define
+                       (This.Referenced_Name (Ref), Value);
+                     This.Push (This.Cdr (Ref));
                   end;
                when DROP =>
                   declare
@@ -597,14 +641,13 @@ package body Raven.Engine.SECD is
                   declare
                      Ref : constant Object := This.Pop (C);
                   begin
-                     if Objects.Is_Symbol (Ref) then
+                     if This.Is_Library_Reference (Ref) then
                         declare
                            Name  : constant String :=
-                                     This.To_String
-                                       (Objects.To_Symbol (Ref));
+                                     This.Referenced_Name (Ref);
                            Value : constant Object :=
-                                     This.Env.Lookup
-                                       (Name);
+                                     This.Referenced_Environment
+                                       (Ref).Lookup (Name);
                         begin
                            if Value = Objects.Undefined then
                               raise Raven.Target.Undefined_Symbol with Name;
@@ -696,19 +739,19 @@ package body Raven.Engine.SECD is
                      Ref : constant Object := This.Pop (C);
                      New_Value  : constant Object := This.Pop;
                   begin
-                     if Objects.Is_Symbol (Ref) then
+                     if This.Is_Library_Reference (Ref) then
                         declare
                            Name       : constant String :=
-                                          This.To_String
-                                            (Objects.To_Symbol (Ref));
+                                          This.Referenced_Name (Ref);
                            Old_Value  : constant Object :=
-                                          This.Env.Lookup
-                                            (Name);
+                                          This.Referenced_Environment
+                                            (Ref).Lookup (Name);
                         begin
                            if Old_Value = Objects.Undefined then
                               raise Raven.Target.Undefined_Symbol with Name;
                            end if;
-                           This.Env.Replace (Name, New_Value);
+                           This.Referenced_Environment (Ref).Replace
+                             (Name, New_Value);
                            This.Push (New_Value);
                         end;
                      else
@@ -767,6 +810,7 @@ package body Raven.Engine.SECD is
             end if;
          end;
       end loop;
+      This.Libraries.Mark (Process);
       for T of This.Translators loop
          T.Mark (Process);
       end loop;
@@ -948,7 +992,13 @@ package body Raven.Engine.SECD is
       Cell    : Raven.Memory.Cell_Type :=
                   This.Memory.Get (Address);
    begin
-      pragma Assert (Cell.Car = Objects.Pending);
+      --  Replaces a car, and asks nothing of the one it replaces.  RAP
+      --  was the only caller when this was written, so it used to
+      --  assert that it was filling in a dummy frame; set! on a name
+      --  the machine holds on the stack replaces an argument, which is
+      --  no such thing.  What RAP needs is still checked where RAP
+      --  takes the dummy frame off the environment stack.
+
       Cell.Car := New_Car;
       This.Memory.Set (Address, Cell);
       return X;
@@ -974,7 +1024,8 @@ package body Raven.Engine.SECD is
    ---------------
 
    overriding procedure Translate
-     (This   : in out Instance)
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
    is
       Translator : aliased Raven.Translator.Abstraction'Class :=
                      Raven.Engine.SECD.Translator.Create;
@@ -987,7 +1038,7 @@ package body Raven.Engine.SECD is
 
       This.Translators.Append (Translator'Unchecked_Access);
       begin
-         Translator.Translate (This'Unchecked_Access);
+         Translator.Translate (This'Unchecked_Access, Library);
       exception
          when others =>
             This.Translators.Delete_Last;

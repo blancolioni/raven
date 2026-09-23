@@ -123,8 +123,9 @@ package body Raven.Engine.SECD.Translator is
       end record;
 
    overriding procedure Translate
-     (This   : in out Instance;
-      Target : Raven.Target.Reference);
+     (This    : in out Instance;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
 
    overriding procedure Mark
      (This    : in out Instance;
@@ -275,8 +276,9 @@ package body Raven.Engine.SECD.Translator is
    ---------------
 
    overriding procedure Translate
-     (This   : in out Instance;
-      Target : Raven.Target.Reference)
+     (This    : in out Instance;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
    is
       Env : Env_Lists.List;
 
@@ -286,6 +288,9 @@ package body Raven.Engine.SECD.Translator is
       --  away from.
 
       Table : constant Root_Table := This.Roots'Unchecked_Access;
+
+      procedure Append_Binding
+        (Sym : Object);
 
       procedure Bind_Macro
         (Name : String;
@@ -343,6 +348,23 @@ package body Raven.Engine.SECD.Translator is
       S_Unquote           : constant Object := Target.To_Symbol ("unquote");
       S_Unquote_Splicing  : constant Object := Target.To_Symbol ("unquote-splicing");
       Indent   : Natural := 0;
+
+      --------------------
+      -- Append_Binding --
+      --------------------
+
+      procedure Append_Binding
+        (Sym : Object)
+      is
+      begin
+         --  A name the library holds, as the operand of LD, ST or
+         --  DFN.  Nothing is left for the machine to decide: the
+         --  library this form is being translated in is the library
+         --  the name is looked up in.
+
+         This.Append (Objects.To_Object (Integer (Library)));
+         This.Append (Sym);
+      end Append_Binding;
 
       ----------------
       -- Bind_Macro --
@@ -517,25 +539,29 @@ package body Raven.Engine.SECD.Translator is
                if X = Raven.Objects.Pending then
                   Next (Position);
                   Emit (Raven.Objects.To_Integer (Element (Position)));
-               elsif X = Raven.Objects.To_Object (LD) then
+               elsif X = Raven.Objects.To_Object (LD)
+                 or else X = Raven.Objects.To_Object (ST)
+                 or else X = Raven.Objects.To_Object (DFN)
+               then
+                  --  Two cells here, one object in the code the
+                  --  machine runs: a frame and an offset for a name on
+                  --  the stack, a library and a symbol for one a
+                  --  library holds.
+
                   Target.Push (X);
                   Count := Count + 1;
                   Next (Position);
-                  if Objects.Is_Symbol (Element (Position)) then
-                     Target.Push (Element (Position));
-                  elsif Objects.Is_Integer (Element (Position))
-                    and then Has_Element (Next (Position))
-                    and then Objects.Is_Integer (Element (Next (Position)))
+                  if not Has_Element (Position)
+                    or else not Has_Element (Next (Position))
                   then
-                     Target.Push (Element (Position));
-                     Next (Position);
-                     Target.Push (Element (Position));
-                     Target.Cons;
-                  else
                      raise Constraint_Error with
-                     "emit: invalid argument to emit: "
+                     "emit: missing operand: "
                        & Show_Code (This.Code (Level), Target);
                   end if;
+                  Target.Push (Element (Position));
+                  Next (Position);
+                  Target.Push (Element (Position));
+                  Target.Cons;
                else
                   Target.Push (X);
                end if;
@@ -713,7 +739,7 @@ package body Raven.Engine.SECD.Translator is
                      Undefine_Macro (Target.Car (Get (A)));
                      Go (Target.Cadr (Get (A)));
                      This.Append (DFN);
-                     This.Append (Target.Car (Get (A)));
+                     Append_Binding (Target.Car (Get (A)));
                   elsif Raven.Objects.Is_Pair (Target.Car (Get (A))) then
                      Undefine_Macro (Target.Caar (Get (A)));
                      Build_Env (Target.Cdar (Get (A)));
@@ -721,7 +747,7 @@ package body Raven.Engine.SECD.Translator is
                      Nested_Sequence (Target.Cdr (Get (A)), RTN);
                      Close_Scope;
                      This.Append (DFN);
-                     This.Append (Target.Caar (Get (A)));
+                     Append_Binding (Target.Caar (Get (A)));
                   else
                      raise Program_Error with "invalid define";
                   end if;
@@ -893,7 +919,11 @@ package body Raven.Engine.SECD.Translator is
                I := @ + 1;
             end if;
          end loop;
-         This.Append (Sym);
+
+         --  Nothing lexical holds the name, so the library being
+         --  translated does, whether or not it has defined it yet.
+
+         Append_Binding (Sym);
       end Locate;
 
       ------------

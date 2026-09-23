@@ -116,6 +116,18 @@ package body Raven.Tests.Define is
       Evaluate (VM, "(define (probe-f) 2)");
       Test_Define (VM, "(probe-f)", 2);
 
+      --  set! on a name the machine holds on the stack, rather than
+      --  one a library holds.  The operand of ST is the same pair the
+      --  operand of LD is, so both reach what they were given.
+
+      Evaluate (VM, "(define (probe-set-arg x) (set! x 99) x)");
+      Test_Define (VM, "(probe-set-arg 1)", 99);
+
+      Evaluate (VM,
+                "(define (probe-set-inner y)"
+                & " ((lambda (z) (set! z (+ z y)) z) 10))");
+      Test_Define (VM, "(probe-set-inner 5)", 15);
+
       --  A definition can take a name the base library defined, and
       --  the library can be loaded again over it: xcons is left as the
       --  library has it, which is how the second load shows.

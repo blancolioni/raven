@@ -29,7 +29,7 @@ package body Raven.Loader is
 
          begin
             Reader.Parse_Next (Target);
-            Target.Translate;
+            Target.Translate (Target.Interaction_Library);
             Target.Execute;
             Target.Drop;
          exception

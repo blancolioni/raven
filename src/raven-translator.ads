@@ -14,8 +14,9 @@ private package Raven.Translator is
    type Abstraction is interface and Raven.Containers.Abstraction;
 
    procedure Translate
-     (This   : in out Abstraction;
-      Target : Raven.Target.Reference)
+     (This    : in out Abstraction;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
    is abstract;
 
 end Raven.Translator;

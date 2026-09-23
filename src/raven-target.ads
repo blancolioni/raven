@@ -19,8 +19,29 @@ private package Raven.Target is
 
    type Reference is access all Abstraction'Class;
 
+   --  Every translation happens in a library, and the code it produces
+   --  carries it: the operand of LD, ST and DFN names a library and a
+   --  symbol, so a name written in one library and the same name
+   --  written in another are two names.  A closure needs to know
+   --  nothing about it, because nothing is left to decide when it runs.
+
+   type Library_Id is new Natural;
+
+   No_Library : constant Library_Id := 0;
+
+   subtype Real_Library_Id is Library_Id range 1 .. Library_Id'Last;
+
+   --  Where a form typed at the host, rather than read out of a
+   --  library, is translated.
+
+   function Interaction_Library
+     (This : Abstraction)
+      return Real_Library_Id
+   is abstract;
+
    procedure Translate
-     (This   : in out Abstraction)
+     (This    : in out Abstraction;
+      Library : Real_Library_Id)
    is abstract;
 
    procedure Execute
