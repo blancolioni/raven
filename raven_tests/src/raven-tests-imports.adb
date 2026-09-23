@@ -127,6 +127,28 @@ package body Raven.Tests.Imports is
       Test_Number (VM, "(cdr (assv 2 '((1 . 10) (2 . 20))))", 20);
       Test_Number (VM, "(car (memv 2 '(1 2 3)))", 2);
 
+      --  The same holds of the arithmetic: the walk min and max share
+      --  and the pieces the division names are built from are how
+      --  they are written, not names a program may take.
+
+      Test_Undefined (VM, "(extreme < '(1 2))");
+      Test_Undefined (VM, "(gcd2 4 6)");
+      Test_Undefined (VM, "(lcm2 4 6)");
+      Test_Undefined (VM, "(floor-adjust 4 1 1)");
+
+      --  truncate/ and floor/ each answer two values, and there are
+      --  no multiple values yet, so neither is here.
+
+      Test_Undefined (VM, "(truncate/ 13 4)");
+      Test_Undefined (VM, "(floor/ 13 4)");
+
+      --  What is here answers, and a negative number now reads.
+
+      Test_Number (VM, "(modulo -13 4)", 3);
+      Test_Number (VM, "(remainder -13 4)", -1);
+      Test_Number (VM, "(max 3 1 2)", 3);
+      Test_Number (VM, "(gcd 32 -36)", 4);
+
       --  A standard library asked for by name, off the same path the
       --  base library came from.  caddr is (scheme cxr)'s: R7RS takes
       --  the base library two deep and no further, so this is what a

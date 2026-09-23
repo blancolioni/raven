@@ -35,10 +35,168 @@
 (test "false is not truthy" #t (if #f #f #t))
 (test "true is truthy" #t (if #t #t #f))
 (test "integer self-equality" #t (eq? 4 (+ 2 2)))
-;;(test "1 < 2" #t (< 1 2))
 (test "1 = 1" #t (= 1 1))
 (test "(= 1 1 1)" #t (= 1 1 1))
 (test "(= 1 1 2)" #f (= 1 1 2))
+
+;;  Integer arithmetic.
+
+;;  A negative number written out.  The reader classifies -13 as one
+;;  integer token and read its value back as a Natural, which raised
+;;  a range check out of the reader, so a negative number could not be
+;;  written at all and had to be said as (- 13).
+
+(test "a negative literal reads" -13 (- 13))
+(test "a negative literal is the number" #t (= -13 (- 0 13)))
+(test "a positive literal may be signed" 13 +13)
+(test "a negative literal in a quotation" '(-1 -2) (list -1 -2))
+(test "arithmetic on a negative literal" -10 (+ -13 3))
+
+;;  The comparisons.  raven-leq was bound and nothing in scheme used
+;;  it; these are it, turned around and negated.  Each is a chain, the
+;;  way = is.
+
+(test "1 < 2" #t (< 1 2))
+(test "2 < 1" #f (< 2 1))
+(test "1 < 1" #f (< 1 1))
+(test "(< 1 2 3)" #t (< 1 2 3))
+(test "(< 1 3 2)" #f (< 1 3 2))
+(test "< over negatives" #t (< -2 -1))
+
+(test "2 > 1" #t (> 2 1))
+(test "1 > 2" #f (> 1 2))
+(test "1 > 1" #f (> 1 1))
+(test "(> 3 2 1)" #t (> 3 2 1))
+(test "(> 3 1 2)" #f (> 3 1 2))
+(test "> over negatives" #t (> -1 -2))
+
+(test "1 <= 1" #t (<= 1 1))
+(test "1 <= 2" #t (<= 1 2))
+(test "2 <= 1" #f (<= 2 1))
+(test "(<= 1 1 2)" #t (<= 1 1 2))
+(test "(<= 1 2 1)" #f (<= 1 2 1))
+
+(test "1 >= 1" #t (>= 1 1))
+(test "2 >= 1" #t (>= 2 1))
+(test "1 >= 2" #f (>= 1 2))
+(test "(>= 2 1 1)" #t (>= 2 1 1))
+(test "(>= 2 1 3)" #f (>= 2 1 3))
+
+(test "zero? of zero" #t (zero? 0))
+(test "zero? of one" #f (zero? 1))
+(test "zero? of a negative" #f (zero? -1))
+
+(test "positive? of one" #t (positive? 1))
+(test "positive? of zero" #f (positive? 0))
+(test "positive? of a negative" #f (positive? -1))
+
+(test "negative? of a negative" #t (negative? -1))
+(test "negative? of zero" #f (negative? 0))
+(test "negative? of one" #f (negative? 1))
+
+(test "even? of zero" #t (even? 0))
+(test "even? of two" #t (even? 2))
+(test "even? of three" #f (even? 3))
+(test "even? of a negative even" #t (even? -4))
+(test "even? of a negative odd" #f (even? -3))
+
+(test "odd? of three" #t (odd? 3))
+(test "odd? of zero" #f (odd? 0))
+(test "odd? of a negative odd" #t (odd? -3))
+
+(test "abs of a positive" 3 (abs 3))
+(test "abs of a negative" 3 (abs -3))
+(test "abs of zero" 0 (abs 0))
+
+(test "square" 16 (square 4))
+(test "square of a negative" 16 (square -4))
+(test "square of zero" 0 (square 0))
+
+(test "min of one" 3 (min 3))
+(test "min" 1 (min 3 1 2))
+(test "min over negatives" -2 (min -1 -2))
+(test "max of one" 3 (max 3))
+(test "max" 3 (max 3 1 2))
+(test "max over negatives" -1 (max -1 -2))
+
+;;  Division.  quotient truncates towards zero and floor-quotient
+;;  rounds down, so the two differ exactly when the division does not
+;;  come out even and the answer is negative.  remainder takes the
+;;  sign of what was divided and modulo takes the sign of what it was
+;;  divided by, which is the whole reason for having both.
+
+(test "quotient" 3 (quotient 13 4))
+(test "quotient, negative over positive" -3 (quotient -13 4))
+(test "quotient, positive over negative" -3 (quotient 13 -4))
+(test "quotient, negative over negative" 3 (quotient -13 -4))
+(test "quotient that comes out even" -3 (quotient -12 4))
+
+(test "remainder" 1 (remainder 13 4))
+(test "remainder, negative over positive" -1 (remainder -13 4))
+(test "remainder, positive over negative" 1 (remainder 13 -4))
+(test "remainder, negative over negative" -1 (remainder -13 -4))
+(test "remainder that comes out even" 0 (remainder 12 4))
+
+(test "modulo" 1 (modulo 13 4))
+(test "modulo, negative over positive" 3 (modulo -13 4))
+(test "modulo, positive over negative" -3 (modulo 13 -4))
+(test "modulo, negative over negative" -1 (modulo -13 -4))
+(test "modulo that comes out even" 0 (modulo 12 4))
+
+(test "floor-quotient" 3 (floor-quotient 13 4))
+(test "floor-quotient, negative over positive" -4 (floor-quotient -13 4))
+(test "floor-quotient, positive over negative" -4 (floor-quotient 13 -4))
+(test "floor-quotient, negative over negative" 3 (floor-quotient -13 -4))
+(test "floor-quotient that comes out even" -3 (floor-quotient -12 4))
+
+;;  The R7RS spellings are the same procedures under the older names.
+
+(test "truncate-quotient is quotient" #t
+      (= (truncate-quotient -13 4) (quotient -13 4)))
+(test "truncate-remainder is remainder" #t
+      (= (truncate-remainder -13 4) (remainder -13 4)))
+(test "floor-remainder is modulo" #t
+      (= (floor-remainder -13 4) (modulo -13 4)))
+
+;;  What holds of every division: the quotient and the remainder put
+;;  the number back together, whichever way the quotient was rounded.
+
+(test "truncating division puts 13 and 4 back together" 13
+      (+ (* 4 (truncate-quotient 13 4)) (truncate-remainder 13 4)))
+(test "flooring division puts -13 and 4 back together" -13
+      (+ (* 4 (floor-quotient -13 4)) (floor-remainder -13 4)))
+
+(test "gcd of nothing" 0 (gcd))
+(test "gcd of one" 32 (gcd 32))
+(test "gcd" 4 (gcd 32 36))
+(test "gcd is never negative" 4 (gcd 32 -36))
+(test "gcd of a negative alone" 4 (gcd -4))
+(test "gcd with zero" 5 (gcd 0 5))
+(test "gcd of three" 2 (gcd 12 18 8))
+
+(test "lcm of nothing" 1 (lcm))
+(test "lcm of one" 32 (lcm 32))
+(test "lcm" 288 (lcm 32 36))
+(test "lcm is never negative" 288 (lcm 32 -36))
+(test "lcm with zero" 0 (lcm 0 5))
+(test "lcm of three" 12 (lcm 2 3 4))
+
+(test "expt to the zeroth" 1 (expt 2 0))
+(test "expt to the first" 5 (expt 5 1))
+(test "expt" 1024 (expt 2 10))
+(test "expt of a negative base, even power" 4 (expt -2 2))
+(test "expt of a negative base, odd power" -8 (expt -2 3))
+(test "expt of zero to the zeroth" 1 (expt 0 0))
+
+;;  Rounding an integer gives it back.  These are here so that a
+;;  program which says where it expects a fraction runs.
+
+(test "floor of an integer" 5 (floor 5))
+(test "ceiling of an integer" 5 (ceiling 5))
+(test "truncate of an integer" 5 (truncate 5))
+(test "round of an integer" 5 (round 5))
+(test "floor of a negative integer" -5 (floor -5))
+(test "round of a negative integer" -5 (round -5))
 (test "boolean? true" #t (boolean? #t))
 (test "boolean? false" #t (boolean? #f))
 (test "boolean? non-boolean" #f (boolean? 42))
