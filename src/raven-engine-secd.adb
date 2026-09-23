@@ -1,8 +1,6 @@
-with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Vectors;
 with Ada.Strings.Equal_Case_Insensitive;
-with Ada.Strings.Hash_Case_Insensitive;
 with Ada.Text_IO;
 
 with Raven.Engine.Libraries;
@@ -43,22 +41,12 @@ package body Raven.Engine.SECD is
       In_Use     : Boolean := False;
       Params     : Object  := Raven.Objects.Nil;
       Macro_Body : Object  := Raven.Objects.Nil;
+      Home       : Raven.Target.Library_Id := Raven.Target.No_Library;
    end record;
 
    package Macro_Vectors is
      new Ada.Containers.Vectors
        (Raven.Target.Real_Macro_Id, Macro_Entry);
-
-   --  The names in the global macro scope.  Holds ids, not objects, so
-   --  it plays no part in collection.
-
-   package Macro_Maps is
-     new Ada.Containers.Indefinite_Hashed_Maps
-       (Key_Type        => String,
-        Element_Type    => Raven.Target.Real_Macro_Id,
-        Hash            => Ada.Strings.Hash_Case_Insensitive,
-        Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive,
-        "="             => Raven.Target."=");
 
    --  The translators running on this instance, innermost last: a
    --  macro expansion executes code, and that code can ask for another
@@ -83,7 +71,6 @@ package body Raven.Engine.SECD is
          Env         : Raven.Environment.Reference;
          Foreign     : Foreign_Vectors.Vector;
          Macros      : Macro_Vectors.Vector;
-         Global      : Macro_Maps.Map;
          Libraries   : Raven.Engine.Libraries.Instance;
          Interaction : Raven.Target.Library_Id :=
                          Raven.Target.No_Library;
@@ -130,6 +117,13 @@ package body Raven.Engine.SECD is
       Name    : String)
       return Raven.Target.Real_Library_Id
    is (This.Libraries.Resolve (Library, Name));
+
+   overriding function Binds
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Boolean
+   is (This.Libraries.Binds (Library, Name));
 
    overriding procedure Add_Library_Path
      (This : in out Instance;
@@ -223,32 +217,45 @@ package body Raven.Engine.SECD is
    overriding function Store_Macro
      (This        : in out Instance;
       Params      : Object;
-      Macro_Body  : Object)
+      Macro_Body  : Object;
+      Home        : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id;
 
    overriding procedure Get_Macro
      (This        : Instance;
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
-      Macro_Body  : out Object);
+      Macro_Body  : out Object;
+      Home        : out Raven.Target.Real_Library_Id);
 
    overriding procedure Release_Macro
      (This : in out Instance;
       Id   : Raven.Target.Real_Macro_Id);
 
-   overriding procedure Define_Global_Macro
-     (This : in out Instance;
-      Name : String;
-      Id   : Raven.Target.Real_Macro_Id);
+   overriding procedure Define_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String;
+      Id      : Raven.Target.Real_Macro_Id);
 
-   overriding procedure Undefine_Global_Macro
-     (This : in out Instance;
-      Name : String);
+   overriding procedure Undefine_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
 
-   overriding function Global_Macro
-     (This : Instance;
-      Name : String)
-      return Raven.Target.Macro_Id;
+   overriding function Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id
+   is (This.Libraries.Macro (Library, Name));
+
+   overriding function Own_Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id
+   is (This.Libraries.Own_Macro (Library, Name));
 
    overriding function To_Foreign_Value
      (This  : Instance;
@@ -451,7 +458,6 @@ package body Raven.Engine.SECD is
          Env         => Env,
          Foreign     => <>,
          Macros      => <>,
-         Global      => <>,
          Libraries   => <>,
          Interaction => Raven.Target.No_Library,
          Translators => <>,
@@ -912,10 +918,12 @@ package body Raven.Engine.SECD is
    overriding function Store_Macro
      (This        : in out Instance;
       Params      : Object;
-      Macro_Body  : Object)
+      Macro_Body  : Object;
+      Home        : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id
    is
-      New_Entry : constant Macro_Entry := (True, Params, Macro_Body);
+      New_Entry : constant Macro_Entry :=
+                    (True, Params, Macro_Body, Home);
    begin
       for Id in 1 .. This.Macros.Last_Index loop
          if not This.Macros (Id).In_Use then
@@ -936,12 +944,14 @@ package body Raven.Engine.SECD is
      (This        : Instance;
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
-      Macro_Body  : out Object)
+      Macro_Body  : out Object;
+      Home        : out Raven.Target.Real_Library_Id)
    is
       E : constant Macro_Entry := This.Macros (Id);
    begin
       Params     := E.Params;
       Macro_Body := E.Macro_Body;
+      Home       := E.Home;
    end Get_Macro;
 
    -------------------
@@ -956,46 +966,32 @@ package body Raven.Engine.SECD is
       This.Macros (Id) := Macro_Entry'(others => <>);
    end Release_Macro;
 
-   -------------------------
-   -- Define_Global_Macro --
-   -------------------------
-
-   overriding procedure Define_Global_Macro
-     (This : in out Instance;
-      Name : String;
-      Id   : Raven.Target.Real_Macro_Id)
-   is
-   begin
-      This.Global.Include (Name, Id);
-   end Define_Global_Macro;
-
-   ---------------------------
-   -- Undefine_Global_Macro --
-   ---------------------------
-
-   overriding procedure Undefine_Global_Macro
-     (This : in out Instance;
-      Name : String)
-   is
-   begin
-      This.Global.Exclude (Name);
-   end Undefine_Global_Macro;
-
    ------------------
-   -- Global_Macro --
+   -- Define_Macro --
    ------------------
 
-   overriding function Global_Macro
-     (This : Instance;
-      Name : String)
-      return Raven.Target.Macro_Id
+   overriding procedure Define_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String;
+      Id      : Raven.Target.Real_Macro_Id)
    is
-      Position : constant Macro_Maps.Cursor := This.Global.Find (Name);
    begin
-      return (if Macro_Maps.Has_Element (Position)
-              then Macro_Maps.Element (Position)
-              else Raven.Target.No_Macro);
-   end Global_Macro;
+      This.Libraries.Define_Macro (Library, Name, Id);
+   end Define_Macro;
+
+   --------------------
+   -- Undefine_Macro --
+   --------------------
+
+   overriding procedure Undefine_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Undefine_Macro (Library, Name);
+   end Undefine_Macro;
 
    ---------
    -- Pop --

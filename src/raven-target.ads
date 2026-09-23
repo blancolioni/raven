@@ -79,6 +79,17 @@ private package Raven.Target is
       return Real_Library_Id
    is abstract;
 
+   --  Whether anything Library knows of accounts for the name, which
+   --  Resolve cannot say: it gives back Library itself both for a name
+   --  written here and for one nothing accounts for.
+
+   function Binds
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+      return Boolean
+   is abstract;
+
    --  Where a library name is looked for, in the order they were
    --  added.  Library_Path gives back nothing past the last.
 
@@ -145,10 +156,18 @@ private package Raven.Target is
 
    subtype Real_Macro_Id is Macro_Id range 1 .. Macro_Id'Last;
 
+   --  A macro is expanded where it is used and read where it was
+   --  written, so it carries the library it was written in.  A name
+   --  free in what it expands to means what it means there, which is
+   --  how a library's macro can reach what the library keeps to
+   --  itself.  Home is an id and not an object, so it costs the
+   --  collector nothing.
+
    function Store_Macro
      (This        : in out Abstraction;
       Params      : Object;
-      Macro_Body  : Object)
+      Macro_Body  : Object;
+      Home        : Real_Library_Id)
       return Real_Macro_Id
    is abstract;
 
@@ -156,7 +175,8 @@ private package Raven.Target is
      (This        : Abstraction;
       Id          : Real_Macro_Id;
       Params      : out Object;
-      Macro_Body  : out Object)
+      Macro_Body  : out Object;
+      Home        : out Real_Library_Id)
    is abstract;
 
    --  Gives a definition back: it becomes collectable and its id may be
@@ -168,24 +188,36 @@ private package Raven.Target is
       Id   : Real_Macro_Id)
    is abstract;
 
-   --  The global scope is the one macro scope that outlives a single
+   --  A library's macro scope is the one that outlives a single
    --  translation, so the translator cannot hold it: each top level
    --  form gets a fresh translator, and with it a fresh lexical chain.
+   --  Macro searches what the library imported as well; Own_Macro is
+   --  what the library itself has, which is all it may take back.
 
-   procedure Define_Global_Macro
-     (This : in out Abstraction;
-      Name : String;
-      Id   : Real_Macro_Id)
+   procedure Define_Macro
+     (This    : in out Abstraction;
+      Library : Real_Library_Id;
+      Name    : String;
+      Id      : Real_Macro_Id)
    is abstract;
 
-   procedure Undefine_Global_Macro
-     (This : in out Abstraction;
-      Name : String)
+   procedure Undefine_Macro
+     (This    : in out Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
    is abstract;
 
-   function Global_Macro
-     (This : Abstraction;
-      Name : String)
+   function Macro
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+      return Macro_Id
+   is abstract;
+
+   function Own_Macro
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
       return Macro_Id
    is abstract;
 

@@ -12,6 +12,7 @@ with Raven.Target;
 package body Raven.Engine.SECD.Translator is
 
    use Raven.Instructions;
+   use type Raven.Target.Library_Id;
    use type Raven.Target.Macro_Id;
 
    package Object_Lists is
@@ -282,6 +283,15 @@ package body Raven.Engine.SECD.Translator is
    is
       Env : Env_Lists.List;
 
+      --  The library the form being read was written in.  It is
+      --  Library until a macro is expanded, and the macro's own while
+      --  its body and what it expands to are read, because that is
+      --  where they were written.  A translation that a macro
+      --  expansion starts gets a Home of its own, so nesting looks
+      --  after itself.
+
+      Home : Raven.Target.Real_Library_Id := Library;
+
       --  Everything this translation is working with lives here, so
       --  that a collection provoked by a macro expansion neither takes
       --  it nor leaves the translator holding an address it has moved
@@ -377,16 +387,39 @@ package body Raven.Engine.SECD.Translator is
       procedure Append_Reference
         (Sym : Object)
       is
-         Name : constant String :=
-                  Target.To_String (Objects.To_Symbol (Sym));
+         Name  : constant String :=
+                   Target.To_String (Objects.To_Symbol (Sym));
+         Found : Raven.Target.Real_Library_Id;
       begin
          --  Which library holds the name is settled here, so that the
          --  machine has nothing left to decide and a closure has
          --  nothing to carry.
+         --
+         --  A name the use site accounts for means what it means
+         --  there, which is what the caller wrote.  One it does not,
+         --  and the library the macro was written in does, means what
+         --  it meant there -- which is what lets a library's macro
+         --  reach what the library keeps to itself.
+         --
+         --  What this cannot do is tell the two apart.  Once a
+         --  template has been instantiated the expansion is one form,
+         --  and a name the caller passed in looks exactly like a name
+         --  the template wrote.  So a caller's reference to a name it
+         --  has not defined yet, which the macro's library defines,
+         --  goes to that library instead, silently.  An identifier
+         --  that carried where it was written would settle it; that
+         --  is #24.
 
-         This.Append
-           (Objects.To_Object
-              (Integer (Target.Resolve (Library, Name))));
+         if Home /= Library
+           and then not Target.Binds (Library, Name)
+           and then Target.Binds (Home, Name)
+         then
+            Found := Target.Resolve (Home, Name);
+         else
+            Found := Target.Resolve (Library, Name);
+         end if;
+
+         This.Append (Objects.To_Object (Integer (Found)));
          This.Append (Sym);
       end Append_Reference;
 
@@ -791,15 +824,25 @@ package body Raven.Engine.SECD.Translator is
                      Params     : constant Object := Target.Cdar (Get (A));
                      Macro_Body : constant Object := Target.Cdr (Get (A));
                      Id         : constant Raven.Target.Real_Macro_Id :=
-                                    Target.Store_Macro (Params, Macro_Body);
+                                    Target.Store_Macro
+                                      (Params, Macro_Body, Home);
                   begin
                      --  The definition belongs to the region being
                      --  translated.  Only a form at top level, where
-                     --  there is no enclosing region, defines globally.
+                     --  there is no enclosing region, defines in the
+                     --  library.
+                     --
+                     --  Where the name goes and where the macro was
+                     --  written are two things.  define-syntax expands
+                     --  to a define-macro, so a macro written this way
+                     --  in one library is named in the library that
+                     --  used define-syntax, and written in the library
+                     --  define-syntax came from -- which is the only
+                     --  place the names in its body mean anything.
 
                      if Env.Is_Empty then
                         Undefine_Macro (Name_Sym);
-                        Target.Define_Global_Macro (Name, Id);
+                        Target.Define_Macro (Library, Name, Id);
                      else
                         Bind_Macro (Name, Id);
                      end if;
@@ -811,10 +854,19 @@ package body Raven.Engine.SECD.Translator is
                      declare
                         Params_Obj      : Object;
                         Body_Obj        : Object;
+                        Macro_Home      : Raven.Target.Real_Library_Id;
+                        Old_Home        : constant
+                          Raven.Target.Real_Library_Id := Home;
                         Old_Current     : constant Positive := This.Current;
                         Expansion_Level : Positive;
                      begin
-                        Target.Get_Macro (Macro, Params_Obj, Body_Obj);
+                        Target.Get_Macro
+                          (Macro, Params_Obj, Body_Obj, Macro_Home);
+
+                        --  The body and what it expands to were both
+                        --  written where the macro was.
+
+                        Home := Macro_Home;
 
                         declare
                            Params     : constant Root :=
@@ -838,6 +890,7 @@ package body Raven.Engine.SECD.Translator is
                         end;
 
                         Go (Target.Pop);
+                        Home := Old_Home;
                      end;
                   else
                      declare
@@ -898,7 +951,21 @@ package body Raven.Engine.SECD.Translator is
             --  same name bound further out.
 
             if not Found then
-               return Target.Global_Macro (Name);
+               declare
+                  Id : constant Raven.Target.Macro_Id :=
+                         Target.Macro (Library, Name);
+               begin
+                  --  A template that names a macro of the library it
+                  --  was written in means that one, wherever it is
+                  --  used.
+
+                  if Id = Raven.Target.No_Macro
+                    and then Home /= Library
+                  then
+                     return Target.Macro (Home, Name);
+                  end if;
+                  return Id;
+               end;
             elsif Ent.Kind = Macro_Binding then
                return Ent.Macro;
             else
@@ -1027,6 +1094,12 @@ package body Raven.Engine.SECD.Translator is
          --  which is the only way to undefine one.  The definition it
          --  displaces belongs to an earlier translation, and this one
          --  roots whatever it took from it, so it goes now.
+         --
+         --  Only what this library itself has: a macro it imported is
+         --  another library's, and giving that back would hand its id
+         --  to the next macro stored, leaving everyone who named it
+         --  naming something else.  A definition here shadows it
+         --  without taking it.
 
          if Env.Is_Empty
            and then Raven.Objects.Is_Symbol (Sym)
@@ -1035,10 +1108,10 @@ package body Raven.Engine.SECD.Translator is
                Name : constant String :=
                         Target.To_String (Raven.Objects.To_Symbol (Sym));
                Old  : constant Raven.Target.Macro_Id :=
-                        Target.Global_Macro (Name);
+                        Target.Own_Macro (Library, Name);
             begin
                if Old /= Raven.Target.No_Macro then
-                  Target.Undefine_Global_Macro (Name);
+                  Target.Undefine_Macro (Library, Name);
                   Target.Release_Macro (Old);
                end if;
             end;

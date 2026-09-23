@@ -1,6 +1,9 @@
+private with Ada.Containers.Indefinite_Hashed_Maps;
 private with Ada.Containers.Indefinite_Ordered_Sets;
 private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Vectors;
+private with Ada.Strings.Equal_Case_Insensitive;
+private with Ada.Strings.Hash_Case_Insensitive;
 private with Ada.Strings.Unbounded;
 
 with Raven.Environment;
@@ -71,6 +74,50 @@ private package Raven.Engine.Libraries is
       Name    : String)
       return Raven.Target.Real_Library_Id;
 
+   --  Whether anything here accounts for the name at all, which is
+   --  not the same question: Resolve gives back the library itself
+   --  for a name nothing accounts for, because that is where it would
+   --  be defined.
+
+   function Binds
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Boolean;
+
+   --  The names of the macros a library has.  The definitions are not
+   --  here: these are ids, and play no part in collection.
+
+   procedure Define_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String;
+      Id      : Raven.Target.Real_Macro_Id);
+
+   procedure Undefine_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
+   --  A macro name resolves as a variable name does: the library's
+   --  own first, then what it imported, most recent first.  A library
+   --  that has defined the name as a variable has taken it from any
+   --  macro it imported under it.
+
+   function Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id;
+
+   --  What the library itself has, which is all it may give back.
+
+   function Own_Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id;
+
    --  Where a library name is looked for, in the order they were
    --  added.  Path gives back nothing past the last.
 
@@ -101,12 +148,21 @@ private
      new Ada.Containers.Vectors
        (Positive, Raven.Target.Real_Library_Id, Raven.Target."=");
 
+   package Macro_Maps is
+     new Ada.Containers.Indefinite_Hashed_Maps
+       (Key_Type        => String,
+        Element_Type    => Raven.Target.Real_Macro_Id,
+        Hash            => Ada.Strings.Hash_Case_Insensitive,
+        Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive,
+        "="             => Raven.Target."=");
+
    type Library_Record is
       record
          Name        : Unbounded_String;
          Environment : Raven.Environment.Reference;
          Defined     : Name_Sets.Set;
          Imports     : Import_Vectors.Vector;
+         Macros      : Macro_Maps.Map;
       end record;
 
    package Library_Vectors is
