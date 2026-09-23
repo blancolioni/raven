@@ -1,13 +1,16 @@
+private with Ada.Containers.Indefinite_Ordered_Sets;
+private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Vectors;
 private with Ada.Strings.Unbounded;
 
 with Raven.Environment;
 with Raven.Target;
 
---  What a library is here: an identity, and an environment of its own.
---  The table holds them all, and hands the running machine the
---  environment for the id the code carries, so that a name written in
---  one library and a name written in another are two names.
+--  What a library is here: an identity, an environment of its own, and
+--  a record of where the names written in it come from.  The table
+--  holds them all, and hands the running machine the environment for
+--  the id the code carries, so that a name written in one library and
+--  the same name written in another are two names.
 --
 --  Every library environment is made with a parent, which holds what
 --  the engine binds and what the host binds through
@@ -40,6 +43,46 @@ private package Raven.Engine.Libraries is
       Id   : Raven.Target.Real_Library_Id)
       return Raven.Environment.Reference;
 
+   --  A library defines a name at the moment the form that defines it
+   --  is translated, which is what takes the name back from anything
+   --  the library imported under it.  What is written after that
+   --  means what is written here; what was written before it does not
+   --  change, which is the price of deciding this while reading.
+
+   procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
+   procedure Add_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id);
+
+   --  Which library holds what a name written in Library means: the
+   --  one that wrote it, or the last one it was imported from, or
+   --  Library itself, whether or not it has the name yet.  A name
+   --  nothing here accounts for is one the engine or the host bound,
+   --  and the environment chain finds it.
+
+   function Resolve
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Real_Library_Id;
+
+   --  Where a library name is looked for, in the order they were
+   --  added.  Path gives back nothing past the last.
+
+   procedure Add_Path
+     (This : in out Instance;
+      Path : String);
+
+   function Path
+     (This  : Instance;
+      Index : Positive)
+      return String;
+
    --  A library environment is reachable only from here, so what a
    --  library holds is kept only by this.
 
@@ -51,19 +94,32 @@ private
 
    use Ada.Strings.Unbounded;
 
+   package Name_Sets is
+     new Ada.Containers.Indefinite_Ordered_Sets (String);
+
+   package Import_Vectors is
+     new Ada.Containers.Vectors
+       (Positive, Raven.Target.Real_Library_Id, Raven.Target."=");
+
    type Library_Record is
       record
          Name        : Unbounded_String;
          Environment : Raven.Environment.Reference;
+         Defined     : Name_Sets.Set;
+         Imports     : Import_Vectors.Vector;
       end record;
 
    package Library_Vectors is
      new Ada.Containers.Vectors
        (Raven.Target.Real_Library_Id, Library_Record);
 
+   package Path_Vectors is
+     new Ada.Containers.Indefinite_Vectors (Positive, String);
+
    type Instance is tagged
       record
          Table : Library_Vectors.Vector;
+         Paths : Path_Vectors.Vector;
       end record;
 
    function Name
@@ -77,5 +133,13 @@ private
       Id   : Raven.Target.Real_Library_Id)
       return Raven.Environment.Reference
    is (This.Table (Id).Environment);
+
+   function Path
+     (This  : Instance;
+      Index : Positive)
+      return String
+   is (if Index <= This.Paths.Last_Index
+       then This.Paths (Index)
+       else "");
 
 end Raven.Engine.Libraries;

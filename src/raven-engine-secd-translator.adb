@@ -289,7 +289,10 @@ package body Raven.Engine.SECD.Translator is
 
       Table : constant Root_Table := This.Roots'Unchecked_Access;
 
-      procedure Append_Binding
+      procedure Append_Definition
+        (Sym : Object);
+
+      procedure Append_Reference
         (Sym : Object);
 
       procedure Bind_Macro
@@ -349,22 +352,43 @@ package body Raven.Engine.SECD.Translator is
       S_Unquote_Splicing  : constant Object := Target.To_Symbol ("unquote-splicing");
       Indent   : Natural := 0;
 
-      --------------------
-      -- Append_Binding --
-      --------------------
+      -----------------------
+      -- Append_Definition --
+      -----------------------
 
-      procedure Append_Binding
+      procedure Append_Definition
         (Sym : Object)
       is
+         Name : constant String :=
+                  Target.To_String (Objects.To_Symbol (Sym));
       begin
-         --  A name the library holds, as the operand of LD, ST or
-         --  DFN.  Nothing is left for the machine to decide: the
-         --  library this form is being translated in is the library
-         --  the name is looked up in.
+         --  A definition binds here, whatever the name meant before:
+         --  a library defines its own names and no one else's.
 
+         Target.Define_Name (Library, Name);
          This.Append (Objects.To_Object (Integer (Library)));
          This.Append (Sym);
-      end Append_Binding;
+      end Append_Definition;
+
+      ----------------------
+      -- Append_Reference --
+      ----------------------
+
+      procedure Append_Reference
+        (Sym : Object)
+      is
+         Name : constant String :=
+                  Target.To_String (Objects.To_Symbol (Sym));
+      begin
+         --  Which library holds the name is settled here, so that the
+         --  machine has nothing left to decide and a closure has
+         --  nothing to carry.
+
+         This.Append
+           (Objects.To_Object
+              (Integer (Target.Resolve (Library, Name))));
+         This.Append (Sym);
+      end Append_Reference;
 
       ----------------
       -- Bind_Macro --
@@ -739,7 +763,7 @@ package body Raven.Engine.SECD.Translator is
                      Undefine_Macro (Target.Car (Get (A)));
                      Go (Target.Cadr (Get (A)));
                      This.Append (DFN);
-                     Append_Binding (Target.Car (Get (A)));
+                     Append_Definition (Target.Car (Get (A)));
                   elsif Raven.Objects.Is_Pair (Target.Car (Get (A))) then
                      Undefine_Macro (Target.Caar (Get (A)));
                      Build_Env (Target.Cdar (Get (A)));
@@ -747,7 +771,7 @@ package body Raven.Engine.SECD.Translator is
                      Nested_Sequence (Target.Cdr (Get (A)), RTN);
                      Close_Scope;
                      This.Append (DFN);
-                     Append_Binding (Target.Caar (Get (A)));
+                     Append_Definition (Target.Caar (Get (A)));
                   else
                      raise Program_Error with "invalid define";
                   end if;
@@ -920,10 +944,9 @@ package body Raven.Engine.SECD.Translator is
             end if;
          end loop;
 
-         --  Nothing lexical holds the name, so the library being
-         --  translated does, whether or not it has defined it yet.
+         --  Nothing lexical holds the name, so a library does.
 
-         Append_Binding (Sym);
+         Append_Reference (Sym);
       end Locate;
 
       ------------

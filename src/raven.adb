@@ -36,6 +36,18 @@ package body Raven is
    procedure Write_Character
      (This : Raven_VM);
 
+   ----------------------
+   -- Add_Library_Path --
+   ----------------------
+
+   procedure Add_Library_Path
+     (This : Raven_VM;
+      Path : String)
+   is
+   begin
+      This.Data.Target.Add_Library_Path (Path);
+   end Add_Library_Path;
+
    ---------------
    -- Bind_Name --
    ---------------
@@ -316,6 +328,8 @@ package body Raven is
       This.Bind_Foreign_Function
         ("raven-write-char", Write_Character'Access, 1);
       This.Data.Target    := This.Data.Evaluator.Target;
+
+      This.Add_Library_Path (Standard_Library_Path);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",

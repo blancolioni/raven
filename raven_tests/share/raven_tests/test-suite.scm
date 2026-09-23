@@ -1,3 +1,5 @@
+(import (scheme base))
+
 (define num-tests 0)
 (define passed-tests 0)
 (define failed-tests 0)

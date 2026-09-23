@@ -102,6 +102,45 @@ package body Raven.Engine.SECD is
       return Raven.Target.Real_Library_Id
    is (This.Interaction);
 
+   overriding function Library
+     (This : Instance;
+      Name : String)
+      return Raven.Target.Library_Id
+   is (This.Libraries.Find (Name));
+
+   overriding function Create_Library
+     (This : in out Instance;
+      Name : String)
+      return Raven.Target.Real_Library_Id
+   is (This.Libraries.Create (Name, This.Env));
+
+   overriding procedure Add_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id);
+
+   overriding procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
+   overriding function Resolve
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Real_Library_Id
+   is (This.Libraries.Resolve (Library, Name));
+
+   overriding procedure Add_Library_Path
+     (This : in out Instance;
+      Path : String);
+
+   overriding function Library_Path
+     (This  : Instance;
+      Index : Positive)
+      return String
+   is (This.Libraries.Path (Index));
+
    overriding procedure Execute
      (This   : in out Instance);
 
@@ -262,6 +301,31 @@ package body Raven.Engine.SECD is
       return String
    is (This.To_String (Raven.Objects.To_Symbol (This.Cdr (Ref))));
 
+   ----------------
+   -- Add_Import --
+   ----------------
+
+   overriding procedure Add_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Libraries.Add_Import (Library, Imported);
+   end Add_Import;
+
+   ----------------------
+   -- Add_Library_Path --
+   ----------------------
+
+   overriding procedure Add_Library_Path
+     (This : in out Instance;
+      Path : String)
+   is
+   begin
+      This.Libraries.Add_Path (Path);
+   end Add_Library_Path;
+
    ------------------
    -- Append_Lists --
    ------------------
@@ -333,6 +397,19 @@ package body Raven.Engine.SECD is
         ("foreign function '" & Name & "' bound to"
          & Id'Image);
    end Bind_Foreign_Function;
+
+   -----------------
+   -- Define_Name --
+   -----------------
+
+   overriding procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Define_Name (Library, Name);
+   end Define_Name;
 
    ----------
    -- Cons --

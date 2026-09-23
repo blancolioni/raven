@@ -39,6 +39,60 @@ private package Raven.Target is
       return Real_Library_Id
    is abstract;
 
+   function Library
+     (This : Abstraction;
+      Name : String)
+      return Library_Id
+   is abstract;
+
+   function Create_Library
+     (This : in out Abstraction;
+      Name : String)
+      return Real_Library_Id
+   is abstract;
+
+   --  What Library imports from Imported: everything Imported has
+   --  defined, and nothing it has not.  An import is looked at only
+   --  when the library itself has nothing of the name, and the most
+   --  recent one is looked at first.
+
+   procedure Add_Import
+     (This     : in out Abstraction;
+      Library  : Real_Library_Id;
+      Imported : Real_Library_Id)
+   is abstract;
+
+   --  A library has defined this name.  Said while the form that
+   --  defines it is translated, because that is when what comes after
+   --  it starts meaning it.
+
+   procedure Define_Name
+     (This    : in out Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+   is abstract;
+
+   function Resolve
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+      return Real_Library_Id
+   is abstract;
+
+   --  Where a library name is looked for, in the order they were
+   --  added.  Library_Path gives back nothing past the last.
+
+   procedure Add_Library_Path
+     (This : in out Abstraction;
+      Path : String)
+   is abstract;
+
+   function Library_Path
+     (This  : Abstraction;
+      Index : Positive)
+      return String
+   is abstract;
+
    procedure Translate
      (This    : in out Abstraction;
       Library : Real_Library_Id)

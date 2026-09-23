@@ -128,16 +128,23 @@ package body Raven.Tests.Define is
                 & " ((lambda (z) (set! z (+ z y)) z) 10))");
       Test_Define (VM, "(probe-set-inner 5)", 15);
 
-      --  A definition can take a name the base library defined, and
-      --  the library can be loaded again over it: xcons is left as the
-      --  library has it, which is how the second load shows.
+      --  A definition takes the name here and leaves the library it
+      --  came from alone, so loading that library again does not put
+      --  its own back: what the host defines, the host keeps.  Before
+      --  libraries there was one name to take, and the second load was
+      --  what took it back.
 
       Evaluate (VM, "(define (xcons xs x) 99)");
       Test_Define (VM, "(xcons '(2 3) 1)", 99);
       VM.Import_Library
         ("(scheme base)",
          Standard_Library_Path & "/scheme/base.scm");
-      Test_Define (VM, "(car (xcons '(2 3) 1))", 1);
+      Test_Define (VM, "(xcons '(2 3) 1)", 99);
+
+      --  The library itself still has its own, and loading it a second
+      --  time did not fall over its own definitions.
+
+      Test_Define (VM, "(length '(1 2 3))", 3);
    end Run_Tests;
 
    -----------------
