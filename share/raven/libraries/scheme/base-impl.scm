@@ -74,6 +74,104 @@
 			      (if (null? (cdr xs)) (raven-div 1 (car xs))
 				  (raven-div (car xs) (fold raven-mul 1 (cdr xs))))))
 
+;;  Comparison.  raven-leq is the only one the machine has and the
+;;  other three are it with the arguments turned around, negated, or
+;;  both.  Each is a chain, the way = is: (< 1 2 3) asks whether the
+;;  whole row rises, and asks it of each neighbouring pair.
+
+(define (< . xs) (all-left-assoc (lambda (x y) (not (raven-leq y x))) #t xs))
+(define (> . xs) (all-left-assoc (lambda (x y) (not (raven-leq x y))) #t xs))
+(define (<= . xs) (all-left-assoc raven-leq #t xs))
+(define (>= . xs) (all-left-assoc (lambda (x y) (raven-leq y x)) #t xs))
+
+(define (zero? x) (= x 0))
+(define (positive? x) (< 0 x))
+(define (negative? x) (< x 0))
+(define (even? x) (zero? (remainder x 2)))
+(define (odd? x) (not (even? x)))
+
+(define (abs x) (if (negative? x) (- x) x))
+(define (square x) (* x x))
+
+;;  min and max are one walk given which of two to keep.  Each holds
+;;  the answer for the rest of the list in a name rather than asking
+;;  for it twice, which would be a walk of the list for every element
+;;  of it.
+
+(define (min . xs) (extreme < xs))
+(define (max . xs) (extreme > xs))
+
+(define (extreme better? xs)
+  (if (null? (cdr xs))
+      (car xs)
+      ((lambda (rest) (if (better? (car xs) rest) (car xs) rest))
+       (extreme better? (cdr xs)))))
+
+;;  Division.  The machine divides towards zero, so what raven-div
+;;  does is the truncating quotient, and the remainder follows from it
+;;  without dividing again.
+
+(define (truncate-quotient x y) (raven-div x y))
+(define (truncate-remainder x y) (- x (* y (truncate-quotient x y))))
+
+(define (quotient x y) (truncate-quotient x y))
+(define (remainder x y) (truncate-remainder x y))
+
+;;  Flooring division differs from truncating division in exactly one
+;;  case: the division did not come out even and the answer is
+;;  negative, where truncating rounds up towards zero and flooring
+;;  rounds down away from it.  So it is the truncating quotient, one
+;;  less when that case holds, and the remainder is what is left over
+;;  from the quotient that was actually taken.
+
+(define (floor-quotient x y)
+  (floor-adjust y (truncate-quotient x y) (truncate-remainder x y)))
+
+(define (floor-adjust y q r)
+  (if (if (zero? r) #f (xor (negative? r) (negative? y))) (- q 1) q))
+
+(define (floor-remainder x y) (- x (* y (floor-quotient x y))))
+
+(define (modulo x y) (floor-remainder x y))
+
+;;  truncate/ and floor/ are the other half of each of these: one call
+;;  answering both the quotient and the remainder, so that the
+;;  division is done once.  Each answers two values, and there are no
+;;  multiple values here to answer with, so neither is written.  A
+;;  caller that wants both asks for both, and pays for two divisions.
+
+;;  gcd and lcm are chains over any number of arguments, and the
+;;  answer of each is never negative.  gcd of nothing is 0 and lcm of
+;;  nothing is 1, which are the values that leave a chain of one
+;;  argument alone.
+
+(define (gcd . xs) (fold gcd2 0 xs))
+(define (gcd2 a b) (if (zero? b) (abs a) (gcd2 b (remainder a b))))
+
+(define (lcm . xs) (fold lcm2 1 xs))
+(define (lcm2 a b)
+  (if (if (zero? a) #t (zero? b))
+      0
+      (abs (quotient (* a b) (gcd2 a b)))))
+
+;;  expt raises to a whole power by multiplying.  A negative power is
+;;  a rational, and rationals are the numeric tower rather than this.
+
+(define (expt base power)
+  (if (negative? power)
+      (error "expt: a negative power is a rational, which raven has no numbers for")
+      (if (zero? power) 1 (* base (expt base (- power 1))))))
+
+;;  Every number here is an integer, so rounding one is giving it
+;;  back.  They are written out rather than left out because a program
+;;  that rounds is a program that works, and what it says about where
+;;  it expects a fraction is worth keeping in it.
+
+(define (floor x) x)
+(define (ceiling x) x)
+(define (truncate x) x)
+(define (round x) x)
+
 (define (optional value default) (if (eq? value '()) default value))
 
 (define string-length raven-string-length)

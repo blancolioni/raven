@@ -24,7 +24,7 @@ private package Raven.Parser.Lexical is
      (This : in out Instance'Class)
       return Wide_Wide_Character;
    function Tok_Integer_Value (This : in out Instance'Class)
-                               return Natural;
+                               return Integer;
 
    procedure Error
      (This    : in out Instance;

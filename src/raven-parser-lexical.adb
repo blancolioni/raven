@@ -577,10 +577,16 @@ package body Raven.Parser.Lexical is
 
    function Tok_Integer_Value
      (This : in out Instance'Class)
-      return Natural
+      return Integer
    is
    begin
-      return Natural'Value
+      --  The token is whatever the identifier scanner classified as an
+      --  integer, and a leading sign is part of that: -13 is one token
+      --  and not a name.  Reading it back as a Natural raised a range
+      --  check out of the reader, so a negative number could not be
+      --  written in raven at all and had to be said as (- 13).
+
+      return Integer'Value
         (Encode
            (To_Wide_Wide_String
                 (This.Current_Stream.Tok_Text)));
