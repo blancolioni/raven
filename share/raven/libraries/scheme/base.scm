@@ -7,8 +7,9 @@
 ;;  library's macros are written, not something a program may call or
 ;;  take the name of.  Nor are the helpers the exported procedures are
 ;;  built from: append2, concatenate, all-left-assoc, apply-subtract,
-;;  apply-divide, write-char-list, sum-list, optional and caddr, which
-;;  the expander uses and which a program asks (scheme cxr) for.
+;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
+;;  assoc-by, optional and caddr, which the expander uses and which a
+;;  program asks (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a
@@ -19,12 +20,17 @@
   (export
 
    ;;  equivalence and booleans
-   eq? equal? boolean? not xor null?
+   eq? eqv? equal? boolean? not xor null?
 
    ;;  pairs and lists.  Two deep is as far as R7RS takes the base
    ;;  library; caddr and everything deeper is (scheme cxr).
+   ;;
+   ;;  list-set! belongs with list-ref and is not here: it wants
+   ;;  set-car!, which the machine can do and does not offer.
    cons car cdr caar cadr cdar cddr
-   list length append make-list map fold assq memq xcons
+   list list? length append reverse make-list list-copy
+   list-tail list-ref map for-each fold xcons
+   assq assv assoc memq memv member
 
    ;;  numbers
    = + - * / sum

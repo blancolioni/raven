@@ -112,6 +112,21 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(import (probe ring-b))");
       Test_Name (VM, "ring-b-name", "ring-b");
 
+      --  The base library's list procedures are written on walks it
+      --  keeps to itself: one for the member family and one for the
+      --  assoc family, each taking the question to ask.  Those are how
+      --  the exported names are written, not names a program may take.
+
+      Test_Undefined (VM, "(member-by eq? 1 '(1))");
+      Test_Undefined (VM, "(assoc-by eq? 1 '((1 . 2)))");
+      Test_Undefined (VM, "(reverse-onto '(1) '())");
+
+      --  What they are written for is exported, and answers here.
+
+      Test_Number (VM, "(car (reverse '(1 2 3)))", 3);
+      Test_Number (VM, "(cdr (assv 2 '((1 . 10) (2 . 20))))", 20);
+      Test_Number (VM, "(car (memv 2 '(1 2 3)))", 2);
+
       --  A standard library asked for by name, off the same path the
       --  base library came from.  caddr is (scheme cxr)'s: R7RS takes
       --  the base library two deep and no further, so this is what a
