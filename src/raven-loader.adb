@@ -84,6 +84,30 @@ package body Raven.Loader is
 
    procedure Report (Message : String);
 
+   ----------------------
+   -- Take_Declaration --
+   ----------------------
+
+   function Take_Declaration
+     (Target : Raven.Target.Reference)
+      return Boolean
+   is
+   begin
+      if Is_Head (Target, "import") then
+         Read_Import (Target, Target.Interaction_Library);
+         return True;
+      elsif Is_Head (Target, "define-library") then
+
+         --  A library typed at the host has no file, so an include in
+         --  it is looked for beside where the host is running.
+
+         Read_Library (Target, ".");
+         return True;
+      else
+         return False;
+      end if;
+   end Take_Declaration;
+
    ---------------
    -- File_Name --
    ---------------

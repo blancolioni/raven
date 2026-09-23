@@ -172,17 +172,28 @@ private package Raven.Target is
    subtype Real_Macro_Id is Macro_Id range 1 .. Macro_Id'Last;
 
    --  A macro is expanded where it is used and read where it was
-   --  written, so it carries the library it was written in.  A name
-   --  free in what it expands to means what it means there, which is
-   --  how a library's macro can reach what the library keeps to
-   --  itself.  Home is an id and not an object, so it costs the
-   --  collector nothing.
+   --  written, so it carries the library it was written in.  It
+   --  carries two, because a macro written by a macro has two: the
+   --  body is the text the outer macro wrote, and Home is that outer
+   --  macro's library; what the body produces is the inner macro's
+   --  own, and Expansion is the library the form that defined it was
+   --  written in.
+   --
+   --  define-syntax is the whole of why.  A syntax-rules macro's body
+   --  is always the same call of the expander, written in the library
+   --  define-syntax came from; what that call produces is the rules,
+   --  written where the macro was.  A macro written by hand has one
+   --  library and both are it.
+   --
+   --  Both are ids and not objects, so they cost the collector
+   --  nothing.
 
    function Store_Macro
      (This        : in out Abstraction;
       Params      : Object;
       Macro_Body  : Object;
-      Home        : Real_Library_Id)
+      Home        : Real_Library_Id;
+      Expansion   : Real_Library_Id)
       return Real_Macro_Id
    is abstract;
 
@@ -191,7 +202,8 @@ private package Raven.Target is
       Id          : Real_Macro_Id;
       Params      : out Object;
       Macro_Body  : out Object;
-      Home        : out Real_Library_Id)
+      Home        : out Real_Library_Id;
+      Expansion   : out Real_Library_Id)
    is abstract;
 
    --  Gives a definition back: it becomes collectable and its id may be

@@ -34,4 +34,13 @@ private package Raven.Loader is
       Name   : String;
       Path   : String);
 
+   --  A form the host has just handed the machine may be a
+   --  declaration rather than an expression.  Takes it if it is, and
+   --  says whether it was: what a program opens with, a REPL has to be
+   --  able to type.
+
+   function Take_Declaration
+     (Target : Raven.Target.Reference)
+      return Boolean;
+
 end Raven.Loader;

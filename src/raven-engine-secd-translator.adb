@@ -842,7 +842,8 @@ package body Raven.Engine.SECD.Translator is
                      Macro_Body : constant Object := Target.Cdr (Get (A));
                      Id         : constant Raven.Target.Real_Macro_Id :=
                                     Target.Store_Macro
-                                      (Params, Macro_Body, Home);
+                                      (Params, Macro_Body,
+                                       Home, Written_In);
                   begin
                      --  The definition belongs to the region being
                      --  translated.  Only a form at top level, where
@@ -872,6 +873,7 @@ package body Raven.Engine.SECD.Translator is
                         Params_Obj      : Object;
                         Body_Obj        : Object;
                         Macro_Home      : Raven.Target.Real_Library_Id;
+                        Macro_Expansion : Raven.Target.Real_Library_Id;
                         Old_Home        : constant
                           Raven.Target.Real_Library_Id := Home;
                         Old_Expanding   : constant Boolean := Expanding;
@@ -879,10 +881,11 @@ package body Raven.Engine.SECD.Translator is
                         Expansion_Level : Positive;
                      begin
                         Target.Get_Macro
-                          (Macro, Params_Obj, Body_Obj, Macro_Home);
+                          (Macro, Params_Obj, Body_Obj,
+                           Macro_Home, Macro_Expansion);
 
-                        --  The body is the macro's own code, read
-                        --  where the macro was written.
+                        --  The body is the text whoever wrote the
+                        --  macro wrote, read in their library.
 
                         Home      := Macro_Home;
                         Expanding := False;
@@ -909,8 +912,11 @@ package body Raven.Engine.SECD.Translator is
                         end;
 
                         --  What the body produced has the caller's
-                        --  forms in it, and is read here.
+                        --  forms in it, so it is read here first, and
+                        --  in the library the macro was defined in for
+                        --  a name here cannot account for.
 
+                        Home      := Macro_Expansion;
                         Expanding := True;
                         Go (Target.Pop);
 

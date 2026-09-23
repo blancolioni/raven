@@ -180,6 +180,16 @@ package body Raven is
       Raven.Parser.Parse_Expression
         (Expression, This.Data.Target);
 
+      --  What a program opens with is not an expression and has no
+      --  value.  It has to be acted on before whatever is typed next
+      --  is translated, which is the same reason the loader looks at a
+      --  form before translating it.
+
+      if Raven.Loader.Take_Declaration (This.Data.Target) then
+         This.Set_Slot_Nil (1);
+         return;
+      end if;
+
       This.Data.Target.Translate
         (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;

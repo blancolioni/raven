@@ -42,6 +42,7 @@ package body Raven.Engine.SECD is
       Params     : Object  := Raven.Objects.Nil;
       Macro_Body : Object  := Raven.Objects.Nil;
       Home       : Raven.Target.Library_Id := Raven.Target.No_Library;
+      Expansion  : Raven.Target.Library_Id := Raven.Target.No_Library;
    end record;
 
    package Macro_Vectors is
@@ -227,7 +228,8 @@ package body Raven.Engine.SECD is
      (This        : in out Instance;
       Params      : Object;
       Macro_Body  : Object;
-      Home        : Raven.Target.Real_Library_Id)
+      Home        : Raven.Target.Real_Library_Id;
+      Expansion   : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id;
 
    overriding procedure Get_Macro
@@ -235,7 +237,8 @@ package body Raven.Engine.SECD is
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
       Macro_Body  : out Object;
-      Home        : out Raven.Target.Real_Library_Id);
+      Home        : out Raven.Target.Real_Library_Id;
+      Expansion   : out Raven.Target.Real_Library_Id);
 
    overriding procedure Release_Macro
      (This : in out Instance;
@@ -953,11 +956,12 @@ package body Raven.Engine.SECD is
      (This        : in out Instance;
       Params      : Object;
       Macro_Body  : Object;
-      Home        : Raven.Target.Real_Library_Id)
+      Home        : Raven.Target.Real_Library_Id;
+      Expansion   : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id
    is
       New_Entry : constant Macro_Entry :=
-                    (True, Params, Macro_Body, Home);
+                    (True, Params, Macro_Body, Home, Expansion);
    begin
       for Id in 1 .. This.Macros.Last_Index loop
          if not This.Macros (Id).In_Use then
@@ -979,13 +983,15 @@ package body Raven.Engine.SECD is
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
       Macro_Body  : out Object;
-      Home        : out Raven.Target.Real_Library_Id)
+      Home        : out Raven.Target.Real_Library_Id;
+      Expansion   : out Raven.Target.Real_Library_Id)
    is
       E : constant Macro_Entry := This.Macros (Id);
    begin
       Params     := E.Params;
       Macro_Body := E.Macro_Body;
       Home       := E.Home;
+      Expansion  := E.Expansion;
    end Get_Macro;
 
    -------------------
