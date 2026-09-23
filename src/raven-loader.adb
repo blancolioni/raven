@@ -6,6 +6,7 @@ with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 
 with Raven.Objects;
+with Raven.Strings;
 with Raven.Parser;
 
 package body Raven.Loader is
@@ -587,37 +588,15 @@ package body Raven.Loader is
       Form   : Object)
       return String
    is
-      use Ada.Strings.Unbounded;
-      Result : Unbounded_String := Null_Unbounded_String;
-      It     : Object;
    begin
-      --  The reader gives a written string as the form that builds
-      --  it, so a string in a declaration has to be read back out of
-      --  one: (list->string (quote (#\a ...))).
-
-      if not Raven.Objects.Is_Pair (Form)
-        or else Target.Car (Form) /= Target.To_Symbol ("list->string")
+      if not Raven.Objects.Is_Foreign_Value (Form)
+        or else not Raven.Strings.Is_String (Target.To_Foreign_Value (Form))
       then
          Report ("expected a string, not " & Target.Show (Form));
          return "";
       end if;
 
-      It := Target.Cadr (Target.Cadr (Form));
-
-      while Raven.Objects.Is_Pair (It) loop
-         declare
-            Ch : constant Object := Target.Car (It);
-         begin
-            if Raven.Objects.Is_Character (Ch) then
-               Append
-                 (Result,
-                  Encode ([1 => Raven.Objects.To_Character (Ch)]));
-            end if;
-         end;
-         It := Target.Cdr (It);
-      end loop;
-
-      return To_String (Result);
+      return Raven.Strings.Text (Target.To_Foreign_Value (Form));
    end Read_Text;
 
    ------------

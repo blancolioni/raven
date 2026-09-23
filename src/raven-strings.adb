@@ -9,6 +9,28 @@ package body Raven.Strings is
    procedure String_To_List (VM : Raven_VM);
    procedure Enable_Trace (VM : Raven_VM);
 
+   ---------------
+   -- Is_String --
+   ---------------
+
+   function Is_String (From : Foreign_Value_Instance'Class) return Boolean
+   is (From in Instance'Class);
+
+   ----------
+   -- Text --
+   ----------
+
+   function Text (From : Foreign_Value_Instance'Class) return String
+   is (Encode (Instance'Class (From).Value));
+
+   --------------
+   -- To_Value --
+   --------------
+
+   function To_Value (Text : Wide_Wide_String) return Instance
+   is (Foreign_Value_Instance with
+       Length => Text'Length, Value => Text);
+
    -------------
    -- Display --
    -------------
