@@ -1,14 +1,56 @@
-with Ada.Exceptions;
-with Ada.Text_IO;
+with Ada.Unchecked_Deallocation;
 with Raven.Objects;
 with Raven.Parser.Tokens;             use Raven.Parser.Tokens;
-with Raven.Parser.Lexical;            use Raven.Parser.Lexical;
+with Raven.Parser.Lexical;
 
 package body Raven.Parser is
+
+   type Source_Record is
+      record
+         Lex : Raven.Parser.Lexical.Instance;
+      end record;
 
    procedure Parse_S_Expression
      (Lex    : in out Raven.Parser.Lexical.Instance'Class;
       Target : Raven.Target.Reference);
+
+   ------------
+   -- At_End --
+   ------------
+
+   function At_End (This : Instance) return Boolean is
+   begin
+      return This.Data = null
+        or else This.Data.Lex.Tok = Tok_End_Of_File;
+   end At_End;
+
+   -----------
+   -- Close --
+   -----------
+
+   procedure Close (This : in out Instance) is
+      procedure Free is
+        new Ada.Unchecked_Deallocation (Source_Record, Source_Access);
+   begin
+      if This.Data /= null then
+         This.Data.Lex.Close;
+         Free (This.Data);
+      end if;
+   end Close;
+
+   ----------
+   -- Open --
+   ----------
+
+   procedure Open
+     (This   : in out Instance;
+      Name   : String;
+      Source : String)
+   is
+   begin
+      This.Data := new Source_Record;
+      This.Data.Lex.Open (Name, Decode (Source));
+   end Open;
 
    ----------------------
    -- Parse_Expression --
@@ -25,33 +67,17 @@ package body Raven.Parser is
       Lex.Close;
    end Parse_Expression;
 
-   -----------------
-   -- Load_Module --
-   -----------------
+   ----------------
+   -- Parse_Next --
+   ----------------
 
-   procedure Load_Module
-     (Name   : String;
-      Source : String;
+   procedure Parse_Next
+     (This   : in out Instance;
       Target : Raven.Target.Reference)
    is
-      Lex : Raven.Parser.Lexical.Instance;
    begin
-      Lex.Open (Name, Decode (Source));
-      while Lex.Tok /= Tok_End_Of_File loop
-         begin
-            Parse_S_Expression (Lex, Target);
-            Target.Translate;
-            Target.Execute;
-            Target.Drop;
-         exception
-            when E : Raven.Target.Undefined_Symbol =>
-               Ada.Text_IO.Put_Line
-                 (Ada.Text_IO.Standard_Error,
-                  "undefined: " & Ada.Exceptions.Exception_Message (E));
-         end;
-      end loop;
-      Lex.Close;
-   end Load_Module;
+      Parse_S_Expression (This.Data.Lex, Target);
+   end Parse_Next;
 
    ------------------------
    -- Parse_S_Expression --

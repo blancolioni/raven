@@ -12,6 +12,7 @@ with Raven.Target;
 package body Raven.Engine.SECD.Translator is
 
    use Raven.Instructions;
+   use type Raven.Target.Library_Id;
    use type Raven.Target.Macro_Id;
 
    package Object_Lists is
@@ -123,8 +124,9 @@ package body Raven.Engine.SECD.Translator is
       end record;
 
    overriding procedure Translate
-     (This   : in out Instance;
-      Target : Raven.Target.Reference);
+     (This    : in out Instance;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
 
    overriding procedure Mark
      (This    : in out Instance;
@@ -275,10 +277,32 @@ package body Raven.Engine.SECD.Translator is
    ---------------
 
    overriding procedure Translate
-     (This   : in out Instance;
-      Target : Raven.Target.Reference)
+     (This    : in out Instance;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id)
    is
       Env : Env_Lists.List;
+
+      --  The library the code being read was written in.  It is
+      --  Library until a macro is expanded, and the macro's own while
+      --  its body is read, because that is where the body was
+      --  written.  A translation that a macro expansion starts gets a
+      --  Home of its own, so nesting looks after itself.
+      --
+      --  Expanding says which of the two is being read.  A macro's
+      --  body is the macro's own code and nothing in it came from the
+      --  caller, so it is read entirely in Home.  What the body
+      --  produced is not: the caller's own forms are in it, and only
+      --  a name the use site cannot account for is read in Home.
+
+      Home      : Raven.Target.Real_Library_Id := Library;
+      Expanding : Boolean := False;
+
+      --  Which library a definition here belongs to, and so which one
+      --  a macro defined here is named in.
+
+      function Written_In return Raven.Target.Real_Library_Id
+      is (if Expanding then Library else Home);
 
       --  Everything this translation is working with lives here, so
       --  that a collection provoked by a macro expansion neither takes
@@ -286,6 +310,12 @@ package body Raven.Engine.SECD.Translator is
       --  away from.
 
       Table : constant Root_Table := This.Roots'Unchecked_Access;
+
+      procedure Append_Definition
+        (Sym : Object);
+
+      procedure Append_Reference
+        (Sym : Object);
 
       procedure Bind_Macro
         (Name : String;
@@ -343,6 +373,72 @@ package body Raven.Engine.SECD.Translator is
       S_Unquote           : constant Object := Target.To_Symbol ("unquote");
       S_Unquote_Splicing  : constant Object := Target.To_Symbol ("unquote-splicing");
       Indent   : Natural := 0;
+
+      -----------------------
+      -- Append_Definition --
+      -----------------------
+
+      procedure Append_Definition
+        (Sym : Object)
+      is
+         Name : constant String :=
+                  Target.To_String (Objects.To_Symbol (Sym));
+      begin
+         --  A definition binds where it was written, whatever the name
+         --  meant before: a library defines its own names and no one
+         --  else's.
+
+         Target.Define_Name (Written_In, Name);
+         This.Append (Objects.To_Object (Integer (Written_In)));
+         This.Append (Sym);
+      end Append_Definition;
+
+      ----------------------
+      -- Append_Reference --
+      ----------------------
+
+      procedure Append_Reference
+        (Sym : Object)
+      is
+         Name  : constant String :=
+                   Target.To_String (Objects.To_Symbol (Sym));
+         Found : Raven.Target.Real_Library_Id;
+      begin
+         --  Which library holds the name is settled here, so that the
+         --  machine has nothing left to decide and a closure has
+         --  nothing to carry.
+         --
+         --  In a macro's body, where every name was written by the
+         --  macro, in the library the macro was written in.  That is
+         --  what lets a library's macros reach what the library keeps
+         --  to itself, and what stops a definition at the use site
+         --  taking a name the macro meant.
+         --
+         --  In what the body produced, at the use site first, because
+         --  the caller's own forms are in it and they mean what the
+         --  caller wrote; then in the macro's library, for a name the
+         --  use site cannot account for.
+         --
+         --  What that second rule cannot do is tell the two apart.
+         --  Once a template has been instantiated the expansion is one
+         --  form, and a name the caller passed in looks exactly like a
+         --  name the template wrote.  So a caller's reference to a
+         --  name it has not defined yet, which the macro's library
+         --  defines, goes to that library instead, silently.  An
+         --  identifier that carried where it was written would settle
+         --  it; that is #24.
+
+         if Home = Library then
+            Found := Target.Resolve (Library, Name);
+         elsif Expanding and then Target.Binds (Library, Name) then
+            Found := Target.Resolve (Library, Name);
+         else
+            Found := Target.Resolve (Home, Name);
+         end if;
+
+         This.Append (Objects.To_Object (Integer (Found)));
+         This.Append (Sym);
+      end Append_Reference;
 
       ----------------
       -- Bind_Macro --
@@ -517,25 +613,29 @@ package body Raven.Engine.SECD.Translator is
                if X = Raven.Objects.Pending then
                   Next (Position);
                   Emit (Raven.Objects.To_Integer (Element (Position)));
-               elsif X = Raven.Objects.To_Object (LD) then
+               elsif X = Raven.Objects.To_Object (LD)
+                 or else X = Raven.Objects.To_Object (ST)
+                 or else X = Raven.Objects.To_Object (DFN)
+               then
+                  --  Two cells here, one object in the code the
+                  --  machine runs: a frame and an offset for a name on
+                  --  the stack, a library and a symbol for one a
+                  --  library holds.
+
                   Target.Push (X);
                   Count := Count + 1;
                   Next (Position);
-                  if Objects.Is_Symbol (Element (Position)) then
-                     Target.Push (Element (Position));
-                  elsif Objects.Is_Integer (Element (Position))
-                    and then Has_Element (Next (Position))
-                    and then Objects.Is_Integer (Element (Next (Position)))
+                  if not Has_Element (Position)
+                    or else not Has_Element (Next (Position))
                   then
-                     Target.Push (Element (Position));
-                     Next (Position);
-                     Target.Push (Element (Position));
-                     Target.Cons;
-                  else
                      raise Constraint_Error with
-                     "emit: invalid argument to emit: "
+                     "emit: missing operand: "
                        & Show_Code (This.Code (Level), Target);
                   end if;
+                  Target.Push (Element (Position));
+                  Next (Position);
+                  Target.Push (Element (Position));
+                  Target.Cons;
                else
                   Target.Push (X);
                end if;
@@ -713,7 +813,7 @@ package body Raven.Engine.SECD.Translator is
                      Undefine_Macro (Target.Car (Get (A)));
                      Go (Target.Cadr (Get (A)));
                      This.Append (DFN);
-                     This.Append (Target.Car (Get (A)));
+                     Append_Definition (Target.Car (Get (A)));
                   elsif Raven.Objects.Is_Pair (Target.Car (Get (A))) then
                      Undefine_Macro (Target.Caar (Get (A)));
                      Build_Env (Target.Cdar (Get (A)));
@@ -721,7 +821,7 @@ package body Raven.Engine.SECD.Translator is
                      Nested_Sequence (Target.Cdr (Get (A)), RTN);
                      Close_Scope;
                      This.Append (DFN);
-                     This.Append (Target.Caar (Get (A)));
+                     Append_Definition (Target.Caar (Get (A)));
                   else
                      raise Program_Error with "invalid define";
                   end if;
@@ -741,15 +841,26 @@ package body Raven.Engine.SECD.Translator is
                      Params     : constant Object := Target.Cdar (Get (A));
                      Macro_Body : constant Object := Target.Cdr (Get (A));
                      Id         : constant Raven.Target.Real_Macro_Id :=
-                                    Target.Store_Macro (Params, Macro_Body);
+                                    Target.Store_Macro
+                                      (Params, Macro_Body,
+                                       Home, Written_In);
                   begin
                      --  The definition belongs to the region being
                      --  translated.  Only a form at top level, where
-                     --  there is no enclosing region, defines globally.
+                     --  there is no enclosing region, defines in the
+                     --  library.
+                     --
+                     --  Where the name goes and where the macro was
+                     --  written are two things.  define-syntax expands
+                     --  to a define-macro, so a macro written this way
+                     --  in one library is named in the library that
+                     --  used define-syntax, and written in the library
+                     --  define-syntax came from -- which is the only
+                     --  place the names in its body mean anything.
 
                      if Env.Is_Empty then
                         Undefine_Macro (Name_Sym);
-                        Target.Define_Global_Macro (Name, Id);
+                        Target.Define_Macro (Written_In, Name, Id);
                      else
                         Bind_Macro (Name, Id);
                      end if;
@@ -761,10 +872,23 @@ package body Raven.Engine.SECD.Translator is
                      declare
                         Params_Obj      : Object;
                         Body_Obj        : Object;
+                        Macro_Home      : Raven.Target.Real_Library_Id;
+                        Macro_Expansion : Raven.Target.Real_Library_Id;
+                        Old_Home        : constant
+                          Raven.Target.Real_Library_Id := Home;
+                        Old_Expanding   : constant Boolean := Expanding;
                         Old_Current     : constant Positive := This.Current;
                         Expansion_Level : Positive;
                      begin
-                        Target.Get_Macro (Macro, Params_Obj, Body_Obj);
+                        Target.Get_Macro
+                          (Macro, Params_Obj, Body_Obj,
+                           Macro_Home, Macro_Expansion);
+
+                        --  The body is the text whoever wrote the
+                        --  macro wrote, read in their library.
+
+                        Home      := Macro_Home;
+                        Expanding := False;
 
                         declare
                            Params     : constant Root :=
@@ -787,7 +911,17 @@ package body Raven.Engine.SECD.Translator is
                            Target.Execute;
                         end;
 
+                        --  What the body produced has the caller's
+                        --  forms in it, so it is read here first, and
+                        --  in the library the macro was defined in for
+                        --  a name here cannot account for.
+
+                        Home      := Macro_Expansion;
+                        Expanding := True;
                         Go (Target.Pop);
+
+                        Home      := Old_Home;
+                        Expanding := Old_Expanding;
                      end;
                   else
                      declare
@@ -848,7 +982,26 @@ package body Raven.Engine.SECD.Translator is
             --  same name bound further out.
 
             if not Found then
-               return Target.Global_Macro (Name);
+               --  As a name that is not a macro is resolved: a
+               --  macro's body means the macros of the library it was
+               --  written in, and what the body produced means the
+               --  use site's first.
+
+               if Home = Library then
+                  return Target.Macro (Library, Name);
+               elsif not Expanding then
+                  return Target.Macro (Home, Name);
+               else
+                  declare
+                     Id : constant Raven.Target.Macro_Id :=
+                            Target.Macro (Library, Name);
+                  begin
+                     if Id = Raven.Target.No_Macro then
+                        return Target.Macro (Home, Name);
+                     end if;
+                     return Id;
+                  end;
+               end if;
             elsif Ent.Kind = Macro_Binding then
                return Ent.Macro;
             else
@@ -893,7 +1046,10 @@ package body Raven.Engine.SECD.Translator is
                I := @ + 1;
             end if;
          end loop;
-         This.Append (Sym);
+
+         --  Nothing lexical holds the name, so a library does.
+
+         Append_Reference (Sym);
       end Locate;
 
       ------------
@@ -974,6 +1130,12 @@ package body Raven.Engine.SECD.Translator is
          --  which is the only way to undefine one.  The definition it
          --  displaces belongs to an earlier translation, and this one
          --  roots whatever it took from it, so it goes now.
+         --
+         --  Only what this library itself has: a macro it imported is
+         --  another library's, and giving that back would hand its id
+         --  to the next macro stored, leaving everyone who named it
+         --  naming something else.  A definition here shadows it
+         --  without taking it.
 
          if Env.Is_Empty
            and then Raven.Objects.Is_Symbol (Sym)
@@ -982,10 +1144,10 @@ package body Raven.Engine.SECD.Translator is
                Name : constant String :=
                         Target.To_String (Raven.Objects.To_Symbol (Sym));
                Old  : constant Raven.Target.Macro_Id :=
-                        Target.Global_Macro (Name);
+                        Target.Own_Macro (Written_In, Name);
             begin
                if Old /= Raven.Target.No_Macro then
-                  Target.Undefine_Global_Macro (Name);
+                  Target.Undefine_Macro (Written_In, Name);
                   Target.Release_Macro (Old);
                end if;
             end;

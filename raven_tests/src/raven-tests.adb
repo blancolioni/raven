@@ -3,6 +3,7 @@ with Ada.Text_IO;
 
 with Raven.Engine.Tests;
 with Raven.Tests.Define;
+with Raven.Tests.Imports;
 with Raven.Tests.Library;
 with Raven.Tests.Macros;
 with Raven.Tests.Memory;
@@ -37,6 +38,13 @@ package body Raven.Tests is
       declare
          VM : Raven_VM := New_VM;
       begin
+         --  The harness's own libraries, which a program asks for by
+         --  name.  The standard library's directory is on the path
+         --  already; this is where the suites below look.
+
+         VM.Add_Library_Path
+           (Raven_Tests_Resources.Resource_Path & "/libraries");
+
          --  Import the scheme suite before anything else touches the VM.
          --  Its first tests assert the values of the first foreign
          --  values of a session, and the suites below allocate strings
@@ -49,6 +57,7 @@ package body Raven.Tests is
          Raven.Engine.Tests.Run_Tests (VM);
          Raven.Tests.Parser.Run_Tests (VM);
          Raven.Tests.Library.Run_Tests (VM);
+         Raven.Tests.Imports.Run_Tests (VM);
          Raven.Tests.Define.Run_Tests (VM);
          Raven.Tests.Macros.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);

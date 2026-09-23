@@ -2,7 +2,7 @@ with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 with Raven.Engine;
 with Raven.Evaluator;
 with Raven.IO;
-with Raven.Libraries;
+with Raven.Loader;
 with Raven.Memory;
 with Raven.Objects;
 with Raven.Parser;
@@ -35,6 +35,18 @@ package body Raven is
 
    procedure Write_Character
      (This : Raven_VM);
+
+   ----------------------
+   -- Add_Library_Path --
+   ----------------------
+
+   procedure Add_Library_Path
+     (This : Raven_VM;
+      Path : String)
+   is
+   begin
+      This.Data.Target.Add_Library_Path (Path);
+   end Add_Library_Path;
 
    ---------------
    -- Bind_Name --
@@ -168,7 +180,18 @@ package body Raven is
       Raven.Parser.Parse_Expression
         (Expression, This.Data.Target);
 
-      This.Data.Target.Translate;
+      --  What a program opens with is not an expression and has no
+      --  value.  It has to be acted on before whatever is typed next
+      --  is translated, which is the same reason the loader looks at a
+      --  form before translating it.
+
+      if Raven.Loader.Take_Declaration (This.Data.Target) then
+         This.Set_Slot_Nil (1);
+         return;
+      end if;
+
+      This.Data.Target.Translate
+        (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;
 
       This.Set_Slot (1, This.Data.Target.Pop);
@@ -186,7 +209,8 @@ package body Raven is
       Fn : constant Object := Object_Lists.Element (Value.Position);
    begin
       This.Data.Target.Push (Fn);
-      This.Data.Target.Translate;
+      This.Data.Target.Translate
+        (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;
       This.Set_Slot (1, This.Data.Target.Pop);
    end Evaluate;
@@ -270,7 +294,7 @@ package body Raven is
       Path : String)
    is
    begin
-      Raven.Libraries.Import (This.Data.Target, Name, Path);
+      Raven.Loader.Import (This.Data.Target, Name, Path);
    end Import_Library;
 
    ----------------
@@ -315,7 +339,9 @@ package body Raven is
         ("raven-write-char", Write_Character'Access, 1);
       This.Data.Target    := This.Data.Evaluator.Target;
 
-      Raven.Libraries.Import
+      This.Add_Library_Path (Standard_Library_Path);
+
+      Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
          Standard_Library_Path & "/scheme/base.scm");
       return This;

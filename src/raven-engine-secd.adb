@@ -1,10 +1,9 @@
-with Ada.Containers.Indefinite_Hashed_Maps;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Vectors;
 with Ada.Strings.Equal_Case_Insensitive;
-with Ada.Strings.Hash_Case_Insensitive;
 with Ada.Text_IO;
 
+with Raven.Engine.Libraries;
 with Raven.Engine.SECD.Translator;
 with Raven.Instructions;
 with Raven.Objects;
@@ -42,22 +41,13 @@ package body Raven.Engine.SECD is
       In_Use     : Boolean := False;
       Params     : Object  := Raven.Objects.Nil;
       Macro_Body : Object  := Raven.Objects.Nil;
+      Home       : Raven.Target.Library_Id := Raven.Target.No_Library;
+      Expansion  : Raven.Target.Library_Id := Raven.Target.No_Library;
    end record;
 
    package Macro_Vectors is
      new Ada.Containers.Vectors
        (Raven.Target.Real_Macro_Id, Macro_Entry);
-
-   --  The names in the global macro scope.  Holds ids, not objects, so
-   --  it plays no part in collection.
-
-   package Macro_Maps is
-     new Ada.Containers.Indefinite_Hashed_Maps
-       (Key_Type        => String,
-        Element_Type    => Raven.Target.Real_Macro_Id,
-        Hash            => Ada.Strings.Hash_Case_Insensitive,
-        Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive,
-        "="             => Raven.Target."=");
 
    --  The translators running on this instance, innermost last: a
    --  macro expansion executes code, and that code can ask for another
@@ -82,13 +72,78 @@ package body Raven.Engine.SECD is
          Env         : Raven.Environment.Reference;
          Foreign     : Foreign_Vectors.Vector;
          Macros      : Macro_Vectors.Vector;
-         Global      : Macro_Maps.Map;
+         Libraries   : Raven.Engine.Libraries.Instance;
+         Interaction : Raven.Target.Library_Id :=
+                         Raven.Target.No_Library;
          Translators : Translator_Vectors.Vector;
          Trace       : Boolean := False;
       end record;
 
+   type Instance_Reference is access all Instance'Class;
+
    overriding procedure Translate
-     (This   : in out Instance);
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding function Interaction_Library
+     (This : Instance)
+      return Raven.Target.Real_Library_Id
+   is (This.Interaction);
+
+   overriding function Library
+     (This : Instance;
+      Name : String)
+      return Raven.Target.Library_Id
+   is (This.Libraries.Find (Name));
+
+   overriding function Create_Library
+     (This : in out Instance;
+      Name : String)
+      return Raven.Target.Real_Library_Id
+   is (This.Libraries.Create (Name, This.Env));
+
+   overriding procedure Add_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id);
+
+   overriding procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
+   overriding procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
+
+   overriding function Resolve
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Real_Library_Id
+   is (This.Libraries.Resolve (Library, Name));
+
+   overriding function Binds
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Boolean
+   is (This.Libraries.Binds (Library, Name));
+
+   overriding procedure Add_Library_Path
+     (This : in out Instance;
+      Path : String);
+
+   overriding function Library_Path
+     (This  : Instance;
+      Index : Positive)
+      return String
+   is (This.Libraries.Path (Index));
 
    overriding procedure Execute
      (This   : in out Instance);
@@ -172,32 +227,47 @@ package body Raven.Engine.SECD is
    overriding function Store_Macro
      (This        : in out Instance;
       Params      : Object;
-      Macro_Body  : Object)
+      Macro_Body  : Object;
+      Home        : Raven.Target.Real_Library_Id;
+      Expansion   : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id;
 
    overriding procedure Get_Macro
      (This        : Instance;
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
-      Macro_Body  : out Object);
+      Macro_Body  : out Object;
+      Home        : out Raven.Target.Real_Library_Id;
+      Expansion   : out Raven.Target.Real_Library_Id);
 
    overriding procedure Release_Macro
      (This : in out Instance;
       Id   : Raven.Target.Real_Macro_Id);
 
-   overriding procedure Define_Global_Macro
-     (This : in out Instance;
-      Name : String;
-      Id   : Raven.Target.Real_Macro_Id);
+   overriding procedure Define_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String;
+      Id      : Raven.Target.Real_Macro_Id);
 
-   overriding procedure Undefine_Global_Macro
-     (This : in out Instance;
-      Name : String);
+   overriding procedure Undefine_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String);
 
-   overriding function Global_Macro
-     (This : Instance;
-      Name : String)
-      return Raven.Target.Macro_Id;
+   overriding function Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id
+   is (This.Libraries.Macro (Library, Name));
+
+   overriding function Own_Macro
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Raven.Target.Macro_Id
+   is (This.Libraries.Own_Macro (Library, Name));
 
    overriding function To_Foreign_Value
      (This  : Instance;
@@ -224,6 +294,81 @@ package body Raven.Engine.SECD is
       X       : Object;
       New_Car : Object)
       return Object;
+
+   --  The operand of LD, ST and DFN is one pair: a library and a
+   --  symbol for a name the library holds, a frame and an offset for
+   --  one the machine built when it applied a closure.  A symbol in
+   --  the cdr is what tells them apart.
+
+   function Is_Library_Reference
+     (This : Instance'Class;
+      Ref  : Object)
+      return Boolean
+   is (Raven.Objects.Is_Symbol (This.Cdr (Ref)));
+
+   function Referenced_Environment
+     (This : Instance'Class;
+      Ref  : Object)
+      return Raven.Environment.Reference
+   is (This.Libraries.Environment
+         (Raven.Target.Real_Library_Id
+            (Raven.Objects.To_Integer (This.Car (Ref)))));
+
+   function Referenced_Name
+     (This : Instance'Class;
+      Ref  : Object)
+      return String
+   is (This.To_String (Raven.Objects.To_Symbol (This.Cdr (Ref))));
+
+   ----------------
+   -- Add_Import --
+   ----------------
+
+   overriding procedure Add_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Libraries.Add_Import (Library, Imported);
+   end Add_Import;
+
+   ----------------
+   -- Add_Export --
+   ----------------
+
+   overriding procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Add_Export (Library, Name);
+   end Add_Export;
+
+   ---------------------
+   -- Set_Export_List --
+   ---------------------
+
+   overriding procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Libraries.Set_Export_List (Library);
+   end Set_Export_List;
+
+   ----------------------
+   -- Add_Library_Path --
+   ----------------------
+
+   overriding procedure Add_Library_Path
+     (This : in out Instance;
+      Path : String)
+   is
+   begin
+      This.Libraries.Add_Path (Path);
+   end Add_Library_Path;
 
    ------------------
    -- Append_Lists --
@@ -297,6 +442,19 @@ package body Raven.Engine.SECD is
          & Id'Image);
    end Bind_Foreign_Function;
 
+   -----------------
+   -- Define_Name --
+   -----------------
+
+   overriding procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Define_Name (Library, Name);
+   end Define_Name;
+
    ----------
    -- Cons --
    ----------
@@ -328,8 +486,7 @@ package body Raven.Engine.SECD is
       Symbols : not null access Raven.Symbols.Abstraction'Class)
       return Raven.Target.Reference
    is
-   begin
-      return This : constant Raven.Target.Reference := new Instance'
+      This : constant Instance_Reference := new Instance'
         (VM          => VM,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
@@ -338,12 +495,21 @@ package body Raven.Engine.SECD is
          Env         => Env,
          Foreign     => <>,
          Macros      => <>,
-         Global      => <>,
+         Libraries   => <>,
+         Interaction => Raven.Target.No_Library,
          Translators => <>,
-         Trace       => False)
-      do
-         Memory.Add_Container (This);
-      end return;
+         Trace       => False);
+   begin
+      Memory.Add_Container (This);
+
+      --  Where a form the host hands the machine is translated.  Env
+      --  is its parent rather than its own, so that what the engine
+      --  and the host bind stays visible to every library.
+
+      This.Interaction :=
+        This.Libraries.Create ("(raven user)", Env);
+
+      return Raven.Target.Reference (This);
    end Create;
 
    -------------
@@ -566,15 +732,13 @@ package body Raven.Engine.SECD is
                   end;
                when DFN =>
                   declare
-                     Sym   : constant Object := This.Pop (C);
-                     Name  : constant String :=
-                               This.To_String
-                                 (Objects.To_Symbol (Sym));
+                     Ref   : constant Object := This.Pop (C);
                      Value : constant Object :=
                                This.Pop;
                   begin
-                     This.Env.Define (Name, Value);
-                     This.Push (Sym);
+                     This.Referenced_Environment (Ref).Define
+                       (This.Referenced_Name (Ref), Value);
+                     This.Push (This.Cdr (Ref));
                   end;
                when DROP =>
                   declare
@@ -597,14 +761,13 @@ package body Raven.Engine.SECD is
                   declare
                      Ref : constant Object := This.Pop (C);
                   begin
-                     if Objects.Is_Symbol (Ref) then
+                     if This.Is_Library_Reference (Ref) then
                         declare
                            Name  : constant String :=
-                                     This.To_String
-                                       (Objects.To_Symbol (Ref));
+                                     This.Referenced_Name (Ref);
                            Value : constant Object :=
-                                     This.Env.Lookup
-                                       (Name);
+                                     This.Referenced_Environment
+                                       (Ref).Lookup (Name);
                         begin
                            if Value = Objects.Undefined then
                               raise Raven.Target.Undefined_Symbol with Name;
@@ -696,19 +859,19 @@ package body Raven.Engine.SECD is
                      Ref : constant Object := This.Pop (C);
                      New_Value  : constant Object := This.Pop;
                   begin
-                     if Objects.Is_Symbol (Ref) then
+                     if This.Is_Library_Reference (Ref) then
                         declare
                            Name       : constant String :=
-                                          This.To_String
-                                            (Objects.To_Symbol (Ref));
+                                          This.Referenced_Name (Ref);
                            Old_Value  : constant Object :=
-                                          This.Env.Lookup
-                                            (Name);
+                                          This.Referenced_Environment
+                                            (Ref).Lookup (Name);
                         begin
                            if Old_Value = Objects.Undefined then
                               raise Raven.Target.Undefined_Symbol with Name;
                            end if;
-                           This.Env.Replace (Name, New_Value);
+                           This.Referenced_Environment (Ref).Replace
+                             (Name, New_Value);
                            This.Push (New_Value);
                         end;
                      else
@@ -767,6 +930,7 @@ package body Raven.Engine.SECD is
             end if;
          end;
       end loop;
+      This.Libraries.Mark (Process);
       for T of This.Translators loop
          T.Mark (Process);
       end loop;
@@ -791,10 +955,13 @@ package body Raven.Engine.SECD is
    overriding function Store_Macro
      (This        : in out Instance;
       Params      : Object;
-      Macro_Body  : Object)
+      Macro_Body  : Object;
+      Home        : Raven.Target.Real_Library_Id;
+      Expansion   : Raven.Target.Real_Library_Id)
       return Raven.Target.Real_Macro_Id
    is
-      New_Entry : constant Macro_Entry := (True, Params, Macro_Body);
+      New_Entry : constant Macro_Entry :=
+                    (True, Params, Macro_Body, Home, Expansion);
    begin
       for Id in 1 .. This.Macros.Last_Index loop
          if not This.Macros (Id).In_Use then
@@ -815,12 +982,16 @@ package body Raven.Engine.SECD is
      (This        : Instance;
       Id          : Raven.Target.Real_Macro_Id;
       Params      : out Object;
-      Macro_Body  : out Object)
+      Macro_Body  : out Object;
+      Home        : out Raven.Target.Real_Library_Id;
+      Expansion   : out Raven.Target.Real_Library_Id)
    is
       E : constant Macro_Entry := This.Macros (Id);
    begin
       Params     := E.Params;
       Macro_Body := E.Macro_Body;
+      Home       := E.Home;
+      Expansion  := E.Expansion;
    end Get_Macro;
 
    -------------------
@@ -835,46 +1006,32 @@ package body Raven.Engine.SECD is
       This.Macros (Id) := Macro_Entry'(others => <>);
    end Release_Macro;
 
-   -------------------------
-   -- Define_Global_Macro --
-   -------------------------
-
-   overriding procedure Define_Global_Macro
-     (This : in out Instance;
-      Name : String;
-      Id   : Raven.Target.Real_Macro_Id)
-   is
-   begin
-      This.Global.Include (Name, Id);
-   end Define_Global_Macro;
-
-   ---------------------------
-   -- Undefine_Global_Macro --
-   ---------------------------
-
-   overriding procedure Undefine_Global_Macro
-     (This : in out Instance;
-      Name : String)
-   is
-   begin
-      This.Global.Exclude (Name);
-   end Undefine_Global_Macro;
-
    ------------------
-   -- Global_Macro --
+   -- Define_Macro --
    ------------------
 
-   overriding function Global_Macro
-     (This : Instance;
-      Name : String)
-      return Raven.Target.Macro_Id
+   overriding procedure Define_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String;
+      Id      : Raven.Target.Real_Macro_Id)
    is
-      Position : constant Macro_Maps.Cursor := This.Global.Find (Name);
    begin
-      return (if Macro_Maps.Has_Element (Position)
-              then Macro_Maps.Element (Position)
-              else Raven.Target.No_Macro);
-   end Global_Macro;
+      This.Libraries.Define_Macro (Library, Name, Id);
+   end Define_Macro;
+
+   --------------------
+   -- Undefine_Macro --
+   --------------------
+
+   overriding procedure Undefine_Macro
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+   begin
+      This.Libraries.Undefine_Macro (Library, Name);
+   end Undefine_Macro;
 
    ---------
    -- Pop --
@@ -948,7 +1105,13 @@ package body Raven.Engine.SECD is
       Cell    : Raven.Memory.Cell_Type :=
                   This.Memory.Get (Address);
    begin
-      pragma Assert (Cell.Car = Objects.Pending);
+      --  Replaces a car, and asks nothing of the one it replaces.  RAP
+      --  was the only caller when this was written, so it used to
+      --  assert that it was filling in a dummy frame; set! on a name
+      --  the machine holds on the stack replaces an argument, which is
+      --  no such thing.  What RAP needs is still checked where RAP
+      --  takes the dummy frame off the environment stack.
+
       Cell.Car := New_Car;
       This.Memory.Set (Address, Cell);
       return X;
@@ -974,7 +1137,8 @@ package body Raven.Engine.SECD is
    ---------------
 
    overriding procedure Translate
-     (This   : in out Instance)
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
    is
       Translator : aliased Raven.Translator.Abstraction'Class :=
                      Raven.Engine.SECD.Translator.Create;
@@ -987,7 +1151,7 @@ package body Raven.Engine.SECD is
 
       This.Translators.Append (Translator'Unchecked_Access);
       begin
-         Translator.Translate (This'Unchecked_Access);
+         Translator.Translate (This'Unchecked_Access, Library);
       exception
          when others =>
             This.Translators.Delete_Last;

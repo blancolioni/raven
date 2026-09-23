@@ -126,6 +126,14 @@ package Raven is
       Name  : String;
       Value : String);
 
+   --  Where (import (scheme base)) looks for a library: the directory
+   --  a name is taken as a path below.  The standard library's own
+   --  directory is on the path already.
+
+   procedure Add_Library_Path
+     (This : Raven_VM;
+      Path : String);
+
    procedure Report_State (This : Raven_VM);
 
 private
@@ -210,10 +218,13 @@ private
 
    function Standard_Library_Path return String;
 
-   --  Load a scheme source file into an existing VM.  New_VM imports the
-   --  standard library itself; this is for libraries that are not part of
-   --  it, such as the scheme test suite, which belongs to the test
-   --  harness rather than to every VM.
+   --  Load a scheme source file as a library of this name, and import
+   --  it into the library the host's own forms are translated in.  The
+   --  file is read whether or not a library of the name is loaded, so
+   --  this is also how a library is loaded again over itself.  New_VM
+   --  imports the standard library itself; this is for libraries that
+   --  are not part of it, such as the scheme test suite, which belongs
+   --  to the test harness rather than to every VM.
 
    procedure Import_Library
      (This : Raven_VM'Class;

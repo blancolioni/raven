@@ -62,7 +62,7 @@ package body Raven.Engine.Tests is
                      Raven.Engine.SECD.Translator.Create;
    begin
       Target.Push (Source);
-      Translator.Translate (Target);
+      Translator.Translate (Target, Target.Interaction_Library);
       Target.Execute;
       declare
          Result : constant Object := Target.Pop;
