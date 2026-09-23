@@ -79,6 +79,122 @@
 (test "macro builds a quotation" '(a b) (quoting-macro (a b)))
 
 (test "append-1" '(1 2 3 4 5 6) (append '(1 2 3) '(4 5 6)))
+
+;;  The list procedures R7RS asks the base library for.  Each is here
+;;  on an ordinary list, on the empty list, and -- where the answer
+;;  turns on it -- on a list that does not end in nil.
+
+(test "reverse" '(3 2 1) (reverse '(1 2 3)))
+(test "reverse of one" '(1) (reverse '(1)))
+(test "reverse of nothing" '() (reverse '()))
+(test "reverse leaves its argument alone" '(1 2 3)
+      ((lambda (xs) (reverse xs) xs) (list 1 2 3)))
+(test "reverse builds pairs of its own" #f
+      ((lambda (xs) (eq? (reverse xs) xs)) (list 1)))
+
+(test "list-tail, none of it" '(1 2 3) (list-tail '(1 2 3) 0))
+(test "list-tail, some of it" '(3) (list-tail '(1 2 3) 2))
+(test "list-tail, all of it" '() (list-tail '(1 2 3) 3))
+
+(test "list-ref, the first" 1 (list-ref '(1 2 3) 0))
+(test "list-ref, the last" 3 (list-ref '(1 2 3) 2))
+
+(test "list-copy" '(1 2 3) (list-copy '(1 2 3)))
+(test "list-copy of nothing" '() (list-copy '()))
+(test "list-copy is a copy" #f
+      ((lambda (xs) (eq? xs (list-copy xs))) (list 1 2 3)))
+(test "list-copy keeps an improper tail" '(1 2 . 3) (list-copy '(1 2 . 3)))
+(test "list-copy of what is not a pair" 7 (list-copy 7))
+
+(test "list? of a list" #t (list? '(1 2 3)))
+(test "list? of nothing" #t (list? '()))
+(test "list? of an improper list" #f (list? '(1 2 . 3)))
+(test "list? of a pair that is not a list" #f (list? '(1 . 2)))
+(test "list? of what is not a pair at all" #f (list? 7))
+
+;;  for-each is map without the answer: it is asked for what the
+;;  procedure does, in the order the list is written.
+
+(define for-each-seen '())
+(for-each (lambda (x) (set! for-each-seen (cons x for-each-seen))) '(1 2 3))
+(test "for-each visits every element" '(1 2 3) (reverse for-each-seen))
+
+(define for-each-count 0)
+(for-each (lambda (x) (set! for-each-count (+ for-each-count 1))) '())
+(test "for-each over nothing does nothing" 0 for-each-count)
+
+;;  eqv? is eq? for everything raven has, and answers the same
+;;  questions.
+
+(test "eqv? of a symbol with itself" #t (eqv? 'a 'a))
+(test "eqv? of two symbols" #f (eqv? 'a 'b))
+(test "eqv? of a number with itself" #t (eqv? 42 42))
+(test "eqv? of two numbers" #f (eqv? 42 43))
+(test "eqv? of nil with nil" #t (eqv? '() '()))
+(test "eqv? of two lists that read alike" #f (eqv? (list 1) (list 1)))
+(test "eqv? of a list with itself" #t
+      ((lambda (xs) (eqv? xs xs)) (list 1)))
+
+;;  memq, memv and member: the sublist that starts where the thing was
+;;  found, and #f when it is not there.  member is the one that looks
+;;  inside what it is comparing, and the one that takes a question of
+;;  its own.
+
+(test "memq finds a symbol" '(b c) (memq 'b '(a b c)))
+(test "memq of what is not there" #f (memq 'z '(a b c)))
+(test "memq of nothing" #f (memq 'a '()))
+(test "memq answers with the tail itself" #t
+      ((lambda (xs) (eq? (memq 'b xs) (cdr xs))) '(a b c)))
+
+(test "memv finds a number" '(2 3) (memv 2 '(1 2 3)))
+(test "memv of what is not there" #f (memv 9 '(1 2 3)))
+
+(test "member looks inside" '((1 2) (3 4)) (member '(1 2) '((0) (1 2) (3 4))))
+(test "memq does not look inside" #f (memq '(1 2) '((0) (1 2) (3 4))))
+(test "member of what is not there" #f (member '(9) '((0) (1 2))))
+;;  A compare of the caller's own is asked (compare obj element),
+;;  which is the order R7RS gives it and the only order that lets it
+;;  mean anything but sameness.
+
+(test "member with a question of its own" '((b 2) (c 3))
+      (member 'b '((a 1) (b 2) (c 3))
+              (lambda (key entry) (eq? key (car entry)))))
+
+;;  assq, assv and assoc: the pair whose car matches, and #f when
+;;  there is none.
+
+(define probe-alist '((a 1) (b 2) (c 3)))
+
+(test "assq finds a key" '(b 2) (assq 'b probe-alist))
+(test "assq of what is not there" #f (assq 'z probe-alist))
+(test "assq of nothing" #f (assq 'a '()))
+(test "assq answers with the pair itself" #t
+      ((lambda (al) (eq? (assq 'a al) (car al))) probe-alist))
+
+(test "assv finds a number key" '(2 two) (assv 2 '((1 one) (2 two))))
+(test "assv of what is not there" #f (assv 9 '((1 one) (2 two))))
+
+(test "assoc looks inside a key" '((1 2) found)
+      (assoc '(1 2) '(((0) zero) ((1 2) found))))
+(test "assq does not look inside a key" #f
+      (assq '(1 2) '(((0) zero) ((1 2) found))))
+(test "assoc of what is not there" #f (assoc '(9) '(((0) zero))))
+(test "assoc with a question of its own" '((b y) 2)
+      (assoc 'b '(((a x) 1) ((b y) 2))
+             (lambda (key k) (eq? key (car k)))))
+
+;;  The expander is written with memq and assq, so the tests above are
+;;  not the only thing that would notice if they stopped answering.
+;;  The macros below are expanded either way; this says so out loud.
+
+(define-syntax probe-after-memq
+  (syntax-rules (literally)
+    ((_ literally x) (list 'literally x))
+    ((_ x ...) (list x ...))))
+(test "the expander still reads a literal" '(literally 1)
+      (probe-after-memq literally 1))
+(test "the expander still reads an ellipsis" '(1 2 3)
+      (probe-after-memq 1 2 3))
 (test "string-1" "Hello, world!" (string-append "Hello, " "world!"))
 (test "string-2" "abcde" (string-append "a" "b" "c" "d" "e"))
 (test "string-3" "" (string-append ""))

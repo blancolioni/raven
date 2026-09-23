@@ -1,4 +1,14 @@
 (define (eq? x y) (raven-eq? x y))
+
+;;  eqv? is eq?, and stays eq? until there is something raven can
+;;  represent that eq? answers wrongly for.  Everything it has now is
+;;  an immediate or a pointer to the one object, and identity is the
+;;  whole of the question for both.  Numbers are where that stops
+;;  holding, and there are no numbers here yet that it does not
+;;  answer for.
+
+(define (eqv? x y) (eq? x y))
+
 (define (null? x) (eq? x '()))
 
 (define (list . xs) xs)
@@ -11,6 +21,30 @@
 
 (define (length xs) (if (null? xs) 0 (+ 1 (length (cdr xs)))))
 (define (make-list n e) (if (= n 0) '() (cons e (make-list (- n 1) e))))
+
+(define (reverse xs) (reverse-onto xs '()))
+(define (reverse-onto xs ys)
+  (if (null? xs) ys (reverse-onto (cdr xs) (cons (car xs) ys))))
+
+(define (list-tail xs k) (if (= k 0) xs (list-tail (cdr xs) (- k 1))))
+(define (list-ref xs k) (car (list-tail xs k)))
+
+;;  list-copy copies the pairs and nothing else: what the last cdr is
+;;  is what it stays, and something that is not a pair at all is its
+;;  own copy.
+
+(define (list-copy x) (if (pair? x) (cons (car x) (list-copy (cdr x))) x))
+
+;;  Whether something is a list is decided by the last cdr, so there
+;;  is no answering it without walking to the end.  What matters is
+;;  stopping when the walk leaves the pairs, rather than taking the
+;;  cdr of whatever it found there.
+;;
+;;  R7RS asks for #f on a list that runs back into itself, and there
+;;  is nothing to do about that here: set-cdr! is what would make one
+;;  and the machine does not offer it, so a walk that gets going ends.
+
+(define (list? x) (if (null? x) #t (if (pair? x) (list? (cdr x)) #f)))
 
 (define (not x) (if x #f #t))
 (define (xor x y) (if x (not y) y))
@@ -54,6 +88,9 @@
 
 (define (map f xs) (if (null? xs) '() (cons (f (car xs)) (map f (cdr xs)))))
 
+(define (for-each f xs)
+  (if (null? xs) '() (begin (f (car xs)) (for-each f (cdr xs)))))
+
 (define (write x) (write-string (display x)))
 
 (define (write-char ch) (raven-write-char ch))
@@ -86,19 +123,35 @@
 (define (cddr x) (cdr (cdr x)))
 (define (caddr x) (car (cddr x)))
 
-(define (assq key alist)
-  (if (null? alist)
-      #f
-      (if (eq? (caar alist) key)
-          (car alist)
-          (assq key (cdr alist)))))
+;;  The three member procedures are one walk, and so are the three
+;;  assoc procedures: what tells them apart is only how they ask
+;;  whether two things are the same.  member and assoc take that
+;;  question from the caller, and ask equal? when the caller leaves it
+;;  out.  The question is asked with what was looked for first, which
+;;  is the order R7RS gives a compare of one's own.
 
-(define (memq x xs)
+(define (member-by same? x xs)
   (if (null? xs)
       #f
-      (if (eq? (car xs) x)
+      (if (same? x (car xs))
           xs
-          (memq x (cdr xs)))))
+          (member-by same? x (cdr xs)))))
+
+(define (memq x xs) (member-by eq? x xs))
+(define (memv x xs) (member-by eqv? x xs))
+(define (member x xs compare) (member-by (optional compare equal?) x xs))
+
+(define (assoc-by same? key alist)
+  (if (null? alist)
+      #f
+      (if (same? key (caar alist))
+          (car alist)
+          (assoc-by same? key (cdr alist)))))
+
+(define (assq key alist) (assoc-by eq? key alist))
+(define (assv key alist) (assoc-by eqv? key alist))
+(define (assoc key alist compare)
+  (assoc-by (optional compare equal?) key alist))
 
 ;;  syntax-rules
 ;;
