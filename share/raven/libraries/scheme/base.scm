@@ -7,7 +7,7 @@
 ;;  library's macros are written, not something a program may call or
 ;;  take the name of.  Nor are the helpers the exported procedures are
 ;;  built from: append2, concatenate, all-left-assoc, apply-subtract,
-;;  apply-divide, write-char-list, sum-list, optional and xcons.
+;;  apply-divide, write-char-list, sum-list and optional.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a
@@ -22,7 +22,7 @@
 
    ;;  pairs and lists
    cons car cdr caar cadr cdar cddr caddr
-   list length append make-list map fold assq memq
+   list length append make-list map fold assq memq xcons
 
    ;;  numbers
    = + - * / sum
