@@ -41,6 +41,8 @@ package body Raven.Tests is
 
    procedure Report_Scheme_Suite (VM : Raven_VM);
 
+   procedure Test_Heap_Size;
+
    ------------------
    -- Library_Path --
    ------------------
@@ -88,7 +90,60 @@ package body Raven.Tests is
          VM.Report_State;
          VM.Close_VM;
       end;
+
+      Test_Heap_Size;
    end Run_Tests;
+
+   --------------------
+   -- Test_Heap_Size --
+   --------------------
+
+   procedure Test_Heap_Size is
+
+      --  How deep a recursion that is not a tail call can go is
+      --  decided by the heap, because every call that has not returned
+      --  is on the dump.  So asking for more cells and getting further
+      --  is what says the size was asked for and not ignored.
+      --
+      --  Six thousand is past what the default heap manages and well
+      --  inside four times it.
+
+      Deep : constant String :=
+               "(define (deep n) (if (= n 0) 0 (+ 1 (deep (- n 1)))))";
+      Probe : constant String := "(deep 6000)";
+   begin
+      declare
+         VM : Raven_VM :=
+                New_VM (Library_Path => Library_Path,
+                        Heap_Size    => Default_Heap_Size * 4);
+      begin
+         VM.Evaluate (Deep);
+         VM.Evaluate (Probe);
+
+         declare
+            Answer : constant Integer := VM.Get_Slot (1);
+         begin
+            Test ("a heap four times the default", Answer = 6000);
+         end;
+
+         VM.Close_VM;
+      end;
+
+      --  And the default does not, which is what makes the test above
+      --  about the size rather than about the recursion.
+
+      declare
+         VM : Raven_VM := New_VM (Library_Path => Library_Path);
+      begin
+         VM.Evaluate (Deep);
+         VM.Evaluate (Probe);
+         Test ("the default heap does not reach as far", False);
+         VM.Close_VM;
+      exception
+         when Constraint_Error =>
+            Test ("the default heap does not reach as far", True);
+      end;
+   end Test_Heap_Size;
 
    -------------------------
    -- Report_Scheme_Suite --
