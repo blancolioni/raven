@@ -3,7 +3,7 @@ with Ada.Wide_Wide_Characters.Handling;
 package body Raven.Parser.Lexical.Identifiers is
 
    type State_Type is (Start, Scanning_Integer, Base_Prefix,
-                       Based_Sign, Based_Digits
+                       Based_Sign, Based_Digits,
                        Number_Sign, Leading_Dot,
                        Decimal_Point, Scanning_Decimals,
                        Exponent, Exponent_Sign, Scanning_Exponent,
