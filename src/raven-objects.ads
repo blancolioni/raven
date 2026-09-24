@@ -1,4 +1,3 @@
-private with Ada.Unchecked_Conversion;
 with Raven.Instructions;
 
 private package Raven.Objects is
@@ -22,6 +21,12 @@ private package Raven.Objects is
 
    function Is_Truthy (X : Object) return Boolean;
 
+   --  Integer is tag 0 and float is tag 1, so the two numeric tags
+   --  differ only in the low bit and asking whether something is a
+   --  number at all is one mask and one compare over both.
+
+   function Is_Number (X : Object) return Boolean;
+
    function Is_Integer (X : Object) return Boolean;
    function To_Integer (X : Object) return Integer
      with Pre => Is_Integer (X);
@@ -29,17 +34,44 @@ private package Raven.Objects is
      with Post => Is_Integer (To_Object'Result)
      and then To_Integer (To_Object'Result) = I;
 
+   --  The floats raven holds are one sign bit, six of exponent and
+   --  twenty three of significand.  That is IEEE single's precision
+   --  exactly -- every mantissa bit of a single is kept -- with a
+   --  shorter exponent, so what a single has and this does not is
+   --  range rather than accuracy: 2**-30 up to just short of 2**32.
+   --
+   --  Which is why this asks first.  The encoding used to mask the low
+   --  bits of a single off to make room for the tag while promising
+   --  the round trip below, so a float whose last bits were not zero
+   --  broke the promise and 0.1 could not be read at all.  Nothing is
+   --  masked now: a number that does not fit is not a float raven has,
+   --  and saying so is the reader's job.
+
    function Is_Float (X : Object) return Boolean;
+   function Is_Representable (F : Float) return Boolean;
    function To_Float (X : Object) return Float
      with Pre => Is_Float (X);
    function To_Object (F : Float) return Object
-     with Post => Is_Float (To_Object'Result)
+     with Pre  => Is_Representable (F),
+     Post => Is_Float (To_Object'Result)
      and then To_Float (To_Object'Result) = F;
 
+   --  A character is a code point, and Unicode's last one is
+   --  16#10FFFF#, which wants twenty one bits and has twenty four.
+   --  Ada's Wide_Wide_Character goes to 2**31 - 1, which is not a code
+   --  point and never fitted in a payload of any width raven has had:
+   --  the round trip below could be asked of one and could not keep
+   --  it.  So the limit is written where the encoding is, and every
+   --  caller inherits it.
+
+   subtype Character_Value is Wide_Wide_Character
+     range Wide_Wide_Character'Val (0)
+        .. Wide_Wide_Character'Val (16#10FFFF#);
+
    function Is_Character (X : Object) return Boolean;
-   function To_Character (X : Object) return Wide_Wide_Character
+   function To_Character (X : Object) return Character_Value
      with Pre => Is_Character (X);
-   function To_Object (Ch : Wide_Wide_Character) return Object
+   function To_Object (Ch : Character_Value) return Object
      with Post => Is_Character (To_Object'Result)
      and then To_Character (To_Object'Result) = Ch;
 
@@ -54,12 +86,14 @@ private package Raven.Objects is
        (To_Instruction (To_Object'Result),
         Instruction);
 
-   --  As many symbols as an object can name.  Generated symbols are
-   --  minted one per expansion of a macro that introduces a name, and
-   --  nothing takes a symbol back, so the room to do that is the whole
-   --  of what the payload can hold.
+   --  As many symbols as an extended payload can name.  Generated
+   --  symbols are minted one per expansion of a macro that introduces
+   --  a name and nothing takes a symbol back, so this is the room to
+   --  do that -- and it is not the ceiling that matters, because the
+   --  symbol table holds a name per symbol, which runs out of memory
+   --  long before it runs out of ids.
 
-   type Symbol_Id is range 1 .. 2 ** Object_Payload_Bits - 1;
+   type Symbol_Id is range 1 .. 2 ** Extended_Payload_Bits - 1;
 
    function Is_Symbol (X : Object) return Boolean;
    function To_Symbol (X : Object) return Symbol_Id
@@ -111,7 +145,15 @@ private package Raven.Objects is
 
 private
 
+   --  The primary tag: two bits, three types and an escape.
+
+   Integer_Tag : constant := 0;
+   Float_Tag   : constant := 1;
+   Pair_Tag    : constant := 2;
+   Escape_Tag  : constant := 3;
+
    Object_Tag_Mask : constant := 2 ** Object_Tag_Bits - 1;
+   Full_Tag_Mask   : constant := 2 ** Full_Tag_Bits - 1;
 
    Max_Integer : constant := 2 ** (Object_Payload_Bits - 1) - 1;
    Min_Integer : constant := -2 ** (Object_Payload_Bits - 1);
@@ -122,23 +164,43 @@ private
    function Payload (X : Object) return Object
    is (X / 2 ** Object_Tag_Bits);
 
-   function Tag_Equal (X, Y : Object) return Boolean
-   is (Tag (X) = Tag (Y));
-
    function Tag (X        : Object;
                  With_Tag : Object)
                  return Object
    is (X * 2 ** Object_Tag_Bits + With_Tag);
 
-   Constant_Tag    : constant := 0;
-   Integer_Tag     : constant := 1;
-   Symbol_Tag      : constant := 2;
-   Pair_Tag        : constant := 3;
-   Character_Tag   : constant := 4;
-   Float_Tag       : constant := 5;
-   External_Tag    : constant := 6;
-   Foreign_Tag     : constant := 7;
-   Instruction_Tag : constant := 8;
+   --  The extended half.  A tag here is the whole eight bits, the
+   --  escape included, so that a test on one is the same mask and
+   --  compare a primary type takes rather than a decode of two steps.
+
+   Extended_Step : constant := 2 ** Object_Tag_Bits;
+
+   Constant_Tag    : constant := Escape_Tag + 0 * Extended_Step;
+   Symbol_Tag      : constant := Escape_Tag + 1 * Extended_Step;
+   Character_Tag   : constant := Escape_Tag + 2 * Extended_Step;
+   Instruction_Tag : constant := Escape_Tag + 3 * Extended_Step;
+   External_Tag    : constant := Escape_Tag + 4 * Extended_Step;
+   Foreign_Tag     : constant := Escape_Tag + 5 * Extended_Step;
+
+   function Full_Tag (X : Object) return Object
+   is (X and Full_Tag_Mask);
+
+   function Extended_Payload (X : Object) return Object
+   is (X / 2 ** Full_Tag_Bits);
+
+   function Extend (X        : Object;
+                    With_Tag : Object)
+                    return Object
+   is (X * 2 ** Full_Tag_Bits + With_Tag);
+
+   --  Two objects are the same kind of thing.  Below the escape that
+   --  is the two bit tag; at or above it, it has to be all eight,
+   --  because every extended type shares the escape.
+
+   function Tag_Equal (X, Y : Object) return Boolean
+   is (if Tag (X) = Escape_Tag
+       then Full_Tag (X) = Full_Tag (Y)
+       else Tag (X) = Tag (Y));
 
    Nil_Payload       : constant := 0;
    Undefined_Payload : constant := 1;
@@ -152,34 +214,40 @@ private
    If_Payload        : constant := 9;
 
    function Nil return Object
-   is (Tag (Nil_Payload, Constant_Tag));
+   is (Extend (Nil_Payload, Constant_Tag));
 
    function Undefined return Object
-   is (Tag (Undefined_Payload, Constant_Tag));
+   is (Extend (Undefined_Payload, Constant_Tag));
 
    function Pending return Object
-   is (Tag (Pending_Payload, Constant_Tag));
+   is (Extend (Pending_Payload, Constant_Tag));
 
    function Lambda return Object
-   is (Tag (Lambda_Payload, Constant_Tag));
+   is (Extend (Lambda_Payload, Constant_Tag));
 
    function Cond return Object
-   is (Tag (Cond_Payload, Constant_Tag));
+   is (Extend (Cond_Payload, Constant_Tag));
 
    function Define return Object
-   is (Tag (Define_Payload, Constant_Tag));
+   is (Extend (Define_Payload, Constant_Tag));
 
    function If_Obj return Object
-   is (Tag (If_Payload, Constant_Tag));
+   is (Extend (If_Payload, Constant_Tag));
 
    function Quote return Object
-   is (Tag (Quote_Payload, Constant_Tag));
+   is (Extend (Quote_Payload, Constant_Tag));
 
    function To_Object (B : Boolean) return Object
-   is (Tag ((if B then True_Payload else False_Payload), Constant_Tag));
+   is (Extend ((if B then True_Payload else False_Payload), Constant_Tag));
 
    function Is_Truthy (X : Object) return Boolean
-   is (Tag (X) /= Constant_Tag or else Payload (X) > 2);
+   is (Full_Tag (X) /= Constant_Tag or else Extended_Payload (X) > 2);
+
+   --  Integer is 0 and float is 1, so bit one of the tag is clear for
+   --  both and set for the pair tag and the escape.
+
+   function Is_Number (X : Object) return Boolean
+   is ((X and 2#10#) = 0);
 
    function Is_Integer (X : Object) return Boolean
    is (Tag (X) = Integer_Tag);
@@ -195,49 +263,38 @@ private
        then Tag (Object (I), Integer_Tag)
        else Tag (Object (2 ** Object_Payload_Bits + I), Integer_Tag));
 
-   function Payload_To_Float is
-     new Ada.Unchecked_Conversion (Object, Float);
-   function Float_To_Payload is
-     new Ada.Unchecked_Conversion (Float, Object);
-
    function Is_Float (X : Object) return Boolean
    is (Tag (X) = Float_Tag);
 
-   function To_Float (X : Object) return Float
-   is (Payload_To_Float (X and not Object_Tag_Mask));
-
-   function To_Object (F : Float) return Object
-   is ((Float_To_Payload (F) and not Object_Tag_Mask) or Float_Tag);
-
    function Is_Character (X : Object) return Boolean
-   is (Tag (X) = Character_Tag);
+   is (Full_Tag (X) = Character_Tag);
 
-   function To_Character (X : Object) return Wide_Wide_Character
-   is (Wide_Wide_Character'Val (Payload (X)));
+   function To_Character (X : Object) return Character_Value
+   is (Wide_Wide_Character'Val (Extended_Payload (X)));
 
-   function To_Object (Ch : Wide_Wide_Character) return Object
-   is (Tag (Wide_Wide_Character'Pos (Ch), Character_Tag));
+   function To_Object (Ch : Character_Value) return Object
+   is (Extend (Wide_Wide_Character'Pos (Ch), Character_Tag));
 
    function Is_Instruction (X : Object) return Boolean
-   is (Tag (X) = Instruction_Tag);
+   is (Full_Tag (X) = Instruction_Tag);
 
    function To_Instruction (X : Object) return Raven.Instructions.Instruction
-   is (Raven.Instructions.Instruction'Val (Payload (X)));
+   is (Raven.Instructions.Instruction'Val (Extended_Payload (X)));
 
    function To_Object
      (Instruction : Raven.Instructions.Instruction)
       return Object
-   is (Tag (Object (Raven.Instructions.Instruction'Pos (Instruction)),
+   is (Extend (Object (Raven.Instructions.Instruction'Pos (Instruction)),
        Instruction_Tag));
 
    function Is_Symbol (X : Object) return Boolean
-   is (Tag (X) = Symbol_Tag);
+   is (Full_Tag (X) = Symbol_Tag);
 
    function To_Symbol (X : Object) return Symbol_Id
-   is (Symbol_Id (Payload (X)));
+   is (Symbol_Id (Extended_Payload (X)));
 
    function To_Object (Symbol : Symbol_Id) return Object
-   is (Tag (Object (Symbol), Symbol_Tag));
+   is (Extend (Object (Symbol), Symbol_Tag));
 
    function Has_Address (X : Object) return Boolean
    is (Tag (X) = Pair_Tag);
@@ -255,21 +312,21 @@ private
    is (Tag (Object (Address), Pair_Tag));
 
    function Is_Foreign_Value (X : Object) return Boolean
-   is (Tag (X) = External_Tag);
+   is (Full_Tag (X) = External_Tag);
 
    function To_Foreign_Value_Id (X : Object) return Foreign_Value_Id
-   is (Foreign_Value_Id (Payload (X)));
+   is (Foreign_Value_Id (Extended_Payload (X)));
 
    function To_Object (Id : Foreign_Value_Id) return Object
-   is (Tag (Object (Id), External_Tag));
+   is (Extend (Object (Id), External_Tag));
 
    function Is_Foreign_Function (X : Object) return Boolean
-   is (Tag (X) = Foreign_Tag);
+   is (Full_Tag (X) = Foreign_Tag);
 
    function To_Foreign_Function_Id (X : Object) return Foreign_Function_Id
-   is (Foreign_Function_Id (Payload (X)));
+   is (Foreign_Function_Id (Extended_Payload (X)));
 
    function To_Object (Id : Foreign_Function_Id) return Object
-   is (Tag (Object (Id), Foreign_Tag));
+   is (Extend (Object (Id), Foreign_Tag));
 
 end Raven.Objects;

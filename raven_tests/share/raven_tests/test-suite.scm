@@ -188,6 +188,89 @@
 (test "expt of a negative base, odd power" -8 (expt -2 3))
 (test "expt of zero to the zeroth" 1 (expt 0 0))
 
+;;  Two bits of tag leave thirty of payload, so an exact integer has
+;;  four times the range it had.  Every one of these was past the end
+;;  of the road: going over used to fail a postcondition out of the
+;;  machine rather than answer or raise.
+
+(test "what used to be the largest integer" 134217727 (+ 134217726 1))
+(test "one past it" 134217728 (+ 134217727 1))
+(test "well past it" 400000000 (* 20000 20000))
+(test "and negative" -400000000 (- 0 (* 20000 20000)))
+(test "the largest integer there is now" 536870911 (+ 536870910 1))
+(test "the smallest" -536870912 (- -536870911 1))
+
+;;  A float keeps every mantissa bit of a single now and gives up
+;;  range instead, so a float with bits at the bottom reads.  0.1 is
+;;  the one that could not: the encoding masked its last four bits off
+;;  to make room for the tag, which broke the round trip the spec
+;;  promised, and the form did not read at all.
+
+(test "a float literal reads" #t (number? 0.1))
+(test "a negative float literal reads" #t (number? -0.1))
+(test "a float is not an integer" #f (integer? 0.1))
+(test "a float without a fraction is an integer" #t (integer? 2.0))
+(test "but it is not an exact integer" #f (exact-integer? 2.0))
+(test "a float is not an exact integer either" #f (exact-integer? 0.1))
+
+;;  What it gives up for keeping the mantissa is range: six bits of
+;;  exponent reach from about 2**-30 up to just short of 2**32, and a
+;;  number outside that is reported where it is written and read as
+;;  nil rather than quietly losing its bottom bits.
+
+(test "a float near the top of the range" #t (number? 1.0e9))
+(test "a float near the bottom of the range" #t (number? 1.0e-9))
+(test "a float written with an exponent is a float" #t (number? 1.5e3))
+(test "and is the number it says" #t (eq? 1.5e3 1500.0))
+
+(test "the same float written twice is the same object" #t (eq? 0.1 0.1))
+(test "two different floats are not" #f (eq? 0.1 0.2))
+(test "equal? over floats" #t (equal? 0.25 0.25))
+(test "equal? over floats that differ" #f (equal? 0.25 0.5))
+
+;;  An integer and a float are different kinds of thing, and the tags
+;;  say so: they are 0 and 1, which is also what lets number? ask
+;;  about both with one mask.
+
+(test "a float and an integer are not eq?" #f (eq? 2.0 2))
+(test "a float and an integer are not equal?" #f (equal? 2.0 2))
+(test "number? of an integer" #t (number? 2))
+(test "number? of a float" #t (number? 2.0))
+(test "number? of a character" #f (number? #\a))
+(test "number? of a symbol" #f (number? 'a))
+(test "number? of nil" #f (number? '()))
+(test "number? of a list" #f (number? '(1)))
+(test "number? of a boolean" #f (number? #t))
+
+;;  Everything that is not an integer, a float or a pair shares one
+;;  escape in the primary tag, so telling two of those apart takes the
+;;  whole eight bits.  equal? is what that is for: it asks whether two
+;;  things are the same kind before it asks anything else, and a
+;;  string against a character is the pair that would go wrong -- the
+;;  character would be read as a foreign value id.
+
+(test "a string and a character are not equal?" #f (equal? "a" #\a))
+(test "a character and a string are not equal?" #f (equal? #\a "a"))
+(test "a string and a symbol are not equal?" #f (equal? "a" 'a))
+(test "a symbol and a character are not equal?" #f (equal? 'a #\a))
+(test "a character and nil are not equal?" #f (equal? #\a '()))
+(test "a string and a number are not equal?" #f (equal? "1" 1))
+
+;;  And the kinds that are the same still are.
+
+(test "two equal strings are equal?" #t (equal? "abc" "abc"))
+(test "two equal characters are equal?" #t (equal? #\a #\a))
+(test "two equal symbols are equal?" #t (equal? 'abc 'abc))
+(test "two equal lists are equal?" #t (equal? '(1 (2 3)) '(1 (2 3))))
+
+;;  A character is a code point and has twenty four bits to be one in,
+;;  which is every code point there is with room over.
+
+(test "the last code point survives" 1114111
+      (char->integer (integer->char 1114111)))
+(test "and reads back as itself" #t
+      (eq? (integer->char 1114111) (integer->char 1114111)))
+
 ;;  Rounding an integer gives it back.  These are here so that a
 ;;  program which says where it expects a fraction runs.
 

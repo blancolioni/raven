@@ -145,13 +145,34 @@ package Raven is
 
 private
 
-   Object_Size         : constant := 32;
-   Object_Tag_Bits     : constant := 4;
-   Object_Payload_Bits : constant := Object_Size - Object_Tag_Bits;
+   --  An object is a tagged word, and the tag is two bits: three types
+   --  and an escape.  The three are the ones that want a payload wider
+   --  than the escape leaves -- an integer, which is the range; a
+   --  float, which is an immediate and needs every bit there is; and a
+   --  pair, whose payload is the ceiling on the heap.  Everything else
+   --  is reached through the escape, with six more bits of tag above
+   --  it and twenty four of payload below.
+   --
+   --  Asking about an extended type costs what asking about a primary
+   --  one costs, because the whole eight bit pattern is a constant: a
+   --  mask and a compare either way, and one shift to get the payload
+   --  out.  So what a primary slot buys is width and not speed, which
+   --  is why the three that have one are the three that need it.
+
+   Object_Size           : constant := 32;
+   Object_Tag_Bits       : constant := 2;
+   Object_Payload_Bits   : constant := Object_Size - Object_Tag_Bits;
+
+   Extended_Tag_Bits     : constant := 6;
+   Full_Tag_Bits         : constant := Object_Tag_Bits + Extended_Tag_Bits;
+   Extended_Payload_Bits : constant := Object_Size - Full_Tag_Bits;
 
    type Object is mod 2 ** Object_Size;
 
-   type Address_Type is mod 2 ** (Object_Size - Object_Tag_Bits);
+   --  A pair is a primary type, so an address is as wide as a payload
+   --  and the heap's ceiling is not the encoding's business.
+
+   type Address_Type is mod 2 ** Object_Payload_Bits;
 
    package Object_Lists is
      new Ada.Containers.Doubly_Linked_Lists (Object);

@@ -65,6 +65,14 @@ package body Raven.Target is
                return Natural'Image (Wide_Wide_Character'Pos (Ch));
             end if;
          end;
+      elsif Is_Float (X) then
+         declare
+            Img : constant String := To_Float (X)'Image;
+         begin
+            return (if Img (Img'First) = ' '
+                    then Img (Img'First + 1 .. Img'Last)
+                    else Img);
+         end;
       elsif Is_Symbol (X) then
          return This.To_String (Raven.Objects.To_Symbol (X));
       elsif Is_Foreign_Function (X) then
@@ -83,14 +91,22 @@ package body Raven.Target is
    -- To_String --
    ---------------
 
+   --  What is left when Show knows of nothing else, which is the whole
+   --  word in hex.  It used to take the tag as the low nibble and show
+   --  it apart from the payload; the tag is two bits or eight
+   --  depending on what it is, so splitting it here would be saying
+   --  something that is not so.
+
    function To_String (X : Object) return String is
-      Ds      : constant String := "0123456789ABCDEF";
-      Tag     : constant Object := X mod 16;
-      Payload : constant Object := X / 16;
-      Img     : constant String := Payload'Image;
-      Prefix  : constant Character := Ds (Natural (Tag) + 1);
+      Ds     : constant String := "0123456789ABCDEF";
+      Digits_Of : String (1 .. Object_Size / 4);
+      W      : Object := X;
    begin
-      return Prefix & "/" & Img (2 .. Img'Last);
+      for I in reverse Digits_Of'Range loop
+         Digits_Of (I) := Ds (Natural (W mod 16) + 1);
+         W := W / 16;
+      end loop;
+      return "#x" & Digits_Of;
    end To_String;
 
 end Raven.Target;
