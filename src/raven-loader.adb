@@ -436,6 +436,15 @@ package body Raven.Loader is
             when E : Raven.Target.Undefined_Symbol =>
                Report
                  ("undefined: " & Ada.Exceptions.Exception_Message (E));
+
+            --  A form the translator refuses is reported and the file
+            --  goes on to the one after it, which is what an
+            --  undefined name in a form has always done.  It could
+            --  not be caught here before, because Translate reported
+            --  it and returned as though nothing were wrong.
+
+            when Raven.Target.Translation_Error =>
+               null;
          end;
       end loop;
 

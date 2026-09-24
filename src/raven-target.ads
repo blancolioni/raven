@@ -162,6 +162,16 @@ private package Raven.Target is
       Value : String)
    is abstract;
 
+   --  Whether the host asked to be shown what the machine is doing.
+   --  Set_Parameter could say so and nothing could ask, so what is
+   --  only of use to somebody reading a trace was written whether one
+   --  had been asked for or not.
+
+   function Tracing
+     (This : Abstraction)
+      return Boolean
+   is abstract;
+
    function Append_Lists
      (This  : in out Abstraction;
       List1 : Object;
