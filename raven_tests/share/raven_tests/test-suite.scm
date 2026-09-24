@@ -200,6 +200,49 @@
 (test "the largest integer there is now" 536870911 (+ 536870910 1))
 (test "the smallest" -536870912 (- -536870911 1))
 
+;;  A number written in another base.  The scanner knew the four
+;;  prefixes and checked the digits against them, and then the whole
+;;  text went to Ada's Value, which takes 16#1F# and not #x1F -- so
+;;  every one of them was recognised as a number and could not be read.
+
+(test "hexadecimal" 31 #x1F)
+(test "hexadecimal, lower case digits" 255 #xff)
+(test "hexadecimal, a larger one" 65536 #x10000)
+(test "binary" 10 #b1010)
+(test "octal" 15 #o17)
+(test "decimal, said out loud" 42 #d42)
+(test "and a decimal not said out loud is the same" #t (eq? #d42 42))
+
+;;  R7RS spells the prefix in either case.
+
+(test "an upper case prefix" 31 #X1F)
+(test "an upper case prefix and digits" 255 #XFF)
+
+;;  R7RS puts the sign after the prefix.  This took it only before,
+;;  where #x-1F was a name; both orders read now.
+
+(test "a sign after the prefix" -31 #x-1F)
+(test "a sign before the prefix" -31 -#x1F)
+(test "a plus after the prefix" 31 #x+1F)
+
+;;  A digit the base does not have is not a number, which is what the
+;;  scanner was already careful about and what must stay true.
+
+(test "a two in a binary number is a name" #t (symbol? '#b12))
+(test "a g in a hexadecimal number is a name" #t (symbol? '#x1g))
+(test "an eight in an octal number is a name" #t (symbol? '#o18))
+
+;;  #e and #i are the other two things that can follow a # on a
+;;  number, and stay names while there is no exactness to change.
+
+(test "an exactness prefix is still a name" #t (symbol? '#e1))
+(test "the other exactness prefix is still a name" #t (symbol? '#i1))
+
+;;  And a number with no prefix is what it was.
+
+(test "a plain integer" 42 42)
+(test "a plain negative integer" -42 -42)
+
 ;;  A float keeps every mantissa bit of a single now and gives up
 ;;  range instead, so a float with bits at the bottom reads.  0.1 is
 ;;  the one that could not: the encoding masked its last four bits off

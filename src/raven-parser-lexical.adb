@@ -579,17 +579,55 @@ package body Raven.Parser.Lexical is
      (This : in out Instance'Class)
       return Integer
    is
+      Text : constant Wide_Wide_String :=
+               To_Wide_Wide_String (This.Current_Stream.Tok_Text);
+      Base     : Natural := 10;
+      Negative : Boolean := False;
+      Result   : Integer := 0;
+      I        : Natural := Text'First;
    begin
       --  The token is whatever the identifier scanner classified as an
-      --  integer, and a leading sign is part of that: -13 is one token
-      --  and not a name.  Reading it back as a Natural raised a range
-      --  check out of the reader, so a negative number could not be
-      --  written in raven at all and had to be said as (- 13).
+      --  integer, and both a leading sign and a radix prefix are part
+      --  of that: -13, #x1F and #x-1F are each one token and not a
+      --  name.
+      --
+      --  This used to hand the whole text to Integer'Value, which
+      --  takes Ada's spelling of a based number -- 16#1F# -- and not
+      --  scheme's, so every prefix the scanner had gone to the trouble
+      --  of recognising and checking the digits of then failed to be
+      --  read at all.  The scanner works the base out; so does this.
 
-      return Integer'Value
-        (Encode
-           (To_Wide_Wide_String
-                (This.Current_Stream.Tok_Text)));
+      if I <= Text'Last
+        and then (Text (I) = '+' or else Text (I) = '-')
+      then
+         Negative := Text (I) = '-';
+         I := I + 1;
+      end if;
+
+      if I < Text'Last and then Text (I) = '#' then
+         case Text (I + 1) is
+            when 'b' | 'B' => Base := 2;
+            when 'o' | 'O' => Base := 8;
+            when 'd' | 'D' => Base := 10;
+            when 'x' | 'X' => Base := 16;
+            when others => null;
+         end case;
+         I := I + 2;
+
+         if I <= Text'Last
+           and then (Text (I) = '+' or else Text (I) = '-')
+         then
+            Negative := Text (I) = '-';
+            I := I + 1;
+         end if;
+      end if;
+
+      while I <= Text'Last loop
+         Result := Result * Base + Hex_Digit (Text (I));
+         I := I + 1;
+      end loop;
+
+      return (if Negative then -Result else Result);
    end Tok_Integer_Value;
 
    --------------

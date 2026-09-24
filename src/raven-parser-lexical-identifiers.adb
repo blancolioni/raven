@@ -3,6 +3,7 @@ with Ada.Wide_Wide_Characters.Handling;
 package body Raven.Parser.Lexical.Identifiers is
 
    type State_Type is (Start, Scanning_Integer, Base_Prefix,
+                       Based_Sign, Based_Digits,
                        Number_Sign, Decimal_Point, Scanning_Decimals,
                        Exponent, Exponent_Sign, Scanning_Exponent,
                        End_State_Identifier,
@@ -209,20 +210,55 @@ package body Raven.Parser.Lexical.Identifiers is
                      State := End_State_Identifier;
                   end if;
                when Base_Prefix =>
-                  if Ch = 'o' then
+
+                  --  R7RS spells each of these in either case, and
+                  --  only the lower one was taken.  #e and #i are the
+                  --  other two things that can follow a # on a number
+                  --  and fall out here as names, which is the right
+                  --  answer while there is no exactness for them to
+                  --  change.
+
+                  if Ch = 'o' or else Ch = 'O' then
                      Base := 8;
-                     State := Scanning_Integer;
-                  elsif Ch = 'b' then
+                     State := Based_Sign;
+                  elsif Ch = 'b' or else Ch = 'B' then
                      Base := 2;
-                     State := Scanning_Integer;
-                  elsif Ch = 'd' then
+                     State := Based_Sign;
+                  elsif Ch = 'd' or else Ch = 'D' then
                      Base := 10;
-                     State := Scanning_Integer;
-                  elsif Ch = 'x' then
+                     State := Based_Sign;
+                  elsif Ch = 'x' or else Ch = 'X' then
                      Base := 16;
-                     State := Scanning_Integer;
+                     State := Based_Sign;
                   else
                      State := End_State_Identifier;
+                  end if;
+               when Based_Sign =>
+
+                  --  R7RS puts the sign after the prefix -- #x-1F --
+                  --  where this took it only before, and #x-1F was a
+                  --  name.  Both orders are taken now.
+
+                  if Ch = '+' or else Ch = '-' then
+                     if Last then
+                        State := End_State_Identifier;
+                     else
+                        State := Based_Digits;
+                     end if;
+                  elsif not Is_Base_Digit (Ch, Base) then
+                     State := End_State_Identifier;
+                  elsif Last then
+                     State := End_State_Integer;
+                  else
+                     State := Scanning_Integer;
+                  end if;
+               when Based_Digits =>
+                  if not Is_Base_Digit (Ch, Base) then
+                     State := End_State_Identifier;
+                  elsif Last then
+                     State := End_State_Integer;
+                  else
+                     State := Scanning_Integer;
                   end if;
                when End_State =>
                   null;
