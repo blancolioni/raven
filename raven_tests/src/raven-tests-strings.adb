@@ -7,6 +7,10 @@ package body Raven.Tests.Strings is
      (VM         : Raven_VM;
       Expression : String);
 
+   procedure Test_Error
+     (VM         : Raven_VM;
+      Expression : String);
+
    procedure Test_String
      (VM         : Raven_VM;
       Expression : String;
@@ -38,6 +42,15 @@ package body Raven.Tests.Strings is
    procedure Run_Tests (VM : Raven_VM) is
    begin
       Test_String (VM, "(string-append ""ab"" ""cd"")", "abcd");
+
+      --  Where to start and where to stop have to be within the
+      --  string.  string->list was bound as taking one argument and
+      --  threw both away, so there was nothing to be outside of.
+
+      Test_Error (VM, "(string->list ""abc"" 0 4)");
+      Test_Error (VM, "(string->list ""abc"" 2 1)");
+      Test_Error (VM, "(substring ""abc"" 0 9)");
+      Test_Error (VM, "(string-ref ""abc"" 9)");
 
       --  The escapes R7RS asks for in a string.  \a and \b were not
       --  among them, and anything the reader did not know reported
@@ -119,6 +132,22 @@ package body Raven.Tests.Strings is
                    "(string-append ""PASS  "" ""nil is not truthy"")",
                    "PASS  nil is not truthy");
    end Run_Tests;
+
+   ----------------
+   -- Test_Error --
+   ----------------
+
+   procedure Test_Error
+     (VM         : Raven_VM;
+      Expression : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+      Test (Expression & " is an error", False);
+   exception
+      when Constraint_Error =>
+         Test (Expression & " is an error", True);
+   end Test_Error;
 
    -----------------
    -- Test_String --
