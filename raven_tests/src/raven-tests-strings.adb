@@ -39,6 +39,37 @@ package body Raven.Tests.Strings is
    begin
       Test_String (VM, "(string-append ""ab"" ""cd"")", "abcd");
 
+      --  The escapes R7RS asks for in a string.  \a and \b were not
+      --  among them, and anything the reader did not know reported
+      --  itself and then raised as well, which took the form and the
+      --  host with it.
+
+      Test_String (VM, "(char->integer (car (string->list ""\a"")))", "7");
+      Test_String (VM, "(char->integer (car (string->list ""\b"")))", "8");
+
+      --  The six it did know, which have to go on working.
+
+      Test_String (VM, "(char->integer (car (string->list ""\t"")))", "9");
+      Test_String (VM, "(char->integer (car (string->list ""\n"")))", "10");
+      Test_String (VM, "(char->integer (car (string->list ""\r"")))", "13");
+      Test_String (VM, "(char->integer (car (string->list ""\\"")))", "92");
+      Test_String (VM, "(char->integer (car (string->list ""\|"")))", "124");
+      Test_String (VM, "(char->integer (car (string->list ""\x41;"")))", "65");
+
+      --  An escape is one character of the string, whatever it is.
+
+      Test_String (VM, "(string-length ""a\ab"")", "3");
+      Test_String (VM, "(string-length ""a\bb"")", "3");
+      Test_String (VM, "(string-length ""a\x41;b"")", "3");
+
+      --  And one the reader does not know is reported and stands for
+      --  itself, rather than ending the session.  The line it writes
+      --  on standard error is the point of the test.
+
+      Test_String (VM, "(string-length ""a\qb"")", "3");
+      Test_String
+        (VM, "(char->integer (car (cdr (string->list ""a\qb""))))", "113");
+
       --  Two strings that are live at the same time must not alias each
       --  other: each foreign value needs its own id.
 
