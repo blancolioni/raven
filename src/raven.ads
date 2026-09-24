@@ -21,6 +21,19 @@ package Raven is
      function (VM        : Raven_VM;
                File_Name : String) return String;
 
+   --  How many cells a VM's heap has.  The collector copies what is
+   --  live into the other half of it, so a program has half of these
+   --  to itself: the default gives it 32,768, which is 512 KB of heap
+   --  all told at eight bytes a cell.
+   --
+   --  It wants to be said rather than assumed.  A host with less
+   --  memory than that cannot have raven at all otherwise, and one
+   --  with a great deal more cannot ask for it.  The standard library
+   --  is about 6,500 live cells once it is loaded, which is the floor
+   --  under anything useful.
+
+   Default_Heap_Size : constant := 65_536;
+
    --  Library_Path is where the scheme library this VM is built with
    --  is read from, and the first place (import ...) looks.  Empty is
    --  the one installed beside the executable, which is what a program
@@ -32,7 +45,8 @@ package Raven is
       File_Reader   : Read_File_Handler  := null;
       User_Data     : access User_Data_Interface'Class := null;
       Configuration : String := "";
-      Library_Path  : String := "")
+      Library_Path  : String := "";
+      Heap_Size     : Positive := Default_Heap_Size)
       return Raven_VM;
 
    procedure Close_VM (This : in out Raven_VM);

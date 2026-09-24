@@ -319,7 +319,8 @@ package body Raven is
       File_Reader   : Read_File_Handler  := null;
       User_Data     : access User_Data_Interface'Class := null;
       Configuration : String := "";
-      Library_Path  : String := "")
+      Library_Path  : String := "";
+      Heap_Size     : Positive := Default_Heap_Size)
       return Raven_VM
    is
       Libraries : constant String :=
@@ -328,7 +329,7 @@ package body Raven is
                      else Library_Path);
 
       Memory : constant Raven.Memory.Reference :=
-                 Raven.Engine.Create_Memory (65536);
+                 Raven.Engine.Create_Memory (Heap_Size);
 
       This : constant Raven_VM :=
                (Data => new Raven_VM_Record'
