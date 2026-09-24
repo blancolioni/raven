@@ -95,7 +95,9 @@ package body Raven.Scheme is
       declare
          I : constant Integer := Raven.Objects.To_Integer (X);
       begin
-         if I not in 0 .. Wide_Wide_Character'Pos (Wide_Wide_Character'Last)
+         if I not in
+           Wide_Wide_Character'Pos (Raven.Objects.Character_Value'First)
+             .. Wide_Wide_Character'Pos (Raven.Objects.Character_Value'Last)
          then
             raise Constraint_Error with
               "integer->char: no character has the value" & I'Image;
@@ -150,10 +152,12 @@ package body Raven.Scheme is
    ---------------
 
    procedure Is_Number (VM : Raven_VM) is
-      use Raven.Objects;
-      X : constant Object := VM.Get_Slot (1);
    begin
-      VM.Set_Slot (1, Is_Integer (X) or else Is_Float (X));
+      --  One mask and one compare over both numeric tags, because
+      --  integer is 0 and float is 1 and nothing else has bit one
+      --  clear.  It used to be the two questions asked separately.
+
+      VM.Set_Slot (1, Raven.Objects.Is_Number (VM.Get_Slot (1)));
    end Is_Number;
 
    ---------------
