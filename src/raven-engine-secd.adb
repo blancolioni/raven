@@ -497,7 +497,13 @@ package body Raven.Engine.SECD is
         (VM          => VM,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
-         Syms        => Symbols,
+         --  Named explicitly, because Symbols is an anonymous access
+         --  parameter and Syms is a named access type.  Ada wants the
+         --  conversion written; the GNAT this was developed against
+         --  took it without, and a newer one on the build server does
+         --  not.
+
+         Syms        => Raven.Symbols.Reference (Symbols),
          Memory      => Memory,
          Env         => Env,
          Foreign     => <>,
