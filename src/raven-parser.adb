@@ -92,12 +92,33 @@ package body Raven.Parser is
 
       procedure Parse_Rest_Of_List;
 
+      procedure Skip_Datum_Comments;
+
+      --------------------------
+      -- Skip_Datum_Comments --
+      --------------------------
+
+      procedure Skip_Datum_Comments is
+      begin
+         --  #; takes out the datum after it, whatever that datum turns
+         --  out to be, so the only way to skip one is to read it and
+         --  throw it away.  Several in a row take out several.
+
+         while Lex.Tok = Tok_Datum_Comment loop
+            Lex.Scan;
+            Parse_Expression;
+            Target.Drop;
+         end loop;
+      end Skip_Datum_Comments;
+
       ----------------------
       -- Parse_Expression --
       ----------------------
 
       procedure Parse_Expression is
       begin
+         Skip_Datum_Comments;
+
          case Lex.Tok is
             when Tok_Nil =>
                Lex.Scan;
@@ -238,6 +259,13 @@ package body Raven.Parser is
          Start_Line : constant Natural := Lex.Current_Line;
       begin
          Parse_Expression;
+
+         --  A datum comment after an element takes the next one out of
+         --  the list, and what follows may then be the closing
+         --  parenthesis -- which is why this is here and not only at
+         --  the top of Parse_Expression.
+
+         Skip_Datum_Comments;
 
          if Lex.Tok = Tok_Dot then
             Lex.Scan;

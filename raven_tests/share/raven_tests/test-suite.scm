@@ -401,6 +401,61 @@
 (test "car-3" '1 (car '(1 . 2)))
 (test "cdr-3" '2 (cdr '(1 . 2)))
 
+;;  Comments.  R7RS has three kinds and raven had one; the other two
+;;  were not merely absent, but read as code.  # is a character an
+;;  identifier may be made of and | is not, so #| was the identifier #
+;;  followed by a bad token and every word of the comment after it was
+;;  read as a program.
+
+#| a block comment |#
+(test "a block comment on its own" 1 1)
+
+(test "a block comment inside a form" 3 (+ 1 #| two |# 2))
+(test "a block comment where an element would be" '(1 2)
+      (list 1 #| between |# 2))
+
+;;  R7RS says the pairs nest, so this counts them rather than stopping
+;;  at the first |# it meets.
+
+#| outer #| inner |# still the outer one |#
+(test "a nested block comment" 2 2)
+(test "a nested block comment inside a form" 7 (+ 3 #| a #| b |# c |# 4))
+
+;;  A block comment runs to its close and not to the end of a line.
+
+#| this comment
+   goes on over
+   three lines |#
+(test "a block comment over several lines" 3 3)
+
+;;  #; takes out the datum after it, whatever that datum turns out to
+;;  be.  It used to read as the identifier # and then a line comment,
+;;  which took the rest of the line with it -- so the parentheses that
+;;  closed the form went too, and the reader ate the form after it
+;;  looking for them.
+
+(test "a datum comment in the middle" '(1 3) (list 1 #;2 3))
+(test "a datum comment at the end" '(1 2) (list 1 2 #;3))
+(test "a datum comment at the front" '(2 3) (list #;1 2 3))
+(test "two datum comments in a row" '(3) (list #;1 #;2 3))
+(test "a datum comment over a compound datum" '(1 2)
+      (list 1 #;(a b (c d)) 2))
+(test "a datum comment over a string" '(1 2) (list 1 #;"gone" 2))
+(test "a datum comment inside a nested list" '(1 (2 4))
+      (list 1 (list 2 #;3 4)))
+
+;;  And one at the top level takes out the whole form after it.
+
+#;(this form is not evaluated and would fail if it were)
+(test "a datum comment over a top level form" 4 4)
+
+;;  Neither of them is a comment inside a string, where # and | are
+;;  ordinary characters.
+
+(test "a block comment opener in a string" 6 (string-length "a #| b"))
+(test "a block comment closer in a string" 6 (string-length "a |# b"))
+(test "a datum comment in a string" 6 (string-length "a #; b"))
+
 ;;  quote written out means what the reader's ' means
 
 (test "quote written out, atom" 5 (quote 5))

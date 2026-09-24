@@ -493,6 +493,63 @@ package body Raven.Parser.Lexical is
                                             [Current_Stream.Ch]) > 0));
             begin
                if Current_Stream.Ch = '#'
+                 and then This.Peek = '|'
+               then
+
+                  --  A block comment, which was not one: # is a
+                  --  character an identifier may be made of and | is
+                  --  not, so #| read as the identifier # followed by a
+                  --  bad token, and every word of the comment after it
+                  --  was read as code.
+                  --
+                  --  R7RS says the pairs nest, so this counts them
+                  --  rather than looking for the first |#.
+
+                  declare
+                     Depth : Natural := 1;
+                  begin
+                     This.Next_Character;
+                     This.Next_Character;
+
+                     while Depth > 0 and then not This.End_Of_Stream loop
+                        if Current_Stream.Ch = '|'
+                          and then This.Peek = '#'
+                        then
+                           Depth := Depth - 1;
+                           This.Next_Character;
+                           This.Next_Character;
+                        elsif Current_Stream.Ch = '#'
+                          and then This.Peek = '|'
+                        then
+                           Depth := Depth + 1;
+                           This.Next_Character;
+                           This.Next_Character;
+                        else
+                           This.Next_Character;
+                        end if;
+                     end loop;
+
+                     if Depth > 0 then
+                        This.Error ("unterminated block comment");
+                     end if;
+                  end;
+
+                  This.Stop_Token;
+                  This.Scan;
+                  return;
+               elsif Current_Stream.Ch = '#'
+                 and then This.Peek = ';'
+               then
+
+                  --  A datum comment.  # read as an identifier and
+                  --  then ; commented out the rest of the line, which
+                  --  took whatever was left of the form with it.
+
+                  This.Next_Character;
+                  This.Next_Character;
+                  This.Stop_Token;
+                  Tok := Tok_Datum_Comment;
+               elsif Current_Stream.Ch = '#'
                  and then This.Peek = '\'
                then
                   This.Next_Character;
