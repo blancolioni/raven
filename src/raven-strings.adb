@@ -162,7 +162,7 @@ package body Raven.Strings is
       Evaluator.Bind_Foreign_Function
         ("raven-list->string", List_To_String'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("raven-string->list", String_To_List'Access, 1);
+        ("raven-string->list", String_To_List'Access, 3);
       Evaluator.Bind_Foreign_Function
         ("raven-enable-trace", Enable_Trace'Access, 1);
    end Load_String_Library;
@@ -200,13 +200,42 @@ package body Raven.Strings is
       pragma Assert
         (Is_Foreign_Value (X)
          and then VM.To_Foreign_Value (X) in Instance'Class);
-      S renames Instance'Class (VM.To_Foreign_Value (X)).Value;
+
+      --  A copy rather than a renaming of the value in the table.  The
+      --  loop below allocates, so a collection can happen inside it,
+      --  and what it would find is decided by the slots -- which is
+      --  also why the string stays in slot 1 until the answer is put
+      --  there, and why the list is built in a slot of its own.
+
+      S : constant Wide_Wide_String :=
+            Instance'Class (VM.To_Foreign_Value (X)).Value;
+
+      --  Where to start and where to stop, which string->list has
+      --  always taken and this has always ignored: it was bound as
+      --  taking one argument, so (string->list "hello" 1 3) was the
+      --  whole of "hello" and substring could not be written on it.
+
+      First : constant Integer := VM.Get_Slot (2);
+      Last  : constant Integer := VM.Get_Slot (3);
    begin
-      VM.Set_Slot_Nil (1);
-      for Ch of reverse S loop
-         VM.Set_Slot (2, To_Object (Ch));
-         VM.Slot_Cons (1, 2);
+      if First < 0 or else Last > S'Length or else First > Last then
+         raise Constraint_Error with
+           "string->list:" & First'Image & Last'Image
+           & " is not within a string of" & S'Length'Image;
+      end if;
+
+      VM.Set_Slot_Nil (4);
+
+      for I in reverse S'First + First .. S'First + Last - 1 loop
+         VM.Set_Slot (5, To_Object (S (I)));
+         VM.Slot_Cons (4, 5);
       end loop;
+
+      declare
+         Answer : constant Object := VM.Get_Slot (4);
+      begin
+         VM.Set_Slot (1, Answer);
+      end;
    end String_To_List;
 
    ------------------

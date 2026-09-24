@@ -10,8 +10,9 @@
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
 ;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
-;;  rests, optional and caddr, which the expander uses and which a
-;;  program asks (scheme cxr) for.
+;;  rests, string->copy, chars=?, chars<?, str=?, str<?, optional and
+;;  caddr, which the expander uses and which a program asks
+;;  (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a
@@ -65,8 +66,14 @@
    ;;  characters, which are immediates holding their own code point
    char? char->integer integer->char
 
-   ;;  strings
-   string-length string-append list->string string->list
+   ;;  strings.  Every one of these walks the string, because a string
+   ;;  is a foreign value and not something with an index; what is not
+   ;;  here is string-set!, string-fill! and string-copy!, which want
+   ;;  one that can be written to.
+   string? string-length string-append list->string string->list
+   string make-string string-ref substring string-copy
+   string=? string<? string>? string<=? string>=?
+   string-map string-for-each
 
    ;;  output
    write write-char write-string newline display

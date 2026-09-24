@@ -232,6 +232,73 @@
 (define (string-append . strings)
    (list->string (concatenate (map string->list strings))))
 
+;;  The rest of what R7RS asks of a string, written on string->list
+;;  and list->string, which is what string-append is written on.  Each
+;;  of them walks the string to do what a real string would do by
+;;  arithmetic; that is the price of a string being a foreign value,
+;;  and it is the same price string-append has always paid.
+
+(define (string . chars) (list->string chars))
+
+(define (make-string n fill)
+  (list->string (make-list n (optional fill #\space))))
+
+(define (string-ref string k) (list-ref (string->list string) k))
+
+;;  substring and string-copy are one procedure under two names, which
+;;  is what R7RS says they are.  string->list already takes where to
+;;  start and where to stop and fills in the whole string when it is
+;;  not told.
+
+(define (substring string start end) (string->copy string start end))
+(define (string-copy string start end) (string->copy string start end))
+
+(define (string->copy string start end)
+  (list->string (string->list string start end)))
+
+;;  Comparison.  A string is compared by its characters and a shorter
+;;  string that matches as far as it goes comes first, which is what
+;;  chars<? says and what string-length alone could not.
+
+(define (chars=? xs ys)
+  (if (null? xs)
+      (null? ys)
+      (if (null? ys)
+	  #f
+	  (if (eq? (car xs) (car ys)) (chars=? (cdr xs) (cdr ys)) #f))))
+
+(define (chars<? xs ys)
+  (if (null? ys)
+      #f
+      (if (null? xs)
+	  #t
+	  (if (< (char->integer (car xs)) (char->integer (car ys)))
+	      #t
+	      (if (< (char->integer (car ys)) (char->integer (car xs)))
+		  #f
+		  (chars<? (cdr xs) (cdr ys)))))))
+
+(define (str=? a b) (chars=? (string->list a) (string->list b)))
+(define (str<? a b) (chars<? (string->list a) (string->list b)))
+
+(define (string=? . ss) (all-left-assoc str=? #t ss))
+(define (string<? . ss) (all-left-assoc str<? #t ss))
+(define (string>? . ss) (all-left-assoc (lambda (a b) (str<? b a)) #t ss))
+(define (string<=? . ss)
+  (all-left-assoc (lambda (a b) (not (str<? b a))) #t ss))
+(define (string>=? . ss)
+  (all-left-assoc (lambda (a b) (not (str<? a b))) #t ss))
+
+;;  string-map and string-for-each take as many strings as they are
+;;  given and stop at the shortest, because map and for-each do: each
+;;  is the list one with the strings taken apart on the way in.
+
+(define (string-map f . ss)
+  (list->string (apply map f (map string->list ss))))
+
+(define (string-for-each f . ss)
+  (apply for-each f (map string->list ss)))
+
 ;;  map and for-each take as many lists as they are given and stop at
 ;;  the shortest of them, which is what R7RS asks and what one list was
 ;;  not.  One list is still its own walk rather than the general one:

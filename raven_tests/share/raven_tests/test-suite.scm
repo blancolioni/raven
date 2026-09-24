@@ -646,6 +646,90 @@
 (test "string-2" "abcde" (string-append "a" "b" "c" "d" "e"))
 (test "string-3" "" (string-append ""))
 
+;;  The rest of what R7RS asks of a string, all of it written on
+;;  string->list and list->string the way string-append already was.
+
+(test "string-ref" #\e (string-ref "hello" 1))
+(test "string-ref at the front" #\h (string-ref "hello" 0))
+(test "string-ref at the end" #\o (string-ref "hello" 4))
+
+;;  substring and string-copy are one procedure under two names.
+;;  Neither could be written until string->list took notice of where
+;;  to start and where to stop, which it had always been given and
+;;  always ignored.
+
+(test "substring" "el" (substring "hello" 1 3))
+(test "substring of the whole" "hello" (substring "hello" 0 5))
+(test "substring of nothing" "" (substring "hello" 2 2))
+(test "string-copy with no bounds" "hello" (string-copy "hello"))
+(test "string-copy from an index" "llo" (string-copy "hello" 2))
+(test "string-copy between two" "el" (string-copy "hello" 1 3))
+(test "a copy is as long as it says" 3 (string-length (string-copy "hello" 2)))
+
+(test "string" "ab" (string #\a #\b))
+(test "string of nothing" "" (string))
+(test "make-string" "zzz" (make-string 3 #\z))
+(test "make-string of nothing" "" (make-string 0 #\z))
+(test "make-string with no fill is still that long" 3
+      (string-length (make-string 3)))
+
+;;  A string is compared by its characters, and a shorter one that
+;;  matches as far as it goes comes first -- which is what length
+;;  alone could not say.
+
+(test "string=? over the same" #t (string=? "abc" "abc"))
+(test "string=? over different" #f (string=? "abc" "abd"))
+(test "string=? over different lengths" #f (string=? "ab" "abc"))
+(test "string=? over two empty" #t (string=? "" ""))
+(test "string<?" #t (string<? "abc" "abd"))
+(test "string<? the other way" #f (string<? "abd" "abc"))
+(test "string<? over a prefix" #t (string<? "ab" "abc"))
+(test "string<? over a prefix the other way" #f (string<? "abc" "ab"))
+(test "string<? over the same" #f (string<? "abc" "abc"))
+(test "string>?" #t (string>? "abd" "abc"))
+(test "string<=? over the same" #t (string<=? "abc" "abc"))
+(test "string<=? over less" #t (string<=? "abc" "abd"))
+(test "string<=? over more" #f (string<=? "abd" "abc"))
+(test "string>=? over the same" #t (string>=? "abc" "abc"))
+(test "string>=? over less" #f (string>=? "abc" "abd"))
+
+;;  And they are chains, the way = and < are.
+
+(test "string<? over three" #t (string<? "a" "b" "c"))
+(test "string<? over three that do not rise" #f (string<? "a" "c" "b"))
+(test "string=? over three" #t (string=? "a" "a" "a"))
+
+;;  string-map and string-for-each take as many strings as they are
+;;  given and stop at the shortest, because map and for-each do.
+
+(test "string-map" "bcd"
+      (string-map (lambda (c) (integer->char (+ 1 (char->integer c)))) "abc"))
+(test "string-map over nothing" "" (string-map (lambda (c) c) ""))
+(test "string-map stops at the shorter" "a"
+      (string-map (lambda (a b) a) "ab" "x"))
+(test "string-map takes from both" "xb"
+      (string-map (lambda (a b) (if (eq? a #\a) b a)) "ab" "xy"))
+
+(define string-seen '())
+(string-for-each (lambda (c) (set! string-seen (cons c string-seen))) "abc")
+(test "string-for-each walks every character" '(#\a #\b #\c)
+      (reverse string-seen))
+
+(define string-pairs '())
+(string-for-each
+ (lambda (a b) (set! string-pairs (cons (list a b) string-pairs)))
+ "abc" "xy")
+(test "string-for-each stops at the shorter" 2 (length string-pairs))
+
+;;  string->list itself, which is what all of the above stand on.
+
+(test "string->list" '(#\a #\b #\c) (string->list "abc"))
+(test "string->list from an index" '(#\b #\c) (string->list "abc" 1))
+(test "string->list between two" '(#\b) (string->list "abc" 1 2))
+(test "string->list of nothing" '() (string->list ""))
+(test "string->list of an empty range" '() (string->list "abc" 1 1))
+(test "list->string undoes it" "abc" (list->string (string->list "abc")))
+
 (test "first string of a session"  "first-append"  first-append)
 (test "second string of a session" "second-append" second-append)
 (test "third string of a session"  "third-append"  third-append)
