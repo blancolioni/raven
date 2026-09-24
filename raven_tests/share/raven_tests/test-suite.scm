@@ -934,6 +934,139 @@
       (call-with-all + (list 1 2 3 4 5)))
 (test "and none of them" 0 (call-with-all + '()))
 
+;;  Tail calls.  A call whose value is the value of the body it stands
+;;  in has nothing to come back for, so the machine saves nothing on
+;;  the dump and the callee returns straight past it.  A loop written
+;;  as a self-call then runs in the space of one call rather than of
+;;  all of them.
+;;
+;;  Every count below was out of reach before: the dump held three
+;;  cells a call, and somewhere past four thousand of them the machine
+;;  said "out of memory" and took the host with it.
+
+(define (countdown n) (if (= n 0) 'done (countdown (- n 1))))
+(test "a hundred thousand tail calls" 'done (countdown 100000))
+
+;;  The space is not the only thing to get right: the answer has to
+;;  come back too, through however many frames were not kept.
+
+(define (sum-to n acc) (if (= n 0) acc (sum-to (- n 1) (+ acc n))))
+(test "an accumulator over a hundred" 5050 (sum-to 100 0))
+(test "an accumulator over a thousand" 500500 (sum-to 1000 0))
+(test "an accumulator over ten thousand" 50005000 (sum-to 10000 0))
+
+;;  Ten thousand is where the total stops rather than where the loop
+;;  does: an object holds a 28 bit integer, and (sum-to 50000 0) is
+;;  past it.  That is the numeric tower and not this.
+
+;;  Where tail position is.  A body answers with its last form, so
+;;  that is the one, and a begin inside it answers with its last form
+;;  for the same reason.  The forms before are dropped, which is also
+;;  what leaves the stack empty for the last one to be a tail call.
+
+(define (through-begin n)
+  (if (= n 0) 'done (begin 'dropped (through-begin (- n 1)))))
+(test "a tail call through begin" 'done (through-begin 50000))
+
+(define (work-first n acc)
+  (if (= n 0) acc (begin (+ 1 1) (work-first (- n 1) (+ acc 1)))))
+(test "a begin whose earlier forms are dropped" 100 (work-first 100 0))
+
+;;  Whichever branch an if takes is what the if answers with, so both
+;;  branches are in tail position exactly when the if is.  This is the
+;;  case the whole thing turns on: a loop is an if in tail position,
+;;  and a tail call that did not reach inside one would fire for
+;;  nothing anybody writes.
+
+(define (either-branch n)
+  (if (= n 0)
+      'done
+      (if (even? n) (either-branch (- n 1)) (either-branch (- n 1)))))
+(test "a tail call in either branch" 'done (either-branch 50000))
+
+;;  Two procedures that call each other, neither of which returns
+;;  until the other does.  The dump holds neither.
+
+(define (ping n) (if (= n 0) 'ping (pong (- n 1))))
+(define (pong n) (if (= n 0) 'pong (ping (- n 1))))
+(test "mutual tail recursion" 'ping (ping 50000))
+(test "mutual tail recursion, landing on the other" 'pong (ping 50001))
+
+;;  A lambda applied where it stands is a call like any other, and
+;;  the last form of its body is in tail position.
+
+(define (through-lambda n)
+  (if (= n 0) 'done ((lambda (m) (through-lambda m)) (- n 1))))
+(test "a tail call from an applied lambda" 'done (through-lambda 50000))
+
+;;  let is that lambda, written by a macro, so its body is a body too.
+;;
+;;  through-let is declared before it is defined because the recursive
+;;  call sits inside the expansion: a name an expansion refers to that
+;;  the use site has not defined yet is looked for in the macro's own
+;;  library, where there is no through-let.  Declaring it first is
+;;  what there is to do about that, and it is #24 rather than this.
+
+(define through-let '())
+(define (through-let n)
+  (if (= n 0) 'done (let ((m (- n 1))) (through-let m))))
+(test "a tail call from inside a let" 'done (through-let 50000))
+
+;;  What a macro expands to stands where the macro stood, so a call it
+;;  leaves in tail position is a tail call.
+
+(define-syntax tail-if
+  (syntax-rules () ((_ test then otherwise) (if test then otherwise))))
+(define (through-macro n)
+  (tail-if (= n 0) 'done (through-macro (- n 1))))
+(test "a tail call out of a macro expansion" 'done (through-macro 50000))
+
+;;  apply is a call with its argument list built already, and is a
+;;  tail call in tail position like any other.
+
+(define (through-apply n)
+  (if (= n 0) 'done (apply through-apply (list (- n 1)))))
+(test "a tail call through apply" 'done (through-apply 50000))
+
+;;  A foreign function has nothing to transfer control to: it answers
+;;  where it stands.  So a tail call of one is the call and the return
+;;  done together, which is a path of its own in the machine.
+
+(define (code-of c) (char->integer c))
+(test "a foreign function in tail position" 65 (code-of #\A))
+
+(define (code-or-zero c) (if (char? c) (char->integer c) 0))
+(test "a foreign function in a tail branch" 97 (code-or-zero #\a))
+(test "and the other branch of it" 0 (code-or-zero 'not-a-char))
+
+;;  What is not in tail position is still not, and still works.  The
+;;  call below answers to the + around it rather than to its caller,
+;;  so every one of them is on the dump and the depth it manages is
+;;  the depth it always managed.  R7RS asks nothing else of it.
+
+(define (not-in-tail-position n)
+  (if (= n 0) 0 (+ 1 (not-in-tail-position (- n 1)))))
+(test "a call that is not a tail call still works" 1000
+      (not-in-tail-position 1000))
+
+;;  Which is the line through the library as well.  reverse, memq and
+;;  the rest of the accumulator walks are loops now and reach the end
+;;  of a list no dump could have held; length and map cons on the way
+;;  out and are not loops, so it is length rather than reverse that
+;;  decides how long a list can be asked about.
+;;
+;;  Nothing below is held in a name.  The heap is 32768 cells and a
+;;  list of five thousand is five thousand of them, so keeping one
+;;  would be measuring the heap rather than the dump.
+
+(define (build-list n acc) (if (= n 0) acc (build-list (- n 1) (cons n acc))))
+
+(test "a list built by a tail recursion" 1 (car (build-list 5000 '())))
+(test "reverse walks all of one" 5000 (car (reverse (build-list 5000 '()))))
+(test "memq reaches the end of one" #f (memq 'absent (build-list 5000 '())))
+(test "memq finds what is at the end" 5000
+      (car (memq 5000 (build-list 5000 '()))))
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there

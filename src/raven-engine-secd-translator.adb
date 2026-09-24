@@ -337,8 +337,18 @@ package body Raven.Engine.SECD.Translator is
          Found : out Boolean;
          Ent   : out Env_Entry);
 
+      --  Tail says that the value of this form is the value of the
+      --  body it stands in, so that a call here need save nothing.  It
+      --  is false everywhere by default and true only where it is
+      --  passed on: a body's last form, the branches of an if in tail
+      --  position, the last form of a begin in tail position, and what
+      --  a macro in tail position expanded to.  Never an argument, an
+      --  operator, an if's condition, or a top level form, which has
+      --  no body to return from.
+
       procedure Go
-        (Form : Object);
+        (Form : Object;
+         Tail : Boolean := False);
 
       function Head_Macro
         (F : Object)
@@ -348,11 +358,13 @@ package body Raven.Engine.SECD.Translator is
 
       procedure Nested
         (X    : Object;
-         Last : Instruction);
+         Last : Instruction;
+         Tail : Boolean := False);
 
       procedure Nested_Sequence
         (X    : Object;
-         Last : Instruction);
+         Last : Instruction;
+         Tail : Boolean := False);
 
       procedure Open_Scope;
 
@@ -682,7 +694,8 @@ package body Raven.Engine.SECD.Translator is
       --------
 
       procedure Go
-        (Form  : Object)
+        (Form  : Object;
+         Tail  : Boolean := False)
       is
          X : constant Root := Hold (Table, Form);
 
@@ -749,15 +762,26 @@ package body Raven.Engine.SECD.Translator is
                elsif Get (F) = Raven.Objects.If_Obj then
                   declare
                      Args : constant Root := Hold (Table, Get (A));
+
+                     --  Whichever branch is taken is what the if
+                     --  answers with, so both are in tail position
+                     --  exactly when the if is.  Then each branch
+                     --  returns for itself and there is no rest of the
+                     --  form to come back to, which is what lets TSEL
+                     --  leave the dump alone.  The condition is never
+                     --  in tail position: its value is tested here.
+
+                     Ends : constant Instruction :=
+                              (if Tail then RTN else JOIN);
                   begin
                      Go (Target.Car (Get (Args)));
-                     This.Append (SEL);
+                     This.Append (if Tail then TSEL else SEL);
                      Set (Args, Target.Cdr (Get (Args)));
-                     Nested (Target.Car (Get (Args)), JOIN);
+                     Nested (Target.Car (Get (Args)), Ends, Tail);
                      if Objects.Is_Pair (Get (Args)) then
-                        Nested (Target.Cadr (Get (Args)), JOIN);
+                        Nested (Target.Cadr (Get (Args)), Ends, Tail);
                      else
-                        Nested (Objects.Nil, JOIN);
+                        Nested (Objects.Nil, Ends, Tail);
                      end if;
                   end;
                elsif Get (F) = S_Begin then
@@ -766,7 +790,16 @@ package body Raven.Engine.SECD.Translator is
                      Arg : constant Root := Hold (Table, Get (A));
                   begin
                      while Is_Pair (Get (Arg)) loop
-                        Go (Target.Car (Get (Arg)));
+
+                        --  Only the last form answers for the begin,
+                        --  so only the last can be in tail position.
+                        --  The ones before it are dropped, which is
+                        --  also what leaves the stack empty for a call
+                        --  in the last one to be a tail call at all.
+
+                        Go (Target.Car (Get (Arg)),
+                            Tail and then not Is_Pair
+                              (Target.Cdr (Get (Arg))));
                         Set (Arg, Target.Cdr (Get (Arg)));
                         if Is_Pair (Get (Arg)) then
                            This.Append (DROP);
@@ -776,7 +809,7 @@ package body Raven.Engine.SECD.Translator is
                elsif Get (F) = Raven.Objects.Lambda then
                   Build_Env (Target.Car (Get (A)));
                   This.Append (LDF);
-                  Nested_Sequence (Target.Cdr (Get (A)), RTN);
+                  Nested_Sequence (Target.Cdr (Get (A)), RTN, Tail => True);
                   Close_Scope;
                elsif Get (F) = S_Set then
                   if not Raven.Objects.Is_Symbol (Target.Car (Get (A)))
@@ -849,7 +882,7 @@ package body Raven.Engine.SECD.Translator is
 
                      Compile_Spread (Target.Cdr (Get (A)));
                      Go (Target.Car (Get (A)));
-                     This.Append (AP);
+                     This.Append (if Tail then TAP else AP);
                   end;
                elsif Get (F) = S_Pair then
                   Go (Target.Car (Get (A)));
@@ -866,7 +899,7 @@ package body Raven.Engine.SECD.Translator is
                      Undefine_Macro (Target.Caar (Get (A)));
                      Build_Env (Target.Cdar (Get (A)));
                      This.Append (LDF);
-                     Nested_Sequence (Target.Cdr (Get (A)), RTN);
+                     Nested_Sequence (Target.Cdr (Get (A)), RTN, Tail => True);
                      Close_Scope;
                      This.Append (DFN);
                      Append_Definition (Target.Caar (Get (A)));
@@ -966,7 +999,7 @@ package body Raven.Engine.SECD.Translator is
 
                         Home      := Macro_Expansion;
                         Expanding := True;
-                        Go (Target.Pop);
+                        Go (Target.Pop, Tail);
 
                         Home      := Old_Home;
                         Expanding := Old_Expanding;
@@ -995,7 +1028,7 @@ package body Raven.Engine.SECD.Translator is
                      begin
                         Compile_Args (Get (A));
                         Go (Get (F));
-                        This.Append (AP);
+                        This.Append (if Tail then TAP else AP);
                      end;
                   end if;
                end if;
@@ -1106,7 +1139,8 @@ package body Raven.Engine.SECD.Translator is
 
       procedure Nested
         (X    : Object;
-         Last : Instruction)
+         Last : Instruction;
+         Tail : Boolean := False)
       is
          Old_Level : constant Natural := This.Current;
          New_Level : Natural;
@@ -1115,7 +1149,7 @@ package body Raven.Engine.SECD.Translator is
          This.Current := This.Code.Last_Index;
          New_Level := This.Current;
          Open_Scope;
-         Go (X);
+         Go (X, Tail);
          Close_Scope;
          if Last /= NOP then
             This.Append (Last);
@@ -1131,7 +1165,8 @@ package body Raven.Engine.SECD.Translator is
 
       procedure Nested_Sequence
         (X    : Object;
-         Last : Instruction)
+         Last : Instruction;
+         Tail : Boolean := False)
       is
          use Raven.Objects;
          Old_Level : constant Natural := This.Current;
@@ -1143,7 +1178,12 @@ package body Raven.Engine.SECD.Translator is
          New_Level := This.Current;
          Open_Scope;
          while Is_Pair (Get (It)) loop
-            Go (Target.Car (Get (It)));
+
+            --  A body answers with its last form and drops the rest,
+            --  so the last form is the one in tail position.
+
+            Go (Target.Car (Get (It)),
+                Tail and then not Is_Pair (Target.Cdr (Get (It))));
             Set (It, Target.Cdr (Get (It)));
             if Is_Pair (Get (It)) then
                This.Append (DROP);

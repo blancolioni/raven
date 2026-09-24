@@ -679,6 +679,94 @@ package body Raven.Engine.SECD is
                        This.Car (This.Rs (1));
                      This.St (S) := Objects.Nil;
                   end if;
+               when TAP =>
+
+                  --  A tail call is a call whose value is the value of
+                  --  the body it stands in, so the caller will do
+                  --  nothing between the callee returning and
+                  --  returning itself.  What AP saves on the dump
+                  --  would be taken off it and put straight back, so
+                  --  this is AP with the three pushes left out: the
+                  --  callee's RTN finds the caller's caller there and
+                  --  returns to it.  The dump stops growing, which is
+                  --  the whole of what a tail call is for.
+
+                  if Is_Foreign_Function (This.Top) then
+
+                     --  There is nothing to transfer control to: a
+                     --  foreign function answers where it stands.  So
+                     --  a tail call of one is the call and the return
+                     --  together, done here.
+
+                     declare
+                        FF_Id : constant Foreign_Function_Id :=
+                                  To_Foreign_Function_Id
+                                    (This.Pop);
+                        Args  : Object := This.Pop;
+                        FF    : constant Foreign_Function_Record :=
+                                  This.Foreign.Element (FF_Id);
+                     begin
+                        for I in 1 .. FF.Arg_Count loop
+                           if Args = Objects.Nil then
+                              This.VM.Set_Slot_Nil (Slot_Index (I));
+                           else
+                              This.VM.Set_Slot
+                                (Slot_Index (I),
+                                 This.Car (Args));
+                              Args := This.Cdr (Args);
+                           end if;
+                        end loop;
+                        FF.Handler (This.VM);
+                        This.Rs (1) := This.VM.Get_Slot (1);
+                     end;
+
+                     This.St (S) := This.Pop (D);
+                     This.St (E) := This.Pop (D);
+                     This.St (C) := This.Pop (D);
+                     This.Push (This.Rs (1));
+                  else
+                     This.Rs (1) := This.Pop (S);
+
+                     if not Objects.Is_Pair (This.Rs (1)) then
+                        raise Program_Error with
+                          "cannot call: "
+                          & This.Show (This.Rs (1));
+                     end if;
+
+                     This.Rs (2) := This.Pop (S);
+
+                     --  The caller's stack is dropped rather than
+                     --  saved, which is right only because there is
+                     --  nothing on it: the body's earlier forms were
+                     --  dropped and the call's own two operands have
+                     --  just come off.  RTN asserts as much when the
+                     --  callee returns.
+
+                     This.St (E) :=
+                       This.Memory.Cons
+                         (This.Rs (2), This.Cdr (This.Rs (1)));
+                     This.St (C) :=
+                       This.Car (This.Rs (1));
+                     This.St (S) := Objects.Nil;
+                  end if;
+               when TSEL =>
+
+                  --  SEL puts the rest of the form on the dump for
+                  --  JOIN to take back.  An if in tail position has no
+                  --  rest: each branch ends in a return of its own, so
+                  --  there is nothing to save and nothing to come back
+                  --  to.  Without this a tail call inside a branch
+                  --  would find JOIN's one saved register where RTN
+                  --  expects three.
+
+                  declare
+                     Cond : constant Boolean :=
+                              Objects.Is_Truthy (This.Pop);
+                     T    : constant Object  := This.Pop (C);
+                     F    : constant Object  := This.Pop (C);
+                  begin
+                     This.St (C) := (if Cond then T else F);
+                  end;
                when APPEND =>
 
                   --  The list on top goes in front, as the object on
