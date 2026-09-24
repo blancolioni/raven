@@ -69,6 +69,41 @@ package body Raven.Tests.Library is
       Test_Value (VM, "(length '(1 2 3))", 3);
       Test_Value (VM, "(list-ref '(1 2 3) 2)", 3);
 
+      --  A closure is not a pair any more, so the two that take a pair
+      --  apart refuse one.  That was the whole of #52: car handed back
+      --  a procedure's code, and a pair whose car happened to be a
+      --  code list could then be called.
+
+      Test_Error (VM, "(car (lambda (x) x))");
+      Test_Error (VM, "(cdr (lambda (x) x))");
+      Test_Error (VM, "(car car)");
+      Test_Error (VM, "(length (lambda (x) x))");
+
+      --  So the forgery in the issue cannot be built at all: it began
+      --  by taking the car of a procedure.
+
+      Test_Error (VM, "(cons (car (lambda (x) x)) '())");
+
+      --  Nor written to, which is what set-car! would have allowed
+      --  once it existed -- a program changing another procedure's
+      --  code or what it had captured.
+
+      Test_Error (VM, "(set-car! (lambda (x) x) 1)");
+      Test_Error (VM, "(set-cdr! (lambda (x) x) 1)");
+
+      --  And a list is not callable, which is the same check from the
+      --  other side.  AP asked whether it had a pair, which every
+      --  list is.
+
+      Test_Error (VM, "((list 1 2) 3)");
+      Test_Error (VM, "('(1 2) 3)");
+
+      --  What is callable still is.
+
+      Test_Value (VM, "((lambda (x) x) 7)", 7);
+      Test_Value (VM, "((lambda (x) (+ x 1)) 41)", 42);
+      Test_Value (VM, "(car '(1 2))", 1);
+
       --  A foreign function can be bound again under the same name,
       --  and the new handler is the one that runs.
 

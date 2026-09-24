@@ -36,6 +36,11 @@
    ;;  is the list the machine wanted in the first place
    apply
 
+   ;;  and asking whether a thing can be called at all, which wanted a
+   ;;  closure to be something other than a pair before it could be
+   ;;  asked
+   procedure?
+
    ;;  numbers.  Integer arithmetic, which is the only arithmetic
    ;;  raven has: exactness, rationals, sqrt and numerator want the
    ;;  numeric tower and are not this.  floor, ceiling, truncate and

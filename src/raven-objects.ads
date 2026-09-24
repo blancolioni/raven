@@ -102,6 +102,26 @@ private package Raven.Objects is
      with Post => Is_Symbol (To_Object'Result)
      and then To_Symbol (To_Object'Result) = Symbol;
 
+   --  A closure: the code and the environment it captured, in a cell
+   --  of its own kind rather than an ordinary pair.  It was a pair, so
+   --  car and cdr took one apart, nothing could tell one from a list,
+   --  and a list whose car happened to be a code list could be called.
+   --
+   --  A closure is an extended type, so its payload is twenty four
+   --  bits where a pair's is thirty.  The encoding has three primary
+   --  tags and no spare, and a closure is the first thing to have
+   --  wanted a fourth; what that costs is the ceiling below, which is
+   --  checked where the heap is made.
+
+   Max_Addressable_Cells : constant := 2 ** Extended_Payload_Bits;
+
+   function Is_Closure (X : Object) return Boolean;
+   function To_Closure (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Closure (To_Closure'Result)
+     and then Has_Address (To_Closure'Result)
+     and then Get_Address (To_Closure'Result) = Address;
+
    function Has_Address (X : Object) return Boolean;
    function Get_Address (X : Object) return Address_Type
      with Pre => Has_Address (X);
@@ -181,6 +201,7 @@ private
    Instruction_Tag : constant := Escape_Tag + 3 * Extended_Step;
    External_Tag    : constant := Escape_Tag + 4 * Extended_Step;
    Foreign_Tag     : constant := Escape_Tag + 5 * Extended_Step;
+   Closure_Tag     : constant := Escape_Tag + 6 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -296,11 +317,26 @@ private
    function To_Object (Symbol : Symbol_Id) return Object
    is (Extend (Object (Symbol), Symbol_Tag));
 
+   --  Both of the things that name a cell, which is what the
+   --  collector asks about: it has to walk a closure's code and
+   --  environment exactly as it walks a pair's car and cdr.
+
    function Has_Address (X : Object) return Boolean
-   is (Tag (X) = Pair_Tag);
+   is (Tag (X) = Pair_Tag or else Full_Tag (X) = Closure_Tag);
+
+   --  And their payloads are not in the same place, because one of
+   --  them is an extended type.
 
    function Get_Address (X : Object) return Address_Type
-   is (Address_Type (Payload (X)));
+   is (if Tag (X) = Pair_Tag
+       then Address_Type (Payload (X))
+       else Address_Type (Extended_Payload (X)));
+
+   function Is_Closure (X : Object) return Boolean
+   is (Full_Tag (X) = Closure_Tag);
+
+   function To_Closure (Address : Address_Type) return Object
+   is (Extend (Object (Address), Closure_Tag));
 
    function Is_Pair (X : Object) return Boolean
    is (Tag (X) = Pair_Tag);
