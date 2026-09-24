@@ -150,7 +150,7 @@ package body Raven.Engine.Memory is
       Container : not null access Raven.Containers.Abstraction'Class)
    is
    begin
-      This.Containers.Append (Container);
+      This.Containers.Append (Container_Reference (Container));
    end Add_Container;
 
    ----------

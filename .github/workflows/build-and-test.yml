@@ -1,0 +1,44 @@
+name: build and test
+
+#  On every push, and on every pull request as well.  The two are not
+#  the same check: a push tests the branch as it stands, and a pull
+#  request tests the branch merged into what it is aimed at, which is
+#  the one that catches a merge that breaks main.  A list where two
+#  branches added a name a line apart had already done that once.
+
+on:
+  push:
+  pull_request:
+
+#  A second push to the same branch makes the first one's answer
+#  uninteresting.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      #  The default toolchain is the newest gnat_native in the index,
+      #  which is what raven wants: alire.toml asks for ada2022 and the
+      #  sources use the target name @ and declare expressions, so
+      #  nothing older than GNAT 12 will read them.
+      - uses: alire-project/setup-alire@v6.0.0
+
+      #  raven_tests pins raven at .. , so building the harness builds
+      #  the library with it.  What the tests read at run time -- the
+      #  scheme library and the suite -- is read out of the checkout
+      #  rather than copied, so there is nothing to install.
+      - name: Build
+        working-directory: raven_tests
+        run: alr --non-interactive build
+
+      #  The harness prints each test as it goes and exits non-zero if
+      #  any of them failed, so the step fails when they do.
+      - name: Test
+        working-directory: raven_tests
+        run: ./bin/raven_tests
