@@ -588,12 +588,24 @@
           (sr-let-names (cdr bindings)))
       '()))
 
+;;  A named let binds its tag as well as the names in its bindings,
+;;  and the tag is what do writes its loop as -- so without this a
+;;  program with a name of its own where the tag lands would have it
+;;  taken over.
+
 (define (sr-bound-here template)
   (if (eq? (car template) 'lambda)
       (if (pair? (cdr template)) (sr-names (cadr template)) '())
       (if (eq? (car template) 'let)
-          (if (pair? (cdr template)) (sr-let-names (cadr template)) '())
-          '())))
+	  (if (pair? (cdr template))
+	      (if (symbol? (cadr template))
+		  (cons (cadr template)
+			(if (pair? (cddr template))
+			    (sr-let-names (caddr template))
+			    '()))
+		  (sr-let-names (cadr template)))
+	      '())
+	  '())))
 
 (define (sr-binders template)
   (if (pair? template)
@@ -729,10 +741,16 @@
 ;;  argument it answers with twice, because it can hold it in a name of
 ;;  its own and trust the name to stay its own.
 
+;;  let, and the named let that is a letrec around a lambda applied
+;;  where it stands.  A bare name cannot match a list of bindings, so
+;;  which of the two is meant is decided by the shape of what follows.
+
 (define-syntax let
   (syntax-rules ()
     ((_ ((name value) ...) body ...)
-     ((lambda (name ...) body ...) value ...))))
+     ((lambda (name ...) body ...) value ...))
+    ((_ tag ((name value) ...) body ...)
+     ((letrec ((tag (lambda (name ...) body ...))) tag) value ...))))
 
 ;;  let-syntax binds macros for a body and no further.  A body is a
 ;;  region and a macro defined in one belongs to it, so the body of a
@@ -769,6 +787,125 @@
     ((_) #f)
     ((_ a) a)
     ((_ a b ...) (let ((value a)) (if value value (or b ...))))))
+
+;;  letrec and letrec*.  The machine has DUM and RAP for this and the
+;;  translator emits neither, and neither is wanted: a name bound to
+;;  nothing and then assigned is a letrec, and set! on a name the
+;;  machine holds on the stack has worked since #26.
+;;
+;;  What letrec asks is that each value may name any of the others,
+;;  which holds because all the names are bound before any value is
+;;  worked out.  letrec* asks for that and for the values to be worked
+;;  out in the order they are written, which is what this does, so one
+;;  definition answers both.
+
+(define-syntax letrec
+  (syntax-rules ()
+    ((_ ((name value) ...) body ...)
+     (let ((name #f) ...)
+       (set! name value) ...
+       body ...))))
+
+(define-syntax letrec*
+  (syntax-rules ()
+    ((_ ((name value) ...) body ...)
+     (letrec ((name value) ...) body ...))))
+
+;;  let* is a let inside a let, as deep as it has bindings, so each
+;;  value sees the ones before it.
+
+(define-syntax let*
+  (syntax-rules ()
+    ((_ () body ...) (let () body ...))
+    ((_ ((name value)) body ...) (let ((name value)) body ...))
+    ((_ ((name value) rest ...) body ...)
+     (let ((name value)) (let* (rest ...) body ...)))))
+
+;;  cond.  else and => are literals, so a clause is told from a test
+;;  by what is written in it rather than by what it evaluates to.
+;;  The rules that take => come before the general one, because
+;;  (test => f) also reads as a test and two results.
+;;
+;;  A clause of a test alone answers with the test, which is why that
+;;  one holds it in a name: it is asked once and answered with.
+
+(define-syntax cond
+  (syntax-rules (else =>)
+    ((_ (else result ...)) (begin result ...))
+    ((_ (test => receiver)) (let ((value test)) (if value (receiver value) #f)))
+    ((_ (test => receiver) clause ...)
+     (let ((value test)) (if value (receiver value) (cond clause ...))))
+    ((_ (test)) test)
+    ((_ (test) clause ...) (let ((value test)) (if value value (cond clause ...))))
+    ((_ (test result ...)) (if test (begin result ...) #f))
+    ((_ (test result ...) clause ...)
+     (if test (begin result ...) (cond clause ...)))))
+
+;;  case asks memv of each clause's data, and holds the key in a name
+;;  so that it is worked out once however many clauses it is compared
+;;  against.  The rule for one clause comes first, because the rule
+;;  for several matches one as well with nothing left over.
+
+(define-syntax case
+  (syntax-rules (else =>)
+    ((_ key (else => receiver)) (receiver key))
+    ((_ key (else result ...)) (begin result ...))
+    ((_ key ((datum ...) => receiver))
+     (if (memv key '(datum ...)) (receiver key) #f))
+    ((_ key ((datum ...) result ...))
+     (if (memv key '(datum ...)) (begin result ...) #f))
+    ((_ key ((datum ...) result ...) clause ...)
+     (let ((k key))
+       (if (memv k '(datum ...)) (begin result ...) (case k clause ...))))))
+
+;;  do is a named let: the variables are what it loops on, the step is
+;;  what each becomes, and a variable written without one stays as it
+;;  was.  That last is what do-next is for -- a step is optional, and
+;;  a pattern cannot say so without somewhere to put the two shapes.
+
+(define-syntax do-next
+  (syntax-rules ()
+    ((_ variable) variable)
+    ((_ variable step) step)))
+
+(define-syntax do
+  (syntax-rules ()
+    ((_ ((variable init step ...) ...) (test result ...) command ...)
+     (let again ((variable init) ...)
+       (if test
+	   (begin #f result ...)
+	   (begin
+	     command ...
+	     (again (do-next variable step ...) ...)))))))
+
+;;  A promise is a procedure that answers the same thing every time
+;;  and works it out once, which is a closure and a set! -- and is
+;;  what #36 says a promise is.  force calls it.
+;;
+;;  What that costs is that a promise cannot be told from any other
+;;  procedure, so make-promise of a procedure is that procedure rather
+;;  than a promise of it.  R7RS wants them told apart, and telling
+;;  them apart wants a promise to be an object of its own.
+
+(define (make-promise-of thunk)
+  (let ((ready #f) (answer #f))
+    (lambda ()
+      (if ready
+	  answer
+	  (begin (set! answer (thunk)) (set! ready #t) answer)))))
+
+(define (make-promise value)
+  (if (procedure? value) value (make-promise-of (lambda () value))))
+
+(define (force promise) (promise))
+
+(define-syntax delay
+  (syntax-rules ()
+    ((_ expression) (make-promise-of (lambda () expression)))))
+
+(define-syntax delay-force
+  (syntax-rules ()
+    ((_ expression) (make-promise-of (lambda () (force expression))))))
 
 ;;  boolean? waits here for or rather than sitting with the other
 ;;  predicates, because or is now one of the forms above.

@@ -10,9 +10,9 @@
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
 ;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
-;;  rests, string->copy, chars=?, chars<?, str=?, str<?, optional and
-;;  caddr, which the expander uses and which a program asks
-;;  (scheme cxr) for.
+;;  rests, string->copy, chars=?, chars<?, str=?, str<?, do-next,
+;;  make-promise-of, optional and caddr, which the expander uses and
+;;  which a program asks (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a
@@ -82,6 +82,10 @@
    error
 
    ;;  syntax
-   define-syntax let let-syntax letrec-syntax when unless and or)
+   define-syntax let let* letrec letrec* let-syntax letrec-syntax
+   when unless and or cond case do
+
+   ;;  and what a promise is made of, which is a closure and a set!
+   delay delay-force force make-promise)
 
   (include "base-impl.scm"))

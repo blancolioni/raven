@@ -1020,6 +1020,153 @@
 (test "define-syntax in a body does not escape" 5
       ((lambda (twice) (twice 5)) (lambda (v) v)))
 
+;;  The derived syntax R7RS asks for, all of it written with
+;;  syntax-rules and none of it wanting anything the machine did not
+;;  already have.
+
+;;  cond.  else and => are literals, so which kind of clause a clause
+;;  is decided by what is written in it.
+
+(test "cond takes the first that holds" 2 (cond (#f 1) (#t 2) (else 3)))
+(test "cond falls through to else" 3 (cond (#f 1) (#f 2) (else 3)))
+(test "cond with nothing that holds" #f (cond (#f 1) (#f 2)))
+(test "cond with several results" 3 (cond (#t 1 2 3) (else 'no)))
+(test "cond answers the test when that is all there is" '(b c)
+      (cond ((memq 'b '(a b c))) (else 'no)))
+(test "cond asks a test that does not hold once" #f
+      (cond ((memq 'z '(a b c))) (else #f)))
+(test "cond hands the test to what follows the arrow" 'b
+      (cond ((memq 'b '(a b c)) => car) (else 'no)))
+(test "cond with an arrow that is not reached" 'no
+      (cond ((memq 'z '(a b c)) => car) (else 'no)))
+(test "cond with an arrow and nothing after it" #f
+      (cond ((memq 'z '(a b c)) => car)))
+
+;;  cond holds a test it means to answer with in a name, so it is
+;;  asked once.
+
+(define cond-asked 0)
+(define (cond-counted x) (set! cond-asked (+ cond-asked 1)) x)
+(test "cond answers with a test" 7 (cond ((cond-counted 7)) (else 'no)))
+(test "and asked it once" 1 cond-asked)
+
+;;  case, which asks memv of each clause's data.
+
+(test "case takes the clause its key is in" 'mid
+      (case 3 ((1 2) 'low) ((3 4) 'mid) (else 'high)))
+(test "case falls through to else" 'high
+      (case 9 ((1 2) 'low) ((3 4) 'mid) (else 'high)))
+(test "case with one clause" 'yes (case 1 ((1) 'yes)))
+(test "case with one clause and no match" #f (case 9 ((1) 'yes)))
+(test "case over symbols" 'found (case 'b ((a) 'no) ((b c) 'found) (else 'no)))
+(test "case over characters" 'letter
+      (case #\a ((#\a #\b) 'letter) (else 'other)))
+(test "case with several results" 3 (case 1 ((1) 1 2 3) (else 'no)))
+(test "case hands the key to an arrow" 5 (case 5 ((5) => (lambda (k) k))))
+
+;;  And works its key out once however many clauses it is compared
+;;  against, which is why it holds it in a name.
+
+(define case-asked 0)
+(define (case-counted x) (set! case-asked (+ case-asked 1)) x)
+(test "case over three clauses" 'third
+      (case (case-counted 3) ((1) 'first) ((2) 'second) ((3) 'third)))
+(test "asked its key once" 1 case-asked)
+
+;;  let* is a let inside a let, so each value sees the ones before it.
+
+(test "let* sees what came before" '(1 2 3)
+      (let* ((a 1) (b (+ a 1)) (c (+ b 1))) (list a b c)))
+(test "let* with one binding" 1 (let* ((a 1)) a))
+(test "let* with none" 'body (let* () 'body))
+(test "let* shadows outwards" 2 (let ((a 1)) (let* ((a 2)) a)))
+
+;;  letrec, where every name is bound before any value is worked out,
+;;  so each value may name any of the others.
+
+(test "letrec over two that call each other" #t
+      (letrec ((probe-even? (lambda (n) (if (= n 0) #t (probe-odd? (- n 1)))))
+               (probe-odd? (lambda (n) (if (= n 0) #f (probe-even? (- n 1))))))
+        (probe-even? 10)))
+(test "letrec over one that calls itself" 120
+      (letrec ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1)))))))
+        (fact 5)))
+(test "letrec* is the same thing" 120
+      (letrec* ((fact (lambda (n) (if (= n 0) 1 (* n (fact (- n 1)))))))
+        (fact 5)))
+(test "letrec* sees what came before it" 3
+      (letrec* ((a 1) (b (+ a 2))) b))
+
+;;  A named let is a letrec around a lambda applied where it stands.
+;;  A bare name cannot match a list of bindings, so which let is meant
+;;  is decided by the shape of what follows.
+
+(test "a named let loops" '(0 1 2)
+      (let loop ((i 0) (acc '()))
+        (if (= i 3) (reverse acc) (loop (+ i 1) (cons i acc)))))
+(test "a named let with one binding" 55
+      (let sum ((n 10)) (if (= n 0) 0 (+ n (sum (- n 1))))))
+(test "an ordinary let is still one" 3 (let ((a 1) (b 2)) (+ a b)))
+(test "an ordinary let with no bindings" 'body (let () 'body))
+
+;;  do, which is a named let with the steps written out.
+
+(test "do with a step" '(0 1 2)
+      (do ((i 0 (+ i 1)) (acc '() (cons i acc)))
+          ((= i 3) (reverse acc))))
+(test "do with a variable that has no step" 5
+      (do ((i 0 (+ i 1)) (n 5)) ((= i 3) n)))
+(test "do with commands in its body" 6
+      (let ((total 0))
+        (do ((i 1 (+ i 1))) ((= i 4) total) (set! total (+ total i)))))
+(test "do with no result at all" #f (do ((i 0 (+ i 1))) ((= i 3))))
+(test "do that runs no times" 'start (do ((i 0 (+ i 1))) (#t 'start)))
+(test "a do inside a do" 6
+      (do ((i 0 (+ i 1))
+           (t 0 (+ t (do ((j 0 (+ j 1)) (s 0 (+ s j))) ((= j 3) s)))))
+          ((= i 2) t)))
+
+;;  None of them takes a name the caller is using, which is what the
+;;  expander renames a template's own bindings for.  do is the one
+;;  that needed the expander told: a named let binds its tag, and the
+;;  tag is what do writes its loop as.
+
+(define probe-again 'the-callers-again)
+(define probe-value 'the-callers-value)
+
+(test "do does not take the caller's loop name" 'the-callers-again
+      (begin (do ((i 0 (+ i 1))) ((= i 2) 'done)) probe-again))
+(test "cond does not take the caller's name" 'the-callers-value
+      (cond (#f 1) (else probe-value)))
+(test "an arrow clause does not either" '((1) the-callers-value)
+      (cond ((list 1) => (lambda (x) (list x probe-value)))))
+(test "case does not take the caller's name" 'the-callers-value
+      (case 1 ((1) probe-value) (else 'no)))
+(test "a named let may use a name the caller has" 'inner
+      (let probe-again ((n 2))
+        (if (= n 0) 'inner (probe-again (- n 1)))))
+
+;;  A promise is a closure and a set!: it answers the same thing every
+;;  time and works it out once.
+
+(test "force answers what was delayed" 3 (force (delay (+ 1 2))))
+(test "force answers the same twice" '(3 3)
+      (let ((p (delay (+ 1 2)))) (list (force p) (force p))))
+
+(define delay-asked 0)
+(define delayed-probe
+  (delay (begin (set! delay-asked (+ delay-asked 1)) 7)))
+(test "a promise answers" 7 (force delayed-probe))
+(test "and again" 7 (force delayed-probe))
+(test "and worked it out once" 1 delay-asked)
+
+(test "make-promise of a value" 42 (force (make-promise 42)))
+(test "delay-force" 3 (force (delay-force (delay (+ 1 2)))))
+(test "a promise is not worked out until it is forced" 0
+      (let ((n 0))
+        (delay (set! n 1))
+        n))
+
 ;;  A name under two ellipses holds a list of lists, and repeats twice
 ;;  over on the way out.
 
