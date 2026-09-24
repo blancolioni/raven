@@ -174,6 +174,20 @@ package body Raven.Tests.Imports is
       --  before the refusal and fails on it.  Nothing of this issue
       --  can fix that, and a test of it would take the harness down.
 
+      --  pair? is exported now, so it answers as a value and not only
+      --  as a call the translator turns into an instruction.
+
+      Test_Number (VM, "(if (pair? '(1)) 1 0)", 1);
+      Test_Number (VM, "(length (map pair? '(1 (2) 3)))", 3);
+      Test_Number (VM, "(if ((lambda (f) (f '(1))) pair?) 1 0)", 1);
+
+      --  atom? was a form of the translator's and is not R7RS, so the
+      --  name means nothing now -- which is what any name that is not
+      --  defined means.
+
+      Test_Undefined (VM, "(atom? 1)");
+      Test_Undefined (VM, "atom?");
+
       --  A standard library asked for by name, off the same path the
       --  base library came from.  caddr is (scheme cxr)'s: R7RS takes
       --  the base library two deep and no further, so this is what a

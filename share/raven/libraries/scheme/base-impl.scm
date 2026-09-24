@@ -228,15 +228,16 @@
 ;;  Odds and ends the macro expander needs, and that a base library
 ;;  wants in any case.
 
-;;  car, cdr and cons are forms the translator knows, which compiles
-;;  them to an instruction, so the names have no value to pass to
-;;  anything.  Defining them gives the name a procedure as well: a call
-;;  written out still compiles to the instruction, and (map car xs) now
-;;  has a car to map.
+;;  car, cdr, cons and pair? are forms the translator knows, which
+;;  compiles them to an instruction, so the names have no value to pass
+;;  to anything.  Defining them gives the name a procedure as well: a
+;;  call written out still compiles to the instruction, and (map car xs)
+;;  now has a car to map.
 
 (define (car x) (car x))
 (define (cdr x) (cdr x))
 (define (cons x y) (cons x y))
+(define (pair? x) (pair? x))
 
 ;;  apply is one of those forms too, for the same reason and with the
 ;;  same remedy.  A call already builds a list of its arguments and

@@ -215,6 +215,26 @@
 ;;(test "pair-4" #f (pair? '#(a b)))
 (test "pair-5" #f (pair? 7))
 (test "pair-6" #f (pair? 'a))
+;;  pair? is a form the translator knows, so a call written out is an
+;;  instruction and no library had to offer one.  What that left was a
+;;  name with no value, which nothing could be handed -- (map pair? xs)
+;;  was undefined: pair?.  It is defined now, the way car and cdr are,
+;;  and a call still compiles to the instruction.
+
+(test "pair? handed to map" '(#f #t #f) (map pair? '(1 (2) 3)))
+(test "pair? handed to a procedure" #t
+      ((lambda (f) (f '(1))) pair?))
+(test "pair? handed to a procedure, and no" #f
+      ((lambda (f) (f 1)) pair?))
+(test "pair? held in a name" #t ((lambda (p) (p '(a . b))) pair?))
+(test "pair? applied over a list of arguments" #t (apply pair? '((1 2))))
+(test "pair? is one thing, not two" #t (eq? pair? pair?))
+
+;;  And the call written out is what it always was.
+
+(test "pair? called on a pair" #t (pair? '(a . b)))
+(test "pair? called on nothing" #f (pair? '()))
+
 (test "car-1" 'a (car '(a b c)))
 (test "cdr-1" '(b c)   (cdr '(a b c)))
 (test "car-2" '(a) (car '((a) b c d)))

@@ -25,7 +25,7 @@
 
    ;;  pairs and lists.  Two deep is as far as R7RS takes the base
    ;;  library; caddr and everything deeper is (scheme cxr).
-   cons car cdr caar cadr cdar cddr
+   cons car cdr caar cadr cdar cddr pair?
    set-car! set-cdr!
    list list? length append reverse make-list list-copy
    list-tail list-ref list-set! map for-each fold xcons
