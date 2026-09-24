@@ -2,6 +2,13 @@ package Raven.Tests is
 
    procedure Run_Tests;
 
+   --  How many of the tests did not pass.  Each one says so as it
+   --  goes, which is enough for somebody reading the output and no
+   --  use at all to a machine: the program exited successfully either
+   --  way.  This is what lets it stop doing that.
+
+   function Failures return Natural;
+
 private
 
    --  Where this harness reads the raven library from, for a suite

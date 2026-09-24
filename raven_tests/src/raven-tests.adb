@@ -41,6 +41,8 @@ package body Raven.Tests is
 
    procedure Report_Scheme_Suite (VM : Raven_VM);
 
+   Failure_Count : Natural := 0;
+
    procedure Test_Heap_Size;
 
    ------------------
@@ -174,6 +176,13 @@ package body Raven.Tests is
             Integer'Image (Total));
    end Report_Scheme_Suite;
 
+   --------------
+   -- Failures --
+   --------------
+
+   function Failures return Natural
+   is (Failure_Count);
+
    ----------
    -- Test --
    ----------
@@ -185,6 +194,10 @@ package body Raven.Tests is
    is
       use Ada.Text_IO;
    begin
+      if Expected /= Found then
+         Failure_Count := Failure_Count + 1;
+      end if;
+
       if Name'Length > 25 then
          Put (Name (Name'First .. Name'First + 22)
               & "...");
@@ -210,6 +223,10 @@ package body Raven.Tests is
    is
       use Ada.Text_IO;
    begin
+      if not Success then
+         Failure_Count := Failure_Count + 1;
+      end if;
+
       Put (Name);
       Set_Col (74);
       Put (if Success then "PASS" else "FAIL");
