@@ -222,6 +222,11 @@ package body Raven.Engine.SECD is
       Name  : String;
       Value : String);
 
+   overriding function Tracing
+     (This : Instance)
+      return Boolean
+   is (This.Trace);
+
    overriding procedure Swap
      (This : in out Instance);
 

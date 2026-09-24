@@ -1245,12 +1245,38 @@ package body Raven.Engine.SECD.Translator is
       Emit (1);
    exception
       when E : others =>
-         Ada.Text_IO.Put_Line (Ada.Exceptions.Exception_Message (E));
-         for I in 1 .. This.Code.Last_Index loop
-            Ada.Text_IO.Put (I'Image);
-            Ada.Text_IO.Set_Col (5);
-            Ada.Text_IO.Put_Line (Show_Code (This.Code (I), Target));
-         end loop;
+
+         --  This used to report and return, so a form the translator
+         --  refused looked to its caller exactly like one it had
+         --  read.  Evaluate translated and then executed whatever had
+         --  been emitted before the refusal, which for a form refused
+         --  early is nothing at all, and the machine read an
+         --  instruction off an empty code list and failed a
+         --  precondition -- out of the machine, taking the host with
+         --  it.  Nobody could catch a syntax error, because none ever
+         --  reached them.
+         --
+         --  So it says what happened and raises, and the message goes
+         --  where an error goes.  Read_Forms takes it from here for a
+         --  form in a file, the way it already takes an undefined
+         --  name: the file carries on at the form after it.
+
+         Ada.Text_IO.Put_Line
+           (Ada.Text_IO.Standard_Error,
+            Ada.Exceptions.Exception_Message (E));
+
+         --  And the code listing is for whoever is working on the
+         --  translator, so it waits to be asked for.
+
+         if Target.Tracing then
+            for I in 1 .. This.Code.Last_Index loop
+               Ada.Text_IO.Put (I'Image);
+               Ada.Text_IO.Set_Col (5);
+               Ada.Text_IO.Put_Line (Show_Code (This.Code (I), Target));
+            end loop;
+         end if;
+
+         raise;
    end Translate;
 
 end Raven.Engine.SECD.Translator;

@@ -19,6 +19,10 @@ package body Raven.Tests.Imports is
       Expression : String;
       Expected   : Integer);
 
+   procedure Test_Translation_Error
+     (VM         : Raven_VM;
+      Expression : String);
+
    procedure Test_Undefined
      (VM         : Raven_VM;
       Expression : String);
@@ -168,11 +172,24 @@ package body Raven.Tests.Imports is
       Test_Number (VM, "(if (char? #\a) 1 0)", 1);
       Test_Number (VM, "(if (exact-integer? 1) 1 0)", 1);
 
-      --  (apply +) is refused by the translator, and there is no
-      --  asserting that here: Translate reports what it raised and
-      --  returns, so Execute is handed the code that was emitted
-      --  before the refusal and fails on it.  Nothing of this issue
-      --  can fix that, and a test of it would take the harness down.
+      --  A form the translator refuses reaches the host now, where it
+      --  used to be reported and swallowed -- so Execute ran whatever
+      --  had been emitted before the refusal, which for a form
+      --  refused early is nothing, and the machine read an
+      --  instruction off an empty code list.  These could not be
+      --  written until #56; the first was written, watched take the
+      --  harness down, and taken out again.
+
+      Test_Translation_Error (VM, "(apply +)");
+      Test_Translation_Error (VM, "(set! 1 2)");
+      Test_Translation_Error (VM, "(lambda (1) 1)");
+      Test_Translation_Error (VM, "(define (f 1) 1)");
+
+      --  And the VM is still usable afterwards, which is the other
+      --  half of being told rather than taken down.
+
+      Test_Number (VM, "(+ 1 2)", 3);
+      Test_Number (VM, "(apply + '(1 2 3))", 6);
 
       --  pair? is exported now, so it answers as a value and not only
       --  as a call the translator turns into an instruction.
@@ -228,6 +245,22 @@ package body Raven.Tests.Imports is
             Integer'Image (VM.Get_Slot (1)),
             Integer'Image (Expected));
    end Test_Number;
+
+   ----------------------------
+   -- Test_Translation_Error --
+   ----------------------------
+
+   procedure Test_Translation_Error
+     (VM         : Raven_VM;
+      Expression : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+      Test ("library: " & Expression & " is refused", False);
+   exception
+      when Raven.Target.Translation_Error =>
+         Test ("library: " & Expression & " is refused", True);
+   end Test_Translation_Error;
 
    --------------------
    -- Test_Undefined --
