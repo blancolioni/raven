@@ -816,6 +816,19 @@ package body Raven.Engine.SECD is
                   declare
                      X : constant Object := This.Pop;
                   begin
+                     --  The same check CAR makes, which this did not.
+                     --  Cdr has Is_Pair as a precondition, so without
+                     --  it a cdr of something else was an assertion
+                     --  failure out of the machine with contracts on
+                     --  and an arbitrary cell with them off.  Every
+                     --  list procedure walks with cdr, so this is the
+                     --  check that decides whether a program that runs
+                     --  off the end of a list is told.
+
+                     if not Is_Pair (X) then
+                        raise Constraint_Error with
+                          "cdr applied to non-pair: " & This.Show (X);
+                     end if;
                      This.Push (This.Cdr (X));
                   end;
                when CONS =>
