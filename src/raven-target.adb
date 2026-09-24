@@ -75,6 +75,13 @@ package body Raven.Target is
          end;
       elsif Is_Symbol (X) then
          return This.To_String (Raven.Objects.To_Symbol (X));
+      elsif Is_Closure (X) then
+
+         --  What a procedure shows as, rather than the whole of its
+         --  code and everything it captured, which is what a pair
+         --  showed as and what a closure was.
+
+         return "#procedure";
       elsif Is_Foreign_Function (X) then
          return "#ff" & Integer'Image (-Integer (To_Foreign_Function_Id (X)));
       elsif Is_Pair (X) then

@@ -229,6 +229,18 @@ package body Raven.Engine.Memory is
                  Space_Size        => Space_Size,
                  others            => <>);
    begin
+      --  A closure names a cell with twenty four bits where a pair
+      --  does it with thirty, so a heap past that could hold a
+      --  procedure no procedure object could point at.  Said here
+      --  rather than left to truncate a pointer quietly.
+
+      if Size > Raven.Objects.Max_Addressable_Cells then
+         raise Constraint_Error with
+           "heap of" & Size'Image & " cells asked for, and"
+           & Natural'Image (Raven.Objects.Max_Addressable_Cells)
+           & " is the most a closure can name";
+      end if;
+
       return Mem;
    end Create;
 
@@ -475,7 +487,20 @@ package body Raven.Engine.Memory is
               Raven.Objects.To_Pair
                 (Copy (This, Address));
          end if;
-         return Cell.Car;
+
+         --  The forwarding pointer left behind is written as a pair,
+         --  which is all it needs to be for In_To_Space to know it
+         --  again.  What is given back has to carry the tag it arrived
+         --  with, though: a closure that has been copied is still a
+         --  closure, and handing back the pair would turn every
+         --  procedure that survived a collection into a list.
+
+         if Raven.Objects.Is_Closure (Item) then
+            return Raven.Objects.To_Closure
+              (Raven.Objects.Get_Address (Cell.Car));
+         else
+            return Cell.Car;
+         end if;
       end;
 
    end Move;

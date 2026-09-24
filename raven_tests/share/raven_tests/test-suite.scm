@@ -1021,6 +1021,67 @@
 (test "cdddr of a list" '(4) (cdddr '(1 2 3 4)))
 (test "cddddr of a list" '(5) (cddddr '(1 2 3 4 5)))
 
+;;  A closure is an object of its own kind now, where it used to be a
+;;  pair of the code and the environment it captured.  So it can be
+;;  asked about, which is what procedure? wanted, and it cannot be
+;;  taken apart, which is what car and cdr were doing to one.
+
+(test "procedure? of a lambda" #t (procedure? (lambda (x) x)))
+(test "procedure? of a name that holds one" #t (procedure? car))
+(test "procedure? of a foreign function" #t (procedure? equal?))
+(test "procedure? of one the library wrote" #t (procedure? map))
+(test "procedure? of a list" #f (procedure? '(1 2)))
+(test "procedure? of nothing" #f (procedure? '()))
+(test "procedure? of a number" #f (procedure? 7))
+(test "procedure? of a symbol" #f (procedure? 'car))
+(test "procedure? of a string" #f (procedure? "car"))
+(test "procedure? of a character" #f (procedure? #\a))
+
+;;  Which is the other half of it: a procedure is not a pair, so
+;;  nothing that walks pairs walks into one.
+
+(test "a procedure is not a pair" #f (pair? (lambda (x) x)))
+(test "a procedure is not a list" #f (list? (lambda (x) x)))
+(test "a procedure is not nothing" #f (null? (lambda (x) x)))
+
+;;  And it shows as what it is rather than as the whole of its code
+;;  and everything it closed over.
+
+(test "a procedure writes as one" "#procedure" (display (lambda (x) x)))
+
+;;  A procedure is still itself, and two of them are not each other.
+
+(test "a procedure is eq? to itself" #t
+      ((lambda (f) (eq? f f)) (lambda (x) x)))
+(test "two procedures are not eq?" #f
+      (eq? (lambda (x) x) (lambda (x) x)))
+(test "a procedure is equal? to itself" #t
+      ((lambda (f) (equal? f f)) (lambda (x) x)))
+(test "two procedures are not equal?" #f
+      (equal? (lambda (x) x) (lambda (x) x)))
+
+;;  The collector leaves a forwarding pointer written as a pair, so a
+;;  closure that has been copied would come back a list if what it
+;;  gave back did not carry the tag it arrived with.  Three thousand
+;;  cells of rubbish is several collections.
+
+(define (probe-churn n) (if (= n 0) '() (cons n (probe-churn (- n 1)))))
+(define probe-kept (lambda (x) (+ x 1)))
+(probe-churn 3000)
+
+(test "a procedure survives a collection" 42 (probe-kept 41))
+(test "and is still a procedure" #t (procedure? probe-kept))
+(test "and is still not a pair" #f (pair? probe-kept))
+
+;;  One the collector has to reach through, rather than one a name
+;;  holds directly: its code and its environment are cells like any
+;;  other and are walked the same way.
+
+(define (probe-adder n) (lambda (x) (+ x n)))
+(define probe-add-five (probe-adder 5))
+(probe-churn 3000)
+(test "a closure over a captured value survives" 12 (probe-add-five 7))
+
 ;;  Primitives the machine could always do and offered no name for.
 
 ;;  set-car! and set-cdr! write a cell, which is what RAP has always

@@ -20,6 +20,8 @@ package body Raven.Scheme is
 
    procedure Is_Number (VM : Raven_VM);
 
+   procedure Is_Procedure (VM : Raven_VM);
+
    procedure Is_Symbol (VM : Raven_VM);
 
    procedure Raise_Error (VM : Raven_VM);
@@ -160,6 +162,22 @@ package body Raven.Scheme is
       VM.Set_Slot (1, Raven.Objects.Is_Number (VM.Get_Slot (1)));
    end Is_Number;
 
+   ------------------
+   -- Is_Procedure --
+   ------------------
+
+   procedure Is_Procedure (VM : Raven_VM) is
+      use Raven.Objects;
+      X : constant Object := VM.Get_Slot (1);
+   begin
+      --  The two kinds there are: one written in scheme, which the
+      --  machine makes, and one the host bound.  Neither could be
+      --  asked about before -- a closure was a pair and answered to
+      --  pair? along with every list.
+
+      VM.Set_Slot (1, Is_Closure (X) or else Is_Foreign_Function (X));
+   end Is_Procedure;
+
    ---------------
    -- Is_Symbol --
    ---------------
@@ -206,6 +224,9 @@ package body Raven.Scheme is
         ("char->integer", Character_To_Integer'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("integer->char", Integer_To_Character'Access, 1);
+
+      Evaluator.Bind_Foreign_Function
+        ("procedure?", Is_Procedure'Access, 1);
 
       Evaluator.Bind_Foreign_Function
         ("char?", Is_Character'Access, 1);

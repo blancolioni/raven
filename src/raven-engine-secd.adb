@@ -670,8 +670,8 @@ package body Raven.Engine.SECD is
                      This.Push (D, This.St (E));
                      This.Rs (1) := This.Pop (S);
 
-                     if not Objects.Is_Pair (This.Rs (1)) then
-                        raise Program_Error with
+                     if not Objects.Is_Closure (This.Rs (1)) then
+                        raise Constraint_Error with
                           "cannot call: "
                           & This.Show (This.Rs (1));
                      end if;
@@ -733,8 +733,8 @@ package body Raven.Engine.SECD is
                   else
                      This.Rs (1) := This.Pop (S);
 
-                     if not Objects.Is_Pair (This.Rs (1)) then
-                        raise Program_Error with
+                     if not Objects.Is_Closure (This.Rs (1)) then
+                        raise Constraint_Error with
                           "cannot call: "
                           & This.Show (This.Rs (1));
                      end if;
@@ -914,7 +914,16 @@ package body Raven.Engine.SECD is
                   declare
                      CC : constant Object := This.Pop (C);
                   begin
-                     This.Push (S, This.Memory.Cons (CC, This.St (E)));
+                     --  The code and the environment it closes over,
+                     --  in a cell that says what it is.  It used to be
+                     --  an ordinary pair, so car took the code out of
+                     --  a procedure and a list could be called.
+
+                     This.Push
+                       (S,
+                        Objects.To_Closure
+                          (Objects.Get_Address
+                             (This.Memory.Cons (CC, This.St (E)))));
                   end;
                when OP_ADD =>
                   declare
