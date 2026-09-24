@@ -256,6 +256,39 @@
 (test "but it is not an exact integer" #f (exact-integer? 2.0))
 (test "a float is not an exact integer either" #f (exact-integer? 0.1))
 
+;;  The shapes of number the reader would not take.  An exponent was
+;;  reachable only through a decimal point, so 1e2 stopped being a
+;;  number at the e and came back a name; and a number could only begin
+;;  with a digit, a sign or a #, so .5 was a name too.  Both are
+;;  ordinary numbers raven could already hold.
+
+(test "an exponent without a point" #t (number? 1e2))
+(test "and it is the number it says" #t (eq? 1e2 100.0))
+(test "an exponent written with a capital" #t (eq? 1E2 100.0))
+(test "a negative exponent without a point" #t (eq? 1e-2 0.01))
+(test "a signed number with an exponent" #t (eq? -1e2 -100.0))
+
+(test "a decimal with no zero in front" #t (number? .5))
+(test "and it is the number it says" #t (eq? .5 0.5))
+(test "a negative decimal with no zero in front" #t (eq? -.5 -0.5))
+(test "a decimal with nothing after the point" #t (eq? 1. 1.0))
+
+;;  A point with no digit after it is still a name, which is what
+;;  keeps the ellipsis working.
+
+(test "the ellipsis is a name" #t (symbol? '...))
+(test "a name that begins with a point" #t (symbol? '.foo))
+(test "the ellipsis still ends a syntax-rules pattern" '(1 2 3)
+      (let-syntax ((listing (syntax-rules () ((_ x ...) (list x ...)))))
+        (listing 1 2 3)))
+
+;;  And the shapes that always read still do.
+
+(test "a plain decimal" #t (eq? 1.5 1.5))
+(test "a decimal with an exponent" #t (eq? 1.5e3 1500.0))
+(test "a plain integer is still an integer" #t (exact-integer? 123))
+(test "a number with an exponent is not" #f (exact-integer? 1e2))
+
 ;;  What it gives up for keeping the mantissa is range: six bits of
 ;;  exponent reach from about 2**-30 up to just short of 2**32, and a
 ;;  number outside that is reported where it is written and read as

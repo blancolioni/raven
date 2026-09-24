@@ -3,8 +3,9 @@ with Ada.Wide_Wide_Characters.Handling;
 package body Raven.Parser.Lexical.Identifiers is
 
    type State_Type is (Start, Scanning_Integer, Base_Prefix,
-                       Based_Sign, Based_Digits,
-                       Number_Sign, Decimal_Point, Scanning_Decimals,
+                       Based_Sign, Based_Digits
+                       Number_Sign, Leading_Dot,
+                       Decimal_Point, Scanning_Decimals,
                        Exponent, Exponent_Sign, Scanning_Exponent,
                        End_State_Identifier,
                        End_State_Integer,
@@ -109,6 +110,19 @@ package body Raven.Parser.Lexical.Identifiers is
                      State := Base_Prefix;
                   elsif Ch = '+' or else Ch = '-' then
                      State := Number_Sign;
+                  elsif Ch = '.' then
+
+                     --  A decimal written without the zero in front of
+                     --  it.  A number could only begin with a digit, a
+                     --  sign or a #, so .5 was a name.  A lone dot
+                     --  still is, and so is ... , because what decides
+                     --  is the digit after it.
+
+                     if Last then
+                        State := End_State_Identifier;
+                     else
+                        State := Leading_Dot;
+                     end if;
                   elsif Is_Digit (Ch) then
                      if Last then
                         State := End_State_Integer;
@@ -121,6 +135,12 @@ package body Raven.Parser.Lexical.Identifiers is
                when Number_Sign =>
                   if Ch = '#' then
                      State := Base_Prefix;
+                  elsif Ch = '.' then
+                     if Last then
+                        State := End_State_Identifier;
+                     else
+                        State := Leading_Dot;
+                     end if;
                   elsif Is_Digit (Ch) then
                      if Last then
                         State := End_State_Integer;
@@ -138,10 +158,37 @@ package body Raven.Parser.Lexical.Identifiers is
                      elsif Last then
                         State := End_State_Float;
                      end if;
+                  elsif Base = 10
+                    and then (Ch = 'e' or else Ch = 'E')
+                  then
+
+                     --  An exponent used to be reachable only through
+                     --  a decimal point, so 1e20 stopped being a
+                     --  number at the e and came back a name.  Base
+                     --  ten is asked about because e is a digit of
+                     --  base sixteen, where this is not an exponent at
+                     --  all; the test above this one has already sent
+                     --  a hex number's digits to Is_Base_Digit.
+
+                     if Last then
+                        State := End_State_Identifier;
+                     else
+                        State := Exponent;
+                     end if;
                   elsif not Is_Base_Digit (Ch, Base) then
                      State := End_State_Identifier;
                   elsif Last then
                      State := End_State_Integer;
+                  end if;
+               when Leading_Dot =>
+                  if Is_Digit (Ch) then
+                     if Last then
+                        State := End_State_Float;
+                     else
+                        State := Scanning_Decimals;
+                     end if;
+                  else
+                     State := End_State_Identifier;
                   end if;
                when Decimal_Point =>
                   if Is_Digit (Ch) then

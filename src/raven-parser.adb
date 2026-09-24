@@ -211,8 +211,7 @@ package body Raven.Parser is
                --  broken promise.
 
                declare
-                  Value : constant Float :=
-                            Float'Wide_Wide_Value (Lex.Tok_Text);
+                  Value : constant Float := Lex.Tok_Float_Value;
                begin
                   if not Raven.Objects.Is_Representable (Value) then
                      Lex.Error
