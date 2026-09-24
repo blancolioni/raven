@@ -346,7 +346,22 @@
 (define (heads xss) (if (null? xss) '() (cons (caar xss) (heads (cdr xss)))))
 (define (rests xss) (if (null? xss) '() (cons (cdar xss) (rests (cdr xss)))))
 
-(define (write x) (write-string (display x)))
+;;  R7RS has two ways of turning an object into text and they differ
+;;  on exactly two kinds of it: a string has its quotation marks and
+;;  its escapes when it is to be read back and not when it is to be
+;;  read, and a character has its #\ and its name.
+;;
+;;  There was one renderer and display was it, so write was display
+;;  with nothing added -- which made write right about strings, since
+;;  the renderer quoted them, and display wrong about them for the
+;;  same reason.  Each was right half the time.
+;;
+;;  And display answered with the text rather than writing it, which
+;;  is what object->string would do and not what display does.  Both
+;;  of them write now, and answer nothing in particular.
+
+(define (write x) (write-string (raven-write-text x)))
+(define (display x) (write-string (raven-display-text x)))
 
 (define (write-char ch) (raven-write-char ch))
 

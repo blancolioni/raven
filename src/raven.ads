@@ -125,7 +125,14 @@ package Raven is
 
    type Foreign_Value_Instance is abstract tagged private;
 
+   --  What a foreign value looks like written so that it can be read
+   --  back, and what it looks like for a person to read.  They are the
+   --  same thing unless the kind of value has quotation marks or
+   --  escapes that are only there for the reader, which is why Display
+   --  has an answer of its own to give and Show does not.
+
    function Show (This : Foreign_Value_Instance) return String is abstract;
+   function Display (This : Foreign_Value_Instance) return String;
    procedure Mark (This : in out Foreign_Value_Instance) is null;
    procedure Free (This : in out Foreign_Value_Instance) is null;
    function Equal (This : Foreign_Value_Instance;
@@ -270,9 +277,15 @@ private
       Value : Object)
       return Foreign_Value_Instance'Class;
 
+   --  Readable says which of the two is wanted: what the reader could
+   --  read back, or what a person reads.  It is the first by default,
+   --  because every caller but display wants a thing it can quote in a
+   --  message about what went wrong.
+
    function Display
-     (This : Raven_VM'Class;
-      Value : Object)
+     (This     : Raven_VM'Class;
+      Value    : Object;
+      Readable : Boolean := True)
       return Wide_Wide_String;
 
    function Equal

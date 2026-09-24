@@ -1,13 +1,49 @@
 package body Raven.Target is
 
+   function Character_To_Name
+     (Ch : Wide_Wide_Character)
+      return String;
+
    function To_String (X : Object) return String;
+
+   -----------------------
+   -- Character_To_Name --
+   -----------------------
+
+   --  The name a character is written under, and empty for one that
+   --  has none and is written as itself.  These are the nine R7RS
+   --  gives, and are Raven.Parser.Lexical.Characters' table read the
+   --  other way round -- which is where a name is turned back into a
+   --  character, and is a private child of the reader that this
+   --  cannot reach.  The two have to agree, and what keeps them
+   --  agreeing is that R7RS fixes the list.
+
+   function Character_To_Name
+     (Ch : Wide_Wide_Character)
+      return String
+   is
+   begin
+      case Wide_Wide_Character'Pos (Ch) is
+         when 0      => return "null";
+         when 7      => return "alarm";
+         when 8      => return "backspace";
+         when 9      => return "tab";
+         when 10     => return "newline";
+         when 13     => return "return";
+         when 27     => return "escape";
+         when 32     => return "space";
+         when 127    => return "delete";
+         when others => return "";
+      end case;
+   end Character_To_Name;
 
    ----------
    -- Show --
    ----------
 
-   function Show (This : Abstraction'Class;
-                  X    : Object)
+   function Show (This     : Abstraction'Class;
+                  X        : Object;
+                  Readable : Boolean := True)
                   return String
    is
       use Raven.Objects;
@@ -23,11 +59,11 @@ package body Raven.Target is
          if List = Nil then
             return "";
          elsif Is_Pair (List) then
-            return " " & This.Show (This.Car (List))
+            return " " & This.Show (This.Car (List), Readable)
               & Show_List (This.Cdr (List));
          else
             return " . "
-              & This.Show (List);
+              & This.Show (List, Readable);
          end if;
       end Show_List;
 
@@ -57,12 +93,23 @@ package body Raven.Target is
          end;
       elsif Is_Character (X) then
          declare
-            Ch : constant Wide_Wide_Character := To_Character (X);
+            Ch   : constant Wide_Wide_Character := To_Character (X);
+            Name : constant String := Character_To_Name (Ch);
+
+            --  The character on its own, which is what it is read as
+            --  and what display answers with.
+
+            function Bare return String
+            is (if Wide_Wide_Character'Pos (Ch) <= 255
+                then [Character'Val (Wide_Wide_Character'Pos (Ch))]
+                else Encode ([Ch]));
          begin
-            if Wide_Wide_Character'Pos (Ch) <= 255 then
-               return [Character'Val (Wide_Wide_Character'Pos (Ch))];
+            if not Readable then
+               return Bare;
+            elsif Name /= "" then
+               return "#\" & Name;
             else
-               return Natural'Image (Wide_Wide_Character'Pos (Ch));
+               return "#\" & Bare;
             end if;
          end;
       elsif Is_Float (X) then
@@ -85,10 +132,12 @@ package body Raven.Target is
       elsif Is_Foreign_Function (X) then
          return "#ff" & Integer'Image (-Integer (To_Foreign_Function_Id (X)));
       elsif Is_Pair (X) then
-         return "(" & This.Show (This.Car (X))
+         return "(" & This.Show (This.Car (X), Readable)
            & Show_List (This.Cdr (X)) & ")";
       elsif Is_Foreign_Value (X) then
-         return This.To_Foreign_Value (X).Show;
+         return (if Readable
+                 then This.To_Foreign_Value (X).Show
+                 else This.To_Foreign_Value (X).Display);
       else
          return To_String (X);
       end if;

@@ -116,7 +116,10 @@ package body Raven.Tests.Strings is
       --  display allocates strings too, so the same aliasing shows up
       --  when its results are combined.
 
-      Test_String (VM, "(string-append (display 12) (display 34))", "1234");
+      Test_String
+        (VM,
+         "(string-append (raven-display-text 12) (raven-display-text 34))",
+         "1234");
 
       --  Nested appends: the intermediate result must survive the
       --  allocation of the outer one.
