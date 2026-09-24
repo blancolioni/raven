@@ -372,7 +372,6 @@ package body Raven.Engine.SECD.Translator is
         (Sym : Object);
 
       S_Apply             : constant Object := Target.To_Symbol ("apply");
-      S_Atom              : constant Object := Target.To_Symbol ("atom?");
       S_Begin             : constant Object := Target.To_Symbol ("begin");
       S_Car               : constant Object := Target.To_Symbol ("car");
       S_Cdr               : constant Object := Target.To_Symbol ("cdr");
@@ -834,9 +833,6 @@ package body Raven.Engine.SECD.Translator is
                   Go (Target.Cadr (Get (A)));
                   Go (Target.Car (Get (A)));
                   This.Append (CONS);
-               elsif Get (F) = S_Atom then
-                  Go (Target.Car (Get (A)));
-                  This.Append (ATOM);
                elsif Get (F) = S_Apply then
 
                   --  apply needs nothing of the machine that a call
