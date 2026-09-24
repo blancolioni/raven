@@ -571,6 +571,71 @@ package body Raven.Parser.Lexical is
       return This.Current_Stream.Tok_Char;
    end Tok_Character_Value;
 
+   ---------------------
+   -- Tok_Float_Value --
+   ---------------------
+
+   function Tok_Float_Value
+     (This : in out Instance'Class)
+      return Float
+   is
+      Text : constant Wide_Wide_String :=
+               To_Wide_Wide_String (This.Current_Stream.Tok_Text);
+
+      --  Ada's Value wants a real literal, and a real literal always
+      --  has a point with a digit on each side of it.  Scheme's
+      --  numbers do not: .5, 1., and 1e20 are all numbers the scanner
+      --  now takes and none of them is an Ada literal.  So the text is
+      --  written out again with what Ada is missing put in.
+      --
+      --  Four more characters is room for every case: a zero in front
+      --  of a leading point, a zero after a trailing one, and the .0
+      --  an exponent with no point of its own wants.
+
+      Norm : Wide_Wide_String (1 .. Text'Length + 4);
+      Last : Natural := 0;
+      Point : Boolean := False;
+
+      procedure Put (Ch : Wide_Wide_Character);
+
+      ---------
+      -- Put --
+      ---------
+
+      procedure Put (Ch : Wide_Wide_Character) is
+      begin
+         Last := Last + 1;
+         Norm (Last) := Ch;
+      end Put;
+
+   begin
+      for I in Text'Range loop
+         declare
+            Ch : constant Wide_Wide_Character := Text (I);
+         begin
+            if Ch = '.' then
+               Point := True;
+               if Last = 0 or else Norm (Last) not in '0' .. '9' then
+                  Put ('0');
+               end if;
+               Put ('.');
+               if I = Text'Last or else Text (I + 1) not in '0' .. '9' then
+                  Put ('0');
+               end if;
+            elsif not Point and then (Ch = 'e' or else Ch = 'E') then
+               Put ('.');
+               Put ('0');
+               Put (Ch);
+               Point := True;
+            else
+               Put (Ch);
+            end if;
+         end;
+      end loop;
+
+      return Float'Wide_Wide_Value (Norm (1 .. Last));
+   end Tok_Float_Value;
+
    -----------------------
    -- Tok_Integer_Value --
    -----------------------
