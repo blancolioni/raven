@@ -1078,6 +1078,50 @@
 (test "list? still says yes to nothing" #t (list? '()))
 (test "list? still says no to an improper list" #f (list? '(1 2 . 3)))
 
+;;  A name written between vertical bars, which may hold anything at
+;;  all -- the spaces and the characters that would otherwise end it
+;;  included.  The bar was in no branch of the scanner, so each one was
+;;  a bad token and the words between them were read as separate names.
+
+(test "a name with spaces in it" #t (symbol? '|a bar name|))
+(test "and it is one name" #t (eq? '|a bar name| '|a bar name|))
+(test "a name with a bracket in it" #t (symbol? '|a (b) c|))
+(test "a name with a quote in it" #t (symbol? '|it's|))
+(test "a name with no characters at all" #t (symbol? '||))
+(test "an ordinary name written between bars" #t (eq? '|abc| 'abc))
+
+;;  Which is what it is for, now that a symbol can be made from a
+;;  string: a name with a space in it could be built and there was no
+;;  way to write it down and read it back.
+
+(test "a symbol with a space survives the round trip" #t
+      (eq? (string->symbol "a bar name") '|a bar name|))
+(test "and its name is what was put in" "a bar name"
+      (symbol->string '|a bar name|))
+(test "a symbol built from an awkward name writes as one" #t
+      (eq? (string->symbol "(") '|(|))
+
+;;  What is between the bars is a name and nothing else, which is why
+;;  it is a token of its own: these would all be something other than
+;;  a symbol without the bars.
+
+(test "a boolean between bars is a name" #t (symbol? '|#t|))
+(test "and not the boolean" #f (eq? '|#t| #t))
+(test "a number between bars is a name" #t (symbol? '|123|))
+(test "and not the number" #f (eq? '|123| 123))
+
+;;  R7RS gives all four spellings of the booleans and only the two
+;;  short ones were matched, so #true and #false were interned as
+;;  ordinary names.
+
+(test "#true is true" #t #true)
+(test "#false is false" #f #false)
+(test "#true is the short one" #t (eq? #true #t))
+(test "#false is the short one" #t (eq? #false #f))
+(test "#true is a boolean" #t (boolean? #true))
+(test "#false is a boolean" #t (boolean? #false))
+(test "and the short ones are what they were" #t (if #t #t #f))
+
 ;;  symbol->string and string->symbol.  The symbol table already read
 ;;  a name both ways; these are the two directions of it.
 

@@ -132,9 +132,13 @@ package body Raven.Parser is
                   Sym : constant Wide_Wide_String := Lex.Tok_Text;
                begin
                   Lex.Scan;
-                  if Sym = "#t" then
+                  --  R7RS gives all four spellings and only the two
+                  --  short ones were matched, so #true and #false were
+                  --  interned as ordinary names.
+
+                  if Sym = "#t" or else Sym = "#true" then
                      Target.Push (Raven.Objects.To_Object (True));
-                  elsif Sym = "#f" then
+                  elsif Sym = "#f" or else Sym = "#false" then
                      Target.Push (Raven.Objects.To_Object (False));
                   elsif Sym = "if" then
                      Target.Push (Raven.Objects.If_Obj);
@@ -153,6 +157,22 @@ package body Raven.Parser is
                           (Target.To_Symbol_Id (Encode (Sym))));
                   end if;
                end;
+            when Tok_Bar_Identifier =>
+
+               --  Whatever is between the bars is the name, and
+               --  nothing it spells means anything else: |if| is the
+               --  identifier if, and |#t| is a symbol rather than a
+               --  boolean, which is why this is a token of its own.
+
+               declare
+                  Sym : constant Wide_Wide_String := Lex.Tok_Text;
+               begin
+                  Lex.Scan;
+                  Target.Push
+                    (Raven.Objects.To_Object
+                       (Target.To_Symbol_Id (Encode (Sym))));
+               end;
+
             when Tok_Start_Vector =>
                Lex.Scan;
                Target.Push
