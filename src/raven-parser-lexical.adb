@@ -348,6 +348,10 @@ package body Raven.Parser.Lexical is
          begin
 
             case Current_Stream.Ch is
+               when 'a' =>
+                  V := 7;
+               when 'b' =>
+                  V := 8;
                when 't' =>
                   V := 9;
                when 'n' =>
@@ -361,8 +365,20 @@ package body Raven.Parser.Lexical is
                when '|' =>
                   V := 16#7C#;
                when others =>
+
+                  --  R7RS says a backslash before anything else is an
+                  --  error.  This reported one through the reader's
+                  --  own error channel and then raised as well, which
+                  --  took the form and the host with it -- one thing
+                  --  too many, since a bad token is reported and the
+                  --  reader carries on.
+                  --
+                  --  So is this now, with the escaped character
+                  --  standing for itself, which is the reading that
+                  --  keeps a typo in a string from ending a session.
+
                   This.Error ("bad escape");
-                  raise Program_Error;
+                  V := Wide_Wide_Character'Pos (Current_Stream.Ch);
             end case;
             This.Next_Character;
             return Wide_Wide_Character'Val (V);
