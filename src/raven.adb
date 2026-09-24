@@ -335,7 +335,7 @@ package body Raven is
                (Data => new Raven_VM_Record'
                   (Text_Writer => Text_Writer,
                    File_Reader => File_Reader,
-                   User_Data   => User_Data,
+                   User_Data   => User_Data_Reference (User_Data),
                    IO          => Raven.IO.Standard_IO,
                    Memory      => Memory,
                    Evaluator   => null,
