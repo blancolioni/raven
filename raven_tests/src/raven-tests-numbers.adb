@@ -45,6 +45,26 @@ package body Raven.Tests.Numbers is
 
       Test_Error (VM, "(/ 1 0)");
 
+      --  - and / want an argument, where they used to answer 0 and 1 --
+      --  which are the identities of adding and multiplying and not of
+      --  anything these two do.
+
+      Test_Error (VM, "(-)");
+      Test_Error (VM, "(/)");
+
+      --  = asks about numbers.  It used to be identity, so it answered
+      --  for anything at all and (= 'a 'a) was #t.
+
+      Test_Error (VM, "(= 'a 'a)");
+      Test_Error (VM, "(= 1 'a)");
+      Test_Error (VM, "(= '(1) '(1))");
+      Test_Error (VM, "(= ""a"" ""a"")");
+
+      --  map and for-each want a list to walk.
+
+      Test_Error (VM, "(map car)");
+      Test_Error (VM, "(for-each car)");
+
       Test_Number (VM, "(length '(1 2 3 4 5))", 5);
       Test_Number (VM, "(length (append '(1 2 3) '(4 5 6)))", 6);
    end Run_Tests;

@@ -373,6 +373,61 @@
 (test "list? of a pair that is not a list" #f (list? '(1 . 2)))
 (test "list? of what is not a pair at all" #f (list? 7))
 
+;;  map takes as many lists as it is given and stops at the shortest,
+;;  which is what R7RS asks and what one list was not.
+
+(test "map over two lists" '(11 22) (map + '(1 2) '(10 20)))
+(test "map over two lists, building" '((1 a) (2 b))
+      (map list '(1 2) '(a b)))
+(test "map over three lists" '(111) (map + '(1) '(10) '(100)))
+(test "map stops at the shorter, second" '(11 22) (map + '(1 2 3) '(10 20)))
+(test "map stops at the shorter, first" '(11 22) (map + '(1 2) '(10 20 30)))
+(test "map over two empty lists" '() (map + '() '()))
+(test "map when one of them is empty" '() (map + '(1 2) '()))
+(test "map over one list still walks it" '(1 3)
+      (map car '((1 2) (3 4))))
+(test "map over one list is what it was" '(2 3 4) (map (lambda (x) (+ x 1)) '(1 2 3)))
+
+;;  for-each is map without the answer.
+
+(define two-list-seen '())
+(for-each (lambda (a b) (set! two-list-seen (cons (list a b) two-list-seen)))
+          '(1 2) '(a b))
+(test "for-each over two lists" '((1 a) (2 b)) (reverse two-list-seen))
+
+(define shortest-seen 0)
+(for-each (lambda (a b) (set! shortest-seen (+ shortest-seen 1)))
+          '(1 2 3) '(10 20))
+(test "for-each stops at the shorter" 2 shortest-seen)
+
+;;  = asks about numbers now, where it used to ask about identity and
+;;  answer for anything at all.  Within a type it is what it was,
+;;  because a number is an immediate and two equal ones are one word.
+
+(test "= over equal integers" #t (= 1 1))
+(test "= over unequal integers" #f (= 1 2))
+(test "= over three the same" #t (= 1 1 1))
+(test "= over three not quite" #f (= 1 1 2))
+(test "= over equal floats" #t (= 2.5 2.5))
+(test "= over unequal floats" #f (= 2.5 2.0))
+
+;;  Across the two it is not, and cannot be here: raven-leq takes two
+;;  integers and is the only comparison the machine has, so (= 2.0 2)
+;;  is written down as what happens rather than left to be found.
+
+(test "= over a float and an integer that look equal" #f (= 2.0 2))
+
+;;  - and / want an argument.  + and * do not, because there is a
+;;  number that leaves a sum or a product alone and there is no such
+;;  number for subtracting or dividing.
+
+(test "+ with no arguments" 0 (+))
+(test "* with no arguments" 1 (*))
+(test "- with one argument negates" -5 (- 5))
+(test "- with two subtracts" 7 (- 10 3))
+(test "/ with one argument inverts" 0 (/ 2))
+(test "/ with two divides" 3 (/ 6 2))
+
 ;;  for-each is map without the answer: it is asked for what the
 ;;  procedure does, in the order the list is written.
 

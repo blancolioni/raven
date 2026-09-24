@@ -8,9 +8,10 @@
 ;;  take the name of.  Nor are the helpers the exported procedures are
 ;;  built from: append2, concatenate, all-left-assoc, apply-subtract,
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
-;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, optional
-;;  and caddr, which the expander uses and which a program asks
-;;  (scheme cxr) for.
+;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
+;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
+;;  rests, optional and caddr, which the expander uses and which a
+;;  program asks (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a

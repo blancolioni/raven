@@ -81,21 +81,46 @@
 	      (all-left-assoc op z (cdr xs))
 	      #f))))
 
-(define (= . xs) (all-left-assoc eq? #t xs))
+;;  = asks about numbers, where it used to ask about identity and
+;;  answer for anything at all: (= 'a 'a) was #t.
+;;
+;;  Within a type eq? is numeric equality here, because a number is an
+;;  immediate and two equal ones are the same word.  Across types it is
+;;  not: (= 2.0 2) is #f where R7RS asks for #t, and answering that
+;;  wants a comparison the machine does not have, raven-leq taking two
+;;  integers.  That half is the numeric tower's.
+
+(define (= . xs) (all-left-assoc num-eq? #t xs))
+
+(define (num-eq? a b)
+  (if (if (number? a) (number? b) #f)
+      (eq? a b)
+      (error "=: expected numbers")))
 
 
 (define (+ . xs) (fold raven-add 0 xs))
 (define (* . xs) (fold raven-mul 1 xs))
 
+;;  + and * have an answer for no arguments at all, because there is a
+;;  number that leaves a sum or a product alone.  - and / have none:
+;;  one argument means negate or invert and two or more means subtract
+;;  or divide, so with nothing to start from there is nothing to do.
+;;  They used to answer 0 and 1, which are the identities of the other
+;;  two operations.
+
 (define (- . xs) (apply-subtract xs))
-(define (apply-subtract xs) (if (null? xs) 0
-				(if (null? (cdr xs)) (raven-sub 0 (car xs))
-				    (raven-sub (car xs) (fold raven-add 0 (cdr xs))))))
+(define (apply-subtract xs)
+  (if (null? xs)
+      (error "-: expected at least one argument")
+      (if (null? (cdr xs)) (raven-sub 0 (car xs))
+	  (raven-sub (car xs) (fold raven-add 0 (cdr xs))))))
 
 (define (/ . xs) (apply-divide xs))
-(define (apply-divide xs) (if (null? xs) 1
-			      (if (null? (cdr xs)) (raven-div 1 (car xs))
-				  (raven-div (car xs) (fold raven-mul 1 (cdr xs))))))
+(define (apply-divide xs)
+  (if (null? xs)
+      (error "/: expected at least one argument")
+      (if (null? (cdr xs)) (raven-div 1 (car xs))
+	  (raven-div (car xs) (fold raven-mul 1 (cdr xs))))))
 
 ;;  Comparison.  raven-leq is the only one the machine has and the
 ;;  other three are it with the arguments turned around, negated, or
@@ -207,10 +232,52 @@
 (define (string-append . strings)
    (list->string (concatenate (map string->list strings))))
 
-(define (map f xs) (if (null? xs) '() (cons (f (car xs)) (map f (cdr xs)))))
+;;  map and for-each take as many lists as they are given and stop at
+;;  the shortest of them, which is what R7RS asks and what one list was
+;;  not.  One list is still its own walk rather than the general one:
+;;  the general one builds a list of the heads for every element it
+;;  answers, and one list is what the library itself asks for
+;;  everywhere -- the expander and string-append included.
 
-(define (for-each f xs)
-  (if (null? xs) '() (begin (f (car xs)) (for-each f (cdr xs)))))
+(define (map f . xss)
+  (if (null? xss)
+      (error "map: expected at least one list")
+      (if (null? (cdr xss))
+	  (map1 f (car xss))
+	  (map-lists f xss))))
+
+(define (map1 f xs) (if (null? xs) '() (cons (f (car xs)) (map1 f (cdr xs)))))
+
+(define (map-lists f xss)
+  (if (any-null? xss)
+      '()
+      (cons (apply f (heads xss)) (map-lists f (rests xss)))))
+
+(define (for-each f . xss)
+  (if (null? xss)
+      (error "for-each: expected at least one list")
+      (if (null? (cdr xss))
+	  (for-each1 f (car xss))
+	  (for-each-lists f xss))))
+
+(define (for-each1 f xs)
+  (if (null? xs) '() (begin (f (car xs)) (for-each1 f (cdr xs)))))
+
+(define (for-each-lists f xss)
+  (if (any-null? xss)
+      '()
+      (begin (apply f (heads xss)) (for-each-lists f (rests xss)))))
+
+;;  Stopping at the shortest is asking whether any of them has run out,
+;;  and stepping them is taking the car and the cdr of each.
+
+(define (any-null? xss)
+  (if (null? xss)
+      #f
+      (if (null? (car xss)) #t (any-null? (cdr xss)))))
+
+(define (heads xss) (if (null? xss) '() (cons (caar xss) (heads (cdr xss)))))
+(define (rests xss) (if (null? xss) '() (cons (cdar xss) (rests (cdr xss)))))
 
 (define (write x) (write-string (display x)))
 
