@@ -446,6 +446,54 @@ package body Raven.Parser.Lexical is
             Current_Stream.Column := 0;
             Current_Stream.Ch := ' ';
             This.Scan;
+         when '|' =>
+
+            --  A name between vertical bars, which may hold anything
+            --  at all -- spaces and the characters that would
+            --  otherwise end it included.  The bar was in no branch
+            --  of this at all, so each one was a bad token and the
+            --  words between them were read as separate names.
+            --
+            --  It matters more now than it looks, because
+            --  symbol->string and string->symbol are both here: a
+            --  program can make a symbol whose name has a space in
+            --  it, and without this there is no way to write that
+            --  symbol down and read it again.
+
+            This.Next_Character;
+            This.Start_Token;
+
+            declare
+               Result : Unbounded_Wide_Wide_String;
+            begin
+               while not This.End_Of_Stream
+                 and then Current_Stream.Ch /= '|'
+               loop
+                  if Current_Stream.Ch = '\' then
+                     This.Next_Character;
+                     Result := Result
+                       & This.Read_Character (Long_Names => False);
+                  elsif This.End_Of_Line then
+                     This.Error ("unterminated name");
+                     exit;
+                  else
+                     Result := Result & Current_Stream.Ch;
+                     This.Next_Character;
+                  end if;
+               end loop;
+
+               This.Stop_Token;
+
+               if This.End_Of_Stream then
+                  This.Error ("unterminated name");
+               else
+                  This.Next_Character;
+               end if;
+
+               Current_Stream.Tok_Text := Result;
+               Tok := Tok_Bar_Identifier;
+            end;
+
          when '"' =>
             This.Next_Character;
             This.Start_Token;
