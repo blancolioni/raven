@@ -46,6 +46,13 @@ package body Raven.Engine.SECD is
       Expansion  : Raven.Target.Library_Id := Raven.Target.No_Library;
    end record;
 
+   package Object_Vectors is
+     new Ada.Containers.Vectors (Positive, Object);
+
+   package Library_Id_Vectors is
+     new Ada.Containers.Vectors (Positive, Raven.Target.Library_Id,
+                                 Raven.Target."=");
+
    package Macro_Vectors is
      new Ada.Containers.Vectors
        (Raven.Target.Real_Macro_Id, Macro_Entry);
@@ -67,6 +74,8 @@ package body Raven.Engine.SECD is
       record
          VM          : Raven_VM;
          Abandoned   : Natural := 0;
+         Held        : Object_Vectors.Vector;
+         Incomplete  : Library_Id_Vectors.Vector;
          St          : Stacks;
          Rs          : Registers;
          Syms        : Raven.Symbols.Reference;
@@ -224,6 +233,22 @@ package body Raven.Engine.SECD is
       Message : String);
 
    overriding procedure Abandon_Form (This : in out Instance);
+
+   overriding procedure Hold_Stack (This : in out Instance);
+
+   overriding procedure Release_Stack
+     (This    : in out Instance;
+      Restore : Boolean);
+
+   overriding procedure Set_Incomplete
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding function Is_Incomplete
+     (This    : Instance;
+      Library : Raven.Target.Library_Id)
+      return Boolean
+   is (This.Incomplete.Contains (Library));
 
    overriding function Forms_Abandoned (This : Instance) return Natural
    is (This.Abandoned);
@@ -541,6 +566,8 @@ package body Raven.Engine.SECD is
       This : constant Instance_Reference := new Instance'
         (VM          => VM,
          Abandoned   => 0,
+         Held        => Object_Vectors.Empty_Vector,
+         Incomplete  => Library_Id_Vectors.Empty_Vector,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
          --  Named explicitly, because Symbols is an anonymous access
@@ -1110,6 +1137,14 @@ package body Raven.Engine.SECD is
       for R of This.Rs loop
          Process (R);
       end loop;
+      for Position in This.Held.Iterate loop
+         declare
+            Stack : Object := Object_Vectors.Element (Position);
+         begin
+            Process (Stack);
+            This.Held.Replace_Element (Position, Stack);
+         end;
+      end loop;
       for Position in This.Macros.Iterate loop
          declare
             E : Macro_Entry := Macro_Vectors.Element (Position);
@@ -1289,6 +1324,50 @@ package body Raven.Engine.SECD is
    begin
       This.Abandoned := This.Abandoned + 1;
    end Abandon_Form;
+
+   ----------------
+   -- Hold_Stack --
+   ----------------
+
+   overriding procedure Hold_Stack (This : in out Instance) is
+   begin
+      --  In the instance rather than in the caller, because Mark
+      --  walks this and does not walk the caller: a form that runs
+      --  may collect, and a stack remembered anywhere else would be
+      --  remembered as it had been before everything moved.
+
+      This.Held.Append (This.St (S));
+   end Hold_Stack;
+
+   -------------------
+   -- Release_Stack --
+   -------------------
+
+   overriding procedure Release_Stack
+     (This    : in out Instance;
+      Restore : Boolean)
+   is
+   begin
+      if Restore then
+         This.St (S) := This.Held.Last_Element;
+      end if;
+
+      This.Held.Delete_Last;
+   end Release_Stack;
+
+   --------------------
+   -- Set_Incomplete --
+   --------------------
+
+   overriding procedure Set_Incomplete
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
+   is
+   begin
+      if not This.Incomplete.Contains (Library) then
+         This.Incomplete.Append (Library);
+      end if;
+   end Set_Incomplete;
 
    overriding procedure Report (This : Instance) is
    begin

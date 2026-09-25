@@ -107,24 +107,53 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(import (probe nowhere))");
       Test_Name (VM, "alpha-name", "alpha");
 
-      --  A form that cannot be run is given up on, the rest of the
-      --  file is read anyway, and the host can now tell that it
-      --  happened.  Nothing downstream could before.
+      --  A form that cannot be run is given up on and counted, where
+      --  nothing downstream could tell it had happened before.
+      --
+      --  Two of them in this library, and both are heard about: the
+      --  first used to raise out of the begin and take the rest of
+      --  the library with it, so everything after it went undefined
+      --  and the second was never reached to be reported.
 
       declare
          Before : constant Natural := VM.Forms_Abandoned;
       begin
          Evaluate (VM, "(import (probe abandoned))");
 
-         Test ("a form given up on is counted",
-               VM.Forms_Abandoned = Before + 1);
+         Test ("a library is read past a form it cannot run",
+               VM.Forms_Abandoned = Before + 2);
       end;
 
-      --  The file carried on at the form after it, and what came
-      --  before it is there too.
+      --  And then nothing imports it.  A library is a unit or it is
+      --  nothing: what it did define is not there either, because
+      --  half a library is worse than none.
 
-      Test_Number (VM, "abandoned-before", 1);
-      Test_Number (VM, "abandoned-after", 3);
+      Test_Undefined (VM, "abandoned-one");
+      Test_Undefined (VM, "abandoned-two");
+
+      --  Asking again is refused again.  The second import used to
+      --  find the library loaded and hand it over.
+
+      Evaluate (VM, "(import (probe abandoned))");
+      Test_Undefined (VM, "abandoned-one");
+
+      --  A file of loose forms is a library too, and carries on the
+      --  same way and is refused the same way.
+
+      declare
+         Before : constant Natural := VM.Forms_Abandoned;
+      begin
+         Evaluate (VM, "(import (probe loose))");
+
+         Test ("a file is read past a form it cannot run",
+               VM.Forms_Abandoned = Before + 2);
+      end;
+
+      Test_Undefined (VM, "loose-between");
+
+      --  And a library with nothing wrong with it still arrives.
+
+      Test_Name (VM, "alpha-name", "alpha");
 
       --  Two libraries that ask for each other: the second to ask
       --  gets what has been read of the first so far, which is
