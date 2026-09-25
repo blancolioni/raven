@@ -12,7 +12,9 @@
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, string->copy, chars=?, chars<?, str=?, str<?, do-next,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
-;;  vector-tail, fill-range, optional and caddr, which the expander
+;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
+;;  bytevector->list, bytevector-onto, bytevector-tail, optional and
+;;  caddr, which the expander
 ;;  uses and which a program asks (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
@@ -74,6 +76,13 @@
    vector->list list->vector vector->string string->vector
    vector-copy vector-copy! vector-append vector-fill!
    vector-map vector-for-each
+
+   ;;  bytevectors, which are laid out the way a vector is; what
+   ;;  tells them apart is that only a byte may go into one
+   bytevector? make-bytevector bytevector bytevector-length
+   bytevector-u8-ref bytevector-u8-set!
+   bytevector-copy bytevector-copy! bytevector-append
+   utf8->string string->utf8
 
    ;;  strings.  Every one of these walks the string, because a string
    ;;  is a foreign value and not something with an index; what is not

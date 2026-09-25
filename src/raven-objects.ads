@@ -133,6 +133,25 @@ private package Raven.Objects is
      and then Has_Address (To_Vector'Result)
      and then Get_Address (To_Vector'Result) = Address;
 
+   --  A bytevector, which is a vector whose elements may only be a
+   --  byte.  It is laid out the way a vector is and held the same
+   --  way, one element to a slot, so it is as large as a vector of
+   --  the same length rather than a quarter of it.
+   --
+   --  Packing four to a word is what a bytevector is for and is not
+   --  what this does.  The collector reads every cell of a block as
+   --  two objects and moves what has an address, so packed bytes
+   --  would have to be skipped -- and a cell it must not read is a
+   --  cell it must be able to recognise, which this heap has no way
+   --  to do.  Nothing about the procedures would change.
+
+   function Is_Bytevector (X : Object) return Boolean;
+   function To_Bytevector (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Bytevector (To_Bytevector'Result)
+     and then Has_Address (To_Bytevector'Result)
+     and then Get_Address (To_Bytevector'Result) = Address;
+
    function Is_Closure (X : Object) return Boolean;
    function To_Closure (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -221,6 +240,7 @@ private
    Foreign_Tag     : constant := Escape_Tag + 5 * Extended_Step;
    Closure_Tag     : constant := Escape_Tag + 6 * Extended_Step;
    Vector_Tag      : constant := Escape_Tag + 7 * Extended_Step;
+   Bytevector_Tag  : constant := Escape_Tag + 8 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -343,7 +363,8 @@ private
    function Has_Address (X : Object) return Boolean
    is (Tag (X) = Pair_Tag
        or else Full_Tag (X) = Closure_Tag
-       or else Full_Tag (X) = Vector_Tag);
+       or else Full_Tag (X) = Vector_Tag
+       or else Full_Tag (X) = Bytevector_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -364,6 +385,12 @@ private
 
    function To_Vector (Address : Address_Type) return Object
    is (Extend (Object (Address), Vector_Tag));
+
+   function Is_Bytevector (X : Object) return Boolean
+   is (Full_Tag (X) = Bytevector_Tag);
+
+   function To_Bytevector (Address : Address_Type) return Object
+   is (Extend (Object (Address), Bytevector_Tag));
 
    function Is_Pair (X : Object) return Boolean
    is (Tag (X) = Pair_Tag);

@@ -232,6 +232,13 @@ package body Raven.Engine.SECD is
    overriding procedure List_To_Vector
      (This : in out Instance);
 
+   overriding procedure List_To_Bytevector
+     (This : in out Instance);
+
+   procedure List_To_Block
+     (This       : in out Instance'Class;
+      Bytevector : Boolean);
+
    overriding function Vector_Length
      (This : Instance;
       V    : Object)
@@ -1285,6 +1292,29 @@ package body Raven.Engine.SECD is
    overriding procedure List_To_Vector
      (This : in out Instance)
    is
+   begin
+      List_To_Block (This, Bytevector => False);
+   end List_To_Vector;
+
+   ------------------------
+   -- List_To_Bytevector --
+   ------------------------
+
+   overriding procedure List_To_Bytevector
+     (This : in out Instance)
+   is
+   begin
+      List_To_Block (This, Bytevector => True);
+   end List_To_Bytevector;
+
+   -------------------
+   -- List_To_Block --
+   -------------------
+
+   procedure List_To_Block
+     (This       : in out Instance'Class;
+      Bytevector : Boolean)
+   is
       Length : Natural := 0;
       It     : Object;
    begin
@@ -1300,7 +1330,9 @@ package body Raven.Engine.SECD is
          It := This.Cdr (It);
       end loop;
 
-      This.Rs (2) := This.Memory.New_Vector (Length);
+      This.Rs (2) := (if Bytevector
+                      then This.Memory.New_Bytevector (Length)
+                      else This.Memory.New_Vector (Length));
 
       It := This.Rs (1);
       for Index in 0 .. Length - 1 loop
@@ -1313,7 +1345,7 @@ package body Raven.Engine.SECD is
 
       This.Rs (1) := Objects.Nil;
       This.Rs (2) := Objects.Nil;
-   end List_To_Vector;
+   end List_To_Block;
 
    ---------------
    -- Translate --

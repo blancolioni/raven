@@ -134,10 +134,10 @@ package body Raven.Target is
       elsif Is_Pair (X) then
          return "(" & This.Show (This.Car (X), Readable)
            & Show_List (This.Cdr (X)) & ")";
-      elsif Is_Vector (X) then
+      elsif Is_Vector (X) or else Is_Bytevector (X) then
 
-         --  #(1 2 3), which is how one is written and how the reader
-         --  takes one back.
+         --  #(1 2 3) and #u8(1 2 3), which is how each is written and
+         --  how the reader takes it back.
 
          declare
             function Elements (Index : Natural) return String
@@ -147,7 +147,8 @@ package body Raven.Target is
                   & This.Show (This.Vector_Element (X, Index), Readable)
                   & Elements (Index + 1));
          begin
-            return "#(" & Elements (0) & ")";
+            return (if Is_Bytevector (X) then "#u8(" else "#(")
+              & Elements (0) & ")";
          end;
       elsif Is_Foreign_Value (X) then
          return (if Readable

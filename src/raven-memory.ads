@@ -44,6 +44,15 @@ private package Raven.Memory is
       return Object
    is abstract;
 
+   --  Laid out the way a vector is, so everything below answers for
+   --  one of these as well.
+
+   function New_Bytevector
+     (This   : in out Abstraction;
+      Length : Natural)
+      return Object
+   is abstract;
+
    function Vector_Length
      (This : Abstraction;
       V    : Object)

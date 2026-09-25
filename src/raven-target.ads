@@ -175,6 +175,13 @@ private package Raven.Target is
      (This : in out Abstraction)
    is abstract;
 
+   --  The same for #u8(...), which read as a call of bytevector and
+   --  had the same trouble: its elements were expressions.
+
+   procedure List_To_Bytevector
+     (This : in out Abstraction)
+   is abstract;
+
    function Create_String
      (This : in out Abstraction;
       Text : Wide_Wide_String)

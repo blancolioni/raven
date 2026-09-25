@@ -1943,6 +1943,111 @@
 (test "including a procedure" #t (procedure? (vector-ref kept-mixed 1)))
 (test "and a vector" '#(9) (vector-ref kept-mixed 2))
 
+;;  Bytevectors, laid out the way a vector is and one element to a
+;;  slot.  What tells them apart is what may go into one, which is
+;;  said where it is put in rather than by the shape of the thing
+;;  holding it.
+
+(test "bytevector? of a bytevector" #t (bytevector? (bytevector 1 2)))
+(test "bytevector? of a vector" #f (bytevector? (vector 1 2)))
+(test "vector? of a bytevector" #f (vector? (bytevector 1 2)))
+(test "bytevector? of a list" #f (bytevector? '(1 2)))
+(test "a bytevector is not a pair" #f (pair? (bytevector 1)))
+
+(test "make-bytevector" '#u8(7 7 7) (make-bytevector 3 7))
+(test "make-bytevector of none" '#u8() (make-bytevector 0 7))
+(test "make-bytevector with no fill is zero" '#u8(0 0) (make-bytevector 2))
+(test "bytevector" '#u8(1 2 3) (bytevector 1 2 3))
+(test "bytevector of none" '#u8() (bytevector))
+(test "bytevector-length" 3 (bytevector-length (bytevector 1 2 3)))
+(test "bytevector-length of none" 0 (bytevector-length (bytevector)))
+
+(test "bytevector-u8-ref" 20 (bytevector-u8-ref '#u8(10 20 30) 1))
+(test "bytevector-u8-ref at the front" 10 (bytevector-u8-ref '#u8(10 20) 0))
+(test "bytevector-u8-ref of the largest byte" 255
+      (bytevector-u8-ref '#u8(0 255) 1))
+(test "bytevector-u8-set!" '#u8(99 0)
+      (let ((v (make-bytevector 2 0))) (bytevector-u8-set! v 0 99) v))
+(test "bytevector-u8-set! of the largest byte" '#u8(255)
+      (let ((v (make-bytevector 1 0))) (bytevector-u8-set! v 0 255) v))
+
+(test "bytevector-copy" '#u8(1 2 3) (bytevector-copy '#u8(1 2 3)))
+(test "bytevector-copy from an index" '#u8(2 3)
+      (bytevector-copy '#u8(1 2 3) 1))
+(test "bytevector-copy between two" '#u8(2 3)
+      (bytevector-copy '#u8(1 2 3 4) 1 3))
+(test "a copy is a different bytevector" #f
+      (let ((v (bytevector 1 2))) (eq? v (bytevector-copy v))))
+
+(test "bytevector-append" '#u8(1 2 3)
+      (bytevector-append '#u8(1 2) '#u8(3)))
+(test "bytevector-append of none" '#u8() (bytevector-append))
+(test "bytevector-append with an empty one" '#u8(1 2)
+      (bytevector-append '#u8(1) '#u8() '#u8(2)))
+
+(test "bytevector-copy!" '#u8(1 9 8 4)
+      (let ((v (bytevector 1 2 3 4))) (bytevector-copy! v 1 '#u8(9 8)) v))
+(test "bytevector-copy! over itself" '#u8(2 3 4 4)
+      (let ((v (bytevector 1 2 3 4))) (bytevector-copy! v 0 v 1 4) v))
+
+;;  A string and the bytes it comes to.  Raven holds a string as
+;;  characters and writes it out as UTF-8, so these are that, said.
+
+(test "string->utf8" '#u8(97 98 99) (string->utf8 "abc"))
+(test "string->utf8 of nothing" '#u8() (string->utf8 ""))
+(test "utf8->string" "abc" (utf8->string '#u8(97 98 99)))
+(test "utf8->string of nothing" "" (utf8->string '#u8()))
+(test "a string survives the round trip" "hello"
+      (utf8->string (string->utf8 "hello")))
+
+;;  And a character that is more than one byte is more than one byte,
+;;  which is the whole of why utf8->string is not string->list.
+
+(test "a character of two bytes" 2
+      (bytevector-length (string->utf8 (string (integer->char 233)))))
+(test "and it is the two it should be" '#u8(195 169)
+      (string->utf8 (string (integer->char 233))))
+(test "a character of three bytes" 3
+      (bytevector-length (string->utf8 (string (integer->char 8364)))))
+(test "one of two survives the round trip" #t
+      (eq? (integer->char 233)
+           (string-ref (utf8->string
+                        (string->utf8 (string (integer->char 233)))) 0)))
+(test "one of three does too" #t
+      (eq? (integer->char 8364)
+           (string-ref (utf8->string
+                        (string->utf8 (string (integer->char 8364)))) 0)))
+
+;;  equal? walks one the way it walks a vector, and a bytevector is
+;;  not a vector however alike they read.
+
+(test "equal? over two the same" #t (equal? '#u8(1 2) '#u8(1 2)))
+(test "equal? over two that differ" #f (equal? '#u8(1 2) '#u8(1 3)))
+(test "equal? over different lengths" #f (equal? '#u8(1) '#u8(1 2)))
+(test "equal? of a bytevector and a vector" #f (equal? '#u8(1 2) '#(1 2)))
+
+;;  #u8(1 2) read as a call of bytevector, so its elements were
+;;  expressions, and #u8() was a bad token.
+
+(test "a bytevector written out" '#u8(1 2 255) (bytevector 1 2 255))
+(test "an empty one written out" 0 (bytevector-length '#u8()))
+(test "one inside a list" #t (bytevector? (car (cdr (list 1 '#u8(2))))))
+(test "what one writes as" "#u8(1 2)" (raven-write-text '#u8(1 2)))
+(test "an empty one writes as one" "#u8()" (raven-write-text '#u8()))
+
+;;  And it survives a collection, the way a vector does and for the
+;;  same reason: the tag has to come back with it.
+
+(define kept-bytes (bytevector 1 2 3))
+(define kept-long-bytes (make-bytevector 300 9))
+
+(vector-churn 3000)
+
+(test "a bytevector survives a collection" '#u8(1 2 3) kept-bytes)
+(test "and is still a bytevector" #t (bytevector? kept-bytes))
+(test "a long one survives too" 300 (bytevector-length kept-long-bytes))
+(test "with what was put in it" 9 (bytevector-u8-ref kept-long-bytes 299))
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there

@@ -271,6 +271,11 @@ private
       Length : Natural)
       return Object;
 
+   function New_Bytevector
+     (This   : Raven_VM'Class;
+      Length : Natural)
+      return Object;
+
    function Vector_Length
      (This : Raven_VM'Class;
       V    : Object)
