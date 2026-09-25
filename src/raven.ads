@@ -91,6 +91,28 @@ package Raven is
      (This : Raven_VM)
       return User_Data_Reference;
 
+   --  How many forms this VM has abandoned: read, and then given up
+   --  on part way through, because the form named something undefined
+   --  or the translator refused it.  One bad form does not stop a
+   --  file, which is right, but nothing downstream could tell it had
+   --  happened -- a suite whose tests never ran looked exactly like
+   --  one where every test passed.
+   --
+   --  It only ever goes up, so a caller that wants to know whether
+   --  some particular thing was read whole reads this before and
+   --  after and compares.
+
+   function Forms_Abandoned (This : Raven_VM) return Natural;
+
+   --  A whole line of complaint, where this VM's host said errors go.
+   --  The loader, the translator and the lexer all wrote to the
+   --  terminal directly, so a host that had been given everything a
+   --  program wrote still saw these go past it.
+
+   procedure Write_Error
+     (This    : Raven_VM'Class;
+      Message : String);
+
    type Handle is private;
 
    function Is_Null (This : Handle) return Boolean;
@@ -314,6 +336,7 @@ private
      (This      : Raven_VM'Class;
       Ch        : out Wide_Wide_Character;
       Available : out Boolean);
+
 
    procedure Write_Character
      (This   : Raven_VM'Class;

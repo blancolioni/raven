@@ -25,6 +25,26 @@ private package Raven.Target is
    --  written in another are two names.  A closure needs to know
    --  nothing about it, because nothing is left to decide when it runs.
 
+   --  What is said about a form, and a form given up on.  The loader
+   --  and the translator have a target and nothing else, and both had
+   --  been writing to the terminal whatever the host asked for; these
+   --  are the two things they need and not a VM to do as they like
+   --  with.
+
+   procedure Report_Error
+     (This    : Abstraction;
+      Message : String)
+   is abstract;
+
+   --  A form read as far as it could be and then given up on.  One
+   --  bad form does not stop a file, which is right, but nothing
+   --  downstream could tell it had happened.
+
+   procedure Abandon_Form (This : in out Abstraction) is abstract;
+
+   function Forms_Abandoned (This : Abstraction) return Natural
+   is abstract;
+
    type Library_Id is new Natural;
 
    No_Library : constant Library_Id := 0;

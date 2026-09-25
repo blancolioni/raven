@@ -18,6 +18,11 @@ private
 
    function Library_Path return String;
 
+   --  And where this harness's own scheme lives, for a suite that
+   --  wants to read one of its files rather than import it by name.
+
+   function Tests_Path return String;
+
    procedure Test
      (Name     : String;
       Success  : Boolean);

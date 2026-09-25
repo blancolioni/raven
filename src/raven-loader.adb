@@ -72,6 +72,10 @@ package body Raven.Loader is
 
    function Read_File (Path : String) return String;
 
+   --  Name is what the reader calls the source it is reading, and is
+   --  the path it was read from: it is what a complaint about a form
+   --  says before the line.
+
    procedure Read_Forms
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
@@ -101,7 +105,29 @@ package body Raven.Loader is
       Form   : Object)
       return String;
 
-   procedure Report (Message : String);
+   procedure Report
+     (Target  : Raven.Target.Reference;
+      Message : String);
+
+   --  A form read as far as it could be and then given up on: said
+   --  where errors go, and counted where the host can ask.  A run
+   --  that abandons a form used to look exactly like one that did
+   --  not, which is how sixteen tests went missing without the suite
+   --  reporting a single failure.
+
+   procedure Abandon
+     (Target : Raven.Target.Reference;
+      Start  : String;
+      Head   : String;
+      What   : String);
+
+   --  The head of the form on the target's stack, for saying which
+   --  form was given up on.  Only the head, because the form itself
+   --  may be the whole of a library.
+
+   function Form_Head
+     (Target : Raven.Target.Reference)
+      return String;
 
    ----------------------
    -- Take_Declaration --
@@ -254,7 +280,7 @@ package body Raven.Loader is
       Loaded : constant Raven.Target.Library_Id := Target.Library (Name);
    begin
       if Loading.Contains (Name) then
-         Report ("import: " & Name & " imports itself");
+         Report (Target, "import: " & Name & " imports itself");
          return Loaded;
       elsif Loaded /= Raven.Target.No_Library then
          return Loaded;
@@ -264,7 +290,7 @@ package body Raven.Loader is
          Path : constant String := Find_File (Target, Name);
       begin
          if Path = "" then
-            Report ("import: no library " & Name);
+            Report (Target, "import: no library " & Name);
             return Raven.Target.No_Library;
          end if;
          return Load_File (Target, Name, Path);
@@ -289,8 +315,12 @@ package body Raven.Loader is
    begin
       Loading.Append (Name);
 
+      --  The reader is opened on the path rather than the library's
+      --  name, because a complaint saying which file and line to open
+      --  is worth more than one naming the library it was in.
+
       Read_Forms
-        (Target, Library, Name, Read_File (Path),
+        (Target, Library, Path, Read_File (Path),
          Ada.Directories.Containing_Directory (Path));
 
       Loading.Delete_Last;
@@ -298,7 +328,7 @@ package body Raven.Loader is
 
    exception
       when E : others =>
-         Report (Name & ": " & Ada.Exceptions.Exception_Message (E));
+         Report (Target, Name & ": " & Ada.Exceptions.Exception_Message (E));
          if not Loading.Is_Empty then
             Loading.Delete_Last;
          end if;
@@ -351,7 +381,8 @@ package body Raven.Loader is
          Read_Include (Target, Library, Directory);
       else
          Report
-           ("define-library: not a declaration: "
+           (Target,
+            "define-library: not a declaration: "
             & Target.Show (Target.Top));
          Target.Drop;
       end if;
@@ -410,6 +441,7 @@ package body Raven.Loader is
       Source    : String;
       Directory : String)
    is
+      use Ada.Strings.Unbounded;
       Reader : Raven.Parser.Instance;
    begin
       Reader.Open (Name, Source);
@@ -419,9 +451,21 @@ package body Raven.Loader is
          --  A form that names something undefined is reported and the
          --  rest of the file is read anyway.  Anything else stops the
          --  read, and is reported where the file was opened.
+         --
+         --  Where the form started is asked for before it is read,
+         --  because afterwards the reader has gone past it, and its
+         --  head once it is on the stack.  Both are for saying which
+         --  form was given up on: the message used to name whatever
+         --  was undefined at the moment it failed and nothing else,
+         --  so "undefined: first" pointed at a variable bound inside
+         --  a procedure called by a form, rather than at the form.
 
+         declare
+            Start : constant String := Reader.Where;
+            Head  : Unbounded_String := Null_Unbounded_String;
          begin
             Reader.Parse_Next (Target);
+            Head := To_Unbounded_String (Form_Head (Target));
 
             if Is_Head (Target, "import") then
                Read_Import (Target, Library);
@@ -434,17 +478,22 @@ package body Raven.Loader is
             end if;
          exception
             when E : Raven.Target.Undefined_Symbol =>
-               Report
-                 ("undefined: " & Ada.Exceptions.Exception_Message (E));
+               Abandon
+                 (Target, Start, To_String (Head),
+                  "undefined: " & Ada.Exceptions.Exception_Message (E));
 
             --  A form the translator refuses is reported and the file
             --  goes on to the one after it, which is what an
             --  undefined name in a form has always done.  It could
             --  not be caught here before, because Translate reported
             --  it and returned as though nothing were wrong.
+            --
+            --  The translator has said what was wrong with it
+            --  already; what is added here is that the form went no
+            --  further.
 
             when Raven.Target.Translation_Error =>
-               null;
+               Abandon (Target, Start, To_String (Head), "");
          end;
       end loop;
 
@@ -474,7 +523,8 @@ package body Raven.Loader is
                Names.Append (Library_Name (Target, Spec));
             else
                Report
-                 ("import: a library name is a list, not "
+                 (Target,
+                  "import: a library name is a list, not "
                   & Target.Show (Spec));
             end if;
          end;
@@ -519,7 +569,8 @@ package body Raven.Loader is
          --  place a library can say where its own text is.
 
          Read_Forms
-           (Target, Library, File, Read_File (Directory & "/" & File),
+           (Target, Library, Directory & "/" & File,
+            Read_File (Directory & "/" & File),
             Directory);
       end loop;
    end Read_Include;
@@ -580,7 +631,7 @@ package body Raven.Loader is
                Names.Append
                  (Target.To_String (Raven.Objects.To_Symbol (Name)));
             else
-               Report ("expected a name, not " & Target.Show (Name));
+               Report (Target, "expected a name, not " & Target.Show (Name));
             end if;
          end;
          It := Target.Cdr (It);
@@ -601,7 +652,7 @@ package body Raven.Loader is
       if not Raven.Objects.Is_Foreign_Value (Form)
         or else not Raven.Strings.Is_String (Target.To_Foreign_Value (Form))
       then
-         Report ("expected a string, not " & Target.Show (Form));
+         Report (Target, "expected a string, not " & Target.Show (Form));
          return "";
       end if;
 
@@ -612,9 +663,52 @@ package body Raven.Loader is
    -- Report --
    ------------
 
-   procedure Report (Message : String) is
+   procedure Report
+     (Target  : Raven.Target.Reference;
+      Message : String)
+   is
    begin
-      Ada.Text_IO.Put_Line (Ada.Text_IO.Standard_Error, Message);
+      --  Where the host said errors go.  This wrote to the terminal
+      --  whatever the host asked for, so a host holding everything a
+      --  program wrote still saw these go past it.
+
+      Target.Report_Error (Message);
    end Report;
+
+   -------------
+   -- Abandon --
+   -------------
+
+   procedure Abandon
+     (Target : Raven.Target.Reference;
+      Start  : String;
+      Head   : String;
+      What   : String)
+   is
+      Where : constant String := (if Start = "" then "" else Start & ": ");
+      Which : constant String :=
+                (if Head = "" then "a form" else Head);
+      Why   : constant String := (if What = "" then "" else ": " & What);
+   begin
+      Target.Abandon_Form;
+      Report (Target, Where & Which & " abandoned" & Why);
+   end Abandon;
+
+   ---------------
+   -- Form_Head --
+   ---------------
+
+   function Form_Head
+     (Target : Raven.Target.Reference)
+      return String
+   is
+      Form : constant Object := Target.Top;
+   begin
+      if Raven.Objects.Is_Pair (Form) then
+         return "(" & Target.Show (Target.Car (Form)) & " ...)";
+      else
+         return Target.Show (Form);
+      end if;
+   end Form_Head;
 
 end Raven.Loader;
