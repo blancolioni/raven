@@ -10,6 +10,13 @@ private package Raven.Objects is
 
    function Pending return Object;
 
+   --  What a port answers with when there is nothing left to read.
+   --  R7RS says it is one object, distinct from everything else, and
+   --  a constant is what that is.
+
+   function Eof return Object;
+   function Is_Eof (X : Object) return Boolean;
+
    function Lambda return Object;
    function Cond return Object;
    function Define return Object;
@@ -272,6 +279,7 @@ private
    Cond_Payload      : constant := 7;
    Define_Payload    : constant := 8;
    If_Payload        : constant := 9;
+   Eof_Payload       : constant := 10;
 
    function Nil return Object
    is (Extend (Nil_Payload, Constant_Tag));
@@ -281,6 +289,12 @@ private
 
    function Pending return Object
    is (Extend (Pending_Payload, Constant_Tag));
+
+   function Eof return Object
+   is (Extend (Eof_Payload, Constant_Tag));
+
+   function Is_Eof (X : Object) return Boolean
+   is (X = Eof);
 
    function Lambda return Object
    is (Extend (Lambda_Payload, Constant_Tag));

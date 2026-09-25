@@ -271,6 +271,19 @@ private
       Length : Natural)
       return Object;
 
+   --  What the host reads, a character at a time, and whether there
+   --  was one.  Nothing could read at all before ports.
+
+   procedure Read_Character
+     (This      : Raven_VM'Class;
+      Ch        : out Wide_Wide_Character;
+      Available : out Boolean);
+
+   procedure Write_Character
+     (This   : Raven_VM'Class;
+      Ch     : Wide_Wide_Character;
+      Errors : Boolean);
+
    function New_Bytevector
      (This   : Raven_VM'Class;
       Length : Natural)

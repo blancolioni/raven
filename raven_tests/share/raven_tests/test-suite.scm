@@ -2069,6 +2069,225 @@
 
 (test "five hundred live strings" 500 (length (probe-strings 500)))
 
+;;  Ports.  Everything raven wrote went to the one place the host
+;;  gave it, through one foreign function, and nothing could be read
+;;  at all.  Every PASS line above goes through the default output
+;;  port, so that much is said by the whole of the rest of this file;
+;;  what is here is the ports that are named.
+
+(test "the host's output is a port" #t (port? (current-output-port)))
+(test "and an output port" #t (output-port? (current-output-port)))
+(test "and not an input port" #f (input-port? (current-output-port)))
+(test "the host's errors go to one too" #t (output-port? (current-error-port)))
+(test "the host's input is an input port" #t (input-port? (current-input-port)))
+(test "and not an output port" #f (output-port? (current-input-port)))
+(test "asking twice asks for the same port" #t
+      (eq? (current-output-port) (current-output-port)))
+(test "a port is textual" #t (textual-port? (current-output-port)))
+(test "and none of them is binary yet" #f (binary-port? (current-output-port)))
+(test "a number is not a port" #f (port? 4))
+(test "a string is not a port" #f (port? "x"))
+(test "nil is not a port" #f (port? '()))
+(test "input-port? of something else" #f (input-port? 4))
+(test "output-port? of something else" #f (output-port? "x"))
+
+;;  The end of a port is one object and nothing else is it.
+
+(test "the end of a port is itself" #t (eof-object? (eof-object)))
+(test "and is the same object each time" #t (eq? (eof-object) (eof-object)))
+(test "nil is not it" #f (eof-object? '()))
+(test "false is not it" #f (eof-object? #f))
+(test "a string is not it" #f (eof-object? ""))
+(test "what it writes as" "#eof" (raven-write-text (eof-object)))
+
+;;  A port opened on a string it is building up.
+
+(test "an output string port is a port" #t (port? (open-output-string)))
+(test "and an output one" #t (output-port? (open-output-string)))
+(test "and not an input one" #f (input-port? (open-output-string)))
+(test "and is open" #t (output-port-open? (open-output-string)))
+(test "with nothing in it" "" (get-output-string (open-output-string)))
+(test "two of them are two ports" #f
+      (eq? (open-output-string) (open-output-string)))
+
+(test "write-char to one" "a"
+      (let ((p (open-output-string))) (write-char #\a p) (get-output-string p)))
+(test "write-string to one" "hello"
+      (let ((p (open-output-string)))
+        (write-string "hello" p) (get-output-string p)))
+(test "display to one" "42"
+      (let ((p (open-output-string))) (display 42 p) (get-output-string p)))
+(test "newline to one" #\newline
+      (let ((p (open-output-string)))
+        (newline p) (string-ref (get-output-string p) 0)))
+(test "write puts a string in quotes" 3
+      (let ((p (open-output-string)))
+        (write "a" p) (string-length (get-output-string p))))
+(test "and display does not" 1
+      (let ((p (open-output-string)))
+        (display "a" p) (string-length (get-output-string p))))
+
+(test "what is written runs together" "ab1"
+      (let ((p (open-output-string)))
+        (write-char #\a p) (write-string "b" p) (display 1 p)
+        (get-output-string p)))
+(test "reading it out does not empty it" "aa"
+      (let ((p (open-output-string)))
+        (write-char #\a p) (get-output-string p) (write-char #\a p)
+        (get-output-string p)))
+(test "two ports are written to separately" "a"
+      (let ((p (open-output-string)) (q (open-output-string)))
+        (write-char #\a p) (write-char #\b q) (get-output-string p)))
+(test "and the other has its own" "b"
+      (let ((p (open-output-string)) (q (open-output-string)))
+        (write-char #\a p) (write-char #\b q) (get-output-string q)))
+
+(test "a closed port is not open" #f
+      (let ((p (open-output-string))) (close-port p) (output-port-open? p)))
+(test "but is still a port" #t
+      (let ((p (open-output-string))) (close-port p) (port? p)))
+(test "and still has what was written to it" "a"
+      (let ((p (open-output-string)))
+        (write-char #\a p) (close-port p) (get-output-string p)))
+(test "close-output-port closes one" #f
+      (let ((p (open-output-string)))
+        (close-output-port p) (output-port-open? p)))
+(test "close-input-port closes one" #f
+      (let ((p (open-input-string "a")))
+        (close-input-port p) (input-port-open? p)))
+(test "an output port is not an open input port" #f
+      (input-port-open? (open-output-string)))
+(test "an input port is not an open output port" #f
+      (output-port-open? (open-input-string "a")))
+
+;;  Closing what the host reads and writes is not this program's to
+;;  do, and every line printed after this one says it did not happen.
+
+(test "the host's port does not close" #t
+      (begin (close-port (current-output-port))
+             (output-port-open? (current-output-port))))
+
+;;  A port opened on a string being read out of.
+
+(test "an input string port is a port" #t (port? (open-input-string "a")))
+(test "and an input one" #t (input-port? (open-input-string "a")))
+(test "and not an output one" #f (output-port? (open-input-string "a")))
+
+(test "read-char" #\a (read-char (open-input-string "abc")))
+;;  The order two reads happen in has to be said: R7RS leaves the
+;;  order arguments are evaluated in open, and raven evaluates them
+;;  right to left, so (list (read-char p) (read-char p)) reads the
+;;  second character first.
+
+(test "reading goes on from where it got to" '(#\a #\b)
+      (let* ((p (open-input-string "ab"))
+             (a (read-char p))
+             (b (read-char p)))
+        (list a b)))
+(test "read-char of an empty port is the end" #t
+      (eof-object? (read-char (open-input-string ""))))
+(test "and so is reading past the last" #t
+      (let ((p (open-input-string "a")))
+        (read-char p) (eof-object? (read-char p))))
+(test "the end stays the end" #t
+      (let ((p (open-input-string "")))
+        (read-char p) (eof-object? (read-char p))))
+
+(test "peek-char does not take the character" '(#\a #\a)
+      (let* ((p (open-input-string "ab"))
+             (a (peek-char p))
+             (b (read-char p)))
+        (list a b)))
+(test "so peeking twice peeks at the same one" #\a
+      (let ((p (open-input-string "ab"))) (peek-char p) (peek-char p)))
+(test "and the read after it goes on" #\b
+      (let ((p (open-input-string "ab")))
+        (peek-char p) (read-char p) (read-char p)))
+(test "peek-char at the end is the end" #t
+      (eof-object? (peek-char (open-input-string ""))))
+
+(test "a string port always has a character ready" #t
+      (char-ready? (open-input-string "a")))
+(test "even when it has run out" #t (char-ready? (open-input-string "")))
+
+(test "a port read to the end" '(#\a #\b #\c)
+      (let* ((p (open-input-string "abc"))
+             (a (read-char p))
+             (b (read-char p))
+             (c (read-char p)))
+        (list a b c)))
+(test "and then it stays at the end" #t
+      (let* ((p (open-input-string "a"))
+             (a (read-char p))
+             (b (read-char p)))
+        (and (eof-object? b) (eof-object? (read-char p)))))
+
+;;  A line is up to the next newline, which is read and thrown away.
+
+(define two-lines (string #\a #\b #\newline #\c #\d))
+
+(test "read-line" "ab" (read-line (open-input-string two-lines)))
+(test "and then the next one" "cd"
+      (let ((p (open-input-string two-lines))) (read-line p) (read-line p)))
+(test "and then the end" #t
+      (let ((p (open-input-string two-lines)))
+        (read-line p) (read-line p) (eof-object? (read-line p))))
+(test "the newline is not left behind" #\c
+      (let ((p (open-input-string two-lines))) (read-line p) (read-char p)))
+(test "a line with no newline after it is a line" "ab"
+      (read-line (open-input-string "ab")))
+(test "a line with nothing on it" ""
+      (read-line (open-input-string (string #\newline #\a))))
+(test "read-line of nothing is the end" #t
+      (eof-object? (read-line (open-input-string ""))))
+
+;;  And a string of up to this many characters.
+
+(test "read-string" "ab" (read-string 2 (open-input-string "abcd")))
+(test "which takes what it read" #\c
+      (let ((p (open-input-string "abcd"))) (read-string 2 p) (read-char p)))
+(test "read-string past the end is what there was" "ab"
+      (read-string 9 (open-input-string "ab")))
+(test "read-string of none is nothing" ""
+      (read-string 0 (open-input-string "ab")))
+(test "and takes nothing" #\a
+      (let ((p (open-input-string "ab"))) (read-string 0 p) (read-char p)))
+(test "read-string at the end is the end" #t
+      (eof-object? (read-string 2 (open-input-string ""))))
+
+;;  call-with-port closes the port after the call, and answers with
+;;  what the call answered with.
+
+(test "call-with-port hands the port over" #\a
+      (call-with-port (open-input-string "a") read-char))
+(test "and answers with what was done" 7
+      (call-with-port (open-output-string) (lambda (p) 7)))
+(test "and closes it after" #f
+      (let ((p (open-output-string)))
+        (call-with-port p (lambda (q) (write-char #\a q)))
+        (output-port-open? p)))
+(test "nothing is held back, so nothing is pushed out" '()
+      (flush-output-port (current-output-port)))
+
+;;  A port is a foreign value, so it is collected, and its place in
+;;  the machine's table has to come back with it -- which is what made
+;;  Free start being called at all.  Two thousand ports, only one of
+;;  them named at a time, where there is room for under a thousand.
+
+(define kept-port (open-output-string))
+(write-char #\a kept-port)
+
+(define (churn-ports n)
+  (if (= n 0)
+      'done
+      (begin (open-output-string) (vector-churn 20) (churn-ports (- n 1)))))
+
+(test "a port no longer named gives its place back" 'done (churn-ports 2000))
+(test "a port survives a collection" "a" (get-output-string kept-port))
+(test "and is still open" #t (output-port-open? kept-port))
+(test "and can still be written to" "ab"
+      (begin (write-char #\b kept-port) (get-output-string kept-port)))
+
 (write-string "Tests: ")
 (display num-tests)
 (write-string ", Passed: ")

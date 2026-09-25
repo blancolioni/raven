@@ -110,6 +110,8 @@ package body Raven.Objects is
          return "<pending>";
       elsif X = Undefined then
          return "<undefined>";
+      elsif Is_Eof (X) then
+         return "#eof";
       elsif Is_Instruction (X) then
          return To_Instruction (X)'Image;
       elsif Is_Integer (X) then
