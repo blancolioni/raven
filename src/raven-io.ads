@@ -1,21 +1,11 @@
+--  The two hosts raven brings with it: one that writes nowhere and
+--  reads nothing, and one that is the terminal the program was
+--  started from.  Anything else is the host's own, derived from
+--  Raven.IO_Interface and handed to New_VM.
+
 private package Raven.IO is
 
-   type Abstraction is interface;
-   type Reference is access all Abstraction'Class;
-
-   procedure Put (This : in out Abstraction;
-                  Ch   : Wide_Wide_Character)
-   is null;
-
-   --  A character from wherever the host reads, and whether there was
-   --  one.  Nothing could be read at all before this.
-
-   procedure Get (This      : in out Abstraction;
-                  Ch        : out Wide_Wide_Character;
-                  Available : out Boolean)
-   is abstract;
-
-   function Null_IO return Reference;
-   function Standard_IO return Reference;
+   function Null_IO return IO_Reference;
+   function Standard_IO return IO_Reference;
 
 end Raven.IO;

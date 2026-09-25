@@ -399,14 +399,21 @@ package body Raven.Ports is
    procedure Port_Ready (VM : Raven_VM) is
       Id : constant Port_Id := Port_Of (VM, "char-ready?", 1);
    begin
-      --  A string port always has its answer ready: it is all there
-      --  already.  The host's has one ready only when a peek has left
-      --  a character behind, because finding out otherwise would mean
-      --  asking the host, and asking the host is the read that this
-      --  is asked in order to avoid.
+      if Table (Id).Direction /= Input then
+         raise Constraint_Error with "char-ready?: not an input port";
+      end if;
 
-      VM.Set_Slot (1, not Table (Id).Of_Host
-                   or else Table (Id).Next <= Length (Table (Id).Text));
+      --  What char-ready? asks is whether a read would have to wait,
+      --  and no read here ever does.  A string port is all there
+      --  already; the host is asked for a character and says at once
+      --  whether it had one, and a host that had none is the end of
+      --  the port, which R7RS says is ready as well.
+      --
+      --  This used to answer for the host by looking at what a peek
+      --  had left behind, which said no whenever nothing had been
+      --  peeked -- including when the host had a character waiting.
+
+      VM.Set_Slot (1, True);
    end Port_Ready;
 
    -------------
