@@ -11,8 +11,9 @@
 ;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, string->copy, chars=?, chars<?, str=?, str<?, do-next,
-;;  make-promise-of, optional and caddr, which the expander uses and
-;;  which a program asks (scheme cxr) for.
+;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
+;;  vector-tail, fill-range, optional and caddr, which the expander
+;;  uses and which a program asks (scheme cxr) for.
 ;;
 ;;  define-syntax expands to a form that calls sr-expand, and that form
 ;;  is read where the macro is used.  It reaches sr-expand because a
@@ -65,6 +66,14 @@
 
    ;;  characters, which are immediates holding their own code point
    char? char->integer integer->char
+
+   ;;  vectors.  A vector's elements are in the cells after its
+   ;;  length, so an index is arithmetic and not a walk -- which is
+   ;;  what tells a vector from a list and what #43 was really about.
+   vector? make-vector vector vector-length vector-ref vector-set!
+   vector->list list->vector vector->string string->vector
+   vector-copy vector-copy! vector-append vector-fill!
+   vector-map vector-for-each
 
    ;;  strings.  Every one of these walks the string, because a string
    ;;  is a foreign value and not something with an index; what is not

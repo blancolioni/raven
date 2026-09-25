@@ -146,6 +146,35 @@ private package Raven.Target is
    --  it reads a string written in the source, so that the string is
    --  an object the code carries rather than a form the code runs.
 
+   --  What Show needs of a vector, which is the same as what a
+   --  program needs of one.
+
+   function Vector_Length
+     (This : Abstraction;
+      V    : Object)
+      return Natural
+   is abstract;
+
+   function Vector_Element
+     (This  : Abstraction;
+      V     : Object;
+      Index : Natural)
+      return Object
+   is abstract;
+
+   --  A vector of the elements of the list on top of the stack, which
+   --  it replaces.
+   --
+   --  #(1 2 3) used to read as a call of vector, so its elements were
+   --  expressions: #(1 2 3) came out right because a number stands
+   --  for itself, and #(a b) said "undefined: a".  R7RS says a vector
+   --  written out is a literal and its elements are data, so the
+   --  reader builds it rather than leaving a call for the translator.
+
+   procedure List_To_Vector
+     (This : in out Abstraction)
+   is abstract;
+
    function Create_String
      (This : in out Abstraction;
       Text : Wide_Wide_String)

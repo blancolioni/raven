@@ -262,6 +262,32 @@ private
       Name : String)
       return Object;
 
+   --  A vector of this many elements, every one of them nil, and the
+   --  three things that can be asked of one.  Making one may collect,
+   --  so whatever is to go in it belongs in a slot until it is made.
+
+   function New_Vector
+     (This   : Raven_VM'Class;
+      Length : Natural)
+      return Object;
+
+   function Vector_Length
+     (This : Raven_VM'Class;
+      V    : Object)
+      return Natural;
+
+   function Vector_Element
+     (This  : Raven_VM'Class;
+      V     : Object;
+      Index : Natural)
+      return Object;
+
+   procedure Set_Vector_Element
+     (This  : Raven_VM'Class;
+      V     : Object;
+      Index : Natural;
+      Value : Object);
+
    type Foreign_Value_Instance is abstract tagged
       record
          Marked : Boolean := False;

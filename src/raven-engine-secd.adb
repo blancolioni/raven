@@ -227,6 +227,24 @@ package body Raven.Engine.SECD is
       return Boolean
    is (This.Trace);
 
+   --  What Show needs of a vector, which the memory holds.
+
+   overriding procedure List_To_Vector
+     (This : in out Instance);
+
+   overriding function Vector_Length
+     (This : Instance;
+      V    : Object)
+      return Natural
+   is (This.Memory.Vector_Length (V));
+
+   overriding function Vector_Element
+     (This  : Instance;
+      V     : Object;
+      Index : Natural)
+      return Object
+   is (This.Memory.Vector_Element (V, Index));
+
    overriding procedure Swap
      (This : in out Instance);
 
@@ -1259,6 +1277,43 @@ package body Raven.Engine.SECD is
          This.Trace := Boolean'Value (Value);
       end if;
    end Set_Parameter;
+
+   --------------------
+   -- List_To_Vector --
+   --------------------
+
+   overriding procedure List_To_Vector
+     (This : in out Instance)
+   is
+      Length : Natural := 0;
+      It     : Object;
+   begin
+      --  The list stays on the stack and in a register, because
+      --  making the vector can collect and both of those are walked.
+      --  A count first, which allocates nothing.
+
+      This.Rs (1) := This.Top;
+
+      It := This.Rs (1);
+      while It /= Objects.Nil loop
+         Length := Length + 1;
+         It := This.Cdr (It);
+      end loop;
+
+      This.Rs (2) := This.Memory.New_Vector (Length);
+
+      It := This.Rs (1);
+      for Index in 0 .. Length - 1 loop
+         This.Memory.Set_Vector_Element (This.Rs (2), Index, This.Car (It));
+         It := This.Cdr (It);
+      end loop;
+
+      This.Drop;
+      This.Push (This.Rs (2));
+
+      This.Rs (1) := Objects.Nil;
+      This.Rs (2) := Objects.Nil;
+   end List_To_Vector;
 
    ---------------
    -- Translate --

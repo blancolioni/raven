@@ -174,12 +174,28 @@ package body Raven.Parser is
                end;
 
             when Tok_Start_Vector =>
+
+               --  A vector written out is a literal, so its elements
+               --  are read as data and the vector is built here.  It
+               --  used to read as a call of vector, which made its
+               --  elements expressions: #(1 2 3) was right because a
+               --  number stands for itself, and #(a b) was undefined.
+
                Lex.Scan;
-               Target.Push
-                 (Raven.Objects.To_Object
-                    (Target.To_Symbol_Id ("vector")));
-               Parse_Rest_Of_List;
-               Target.Cons;
+
+               --  #() has no elements, and Parse_Rest_Of_List reads
+               --  one before it looks for the bracket, so the empty
+               --  one is read here.  It was a bad token before, on
+               --  this path and on the one this replaced.
+
+               if Lex.Tok = Tok_Right_Paren then
+                  Lex.Scan;
+                  Target.Push_Nil;
+               else
+                  Parse_Rest_Of_List;
+               end if;
+
+               Target.List_To_Vector;
 
             when Tok_Start_Bytevector =>
                Lex.Scan;

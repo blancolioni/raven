@@ -134,6 +134,21 @@ package body Raven.Target is
       elsif Is_Pair (X) then
          return "(" & This.Show (This.Car (X), Readable)
            & Show_List (This.Cdr (X)) & ")";
+      elsif Is_Vector (X) then
+
+         --  #(1 2 3), which is how one is written and how the reader
+         --  takes one back.
+
+         declare
+            function Elements (Index : Natural) return String
+            is (if Index = This.Vector_Length (X)
+                then ""
+                else (if Index = 0 then "" else " ")
+                  & This.Show (This.Vector_Element (X, Index), Readable)
+                  & Elements (Index + 1));
+         begin
+            return "#(" & Elements (0) & ")";
+         end;
       elsif Is_Foreign_Value (X) then
          return (if Readable
                  then This.To_Foreign_Value (X).Show

@@ -141,6 +141,8 @@ package body Raven.Objects is
          return "#sym" & Integer'Image (-Integer (Raven.Objects.To_Symbol (X)));
       elsif Is_Closure (X) then
          return "#procedure";
+      elsif Is_Vector (X) then
+         return "#vector";
       elsif Is_Foreign_Function (X) then
          return "#fn" & Integer'Image (-Integer (To_Foreign_Function_Id (X)));
       elsif Is_Pair (X) then
