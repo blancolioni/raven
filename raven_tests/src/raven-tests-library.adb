@@ -156,6 +156,7 @@ package body Raven.Tests.Library is
       Test_Error (VM, "(write-char #\a 4)");
       Test_Error (VM, "(close-port 4)");
       Test_Error (VM, "(char-ready? ""x"")");
+      Test_Error (VM, "(char-ready? (open-output-string))");
       Test_Error (VM, "(open-input-string 4)");
       Test_Error (VM, "(get-output-string 4)");
 

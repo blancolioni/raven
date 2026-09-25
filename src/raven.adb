@@ -24,13 +24,11 @@ package body Raven is
 
    type Raven_VM_Record is
       record
-         Text_Writer : Write_Text_Handler;
-         File_Reader : Read_File_Handler;
          User_Data   : User_Data_Reference;
          Evaluator   : Raven.Evaluator.Reference;
          Memory      : Raven.Memory.Reference;
          Target      : Raven.Target.Reference;
-         IO          : Raven.IO.Reference;
+         IO          : IO_Reference;
       end record;
 
    ----------------------
@@ -339,8 +337,7 @@ package body Raven is
    -------------
 
    function New_VM
-     (Text_Writer   : Write_Text_Handler := null;
-      File_Reader   : Read_File_Handler  := null;
+     (IO            : IO_Reference := null;
       User_Data     : access User_Data_Interface'Class := null;
       Configuration : String := "";
       Library_Path  : String := "";
@@ -357,10 +354,10 @@ package body Raven is
 
       This : constant Raven_VM :=
                (Data => new Raven_VM_Record'
-                  (Text_Writer => Text_Writer,
-                   File_Reader => File_Reader,
-                   User_Data   => User_Data_Reference (User_Data),
-                   IO          => Raven.IO.Standard_IO,
+                  (User_Data   => User_Data_Reference (User_Data),
+                   IO          => (if IO = null
+                                   then Raven.IO.Standard_IO
+                                   else IO),
                    Memory      => Memory,
                    Evaluator   => null,
                    Target      => null));
@@ -650,12 +647,15 @@ package body Raven is
       Errors : Boolean)
    is
    begin
-      --  There is one place the host writes, so an error goes to it
-      --  as well.  Telling the two apart is the host's to do and
-      --  wants Raven.IO to have somewhere else to put a character.
+      --  Which of the two the host is told apart by.  Before it had
+      --  somewhere else to put a character, an error went where
+      --  everything else went and this flag was thrown away.
 
-      pragma Unreferenced (Errors);
-      This.Data.IO.Put (Ch);
+      if Errors then
+         This.Data.IO.Put_Error (Ch);
+      else
+         This.Data.IO.Put (Ch);
+      end if;
    end Write_Character;
 
 end Raven;

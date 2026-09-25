@@ -3,6 +3,7 @@ with Ada.Text_IO;
 
 with Raven.Engine.Tests;
 with Raven.Tests.Define;
+with Raven.Tests.Host_IO;
 with Raven.Tests.Imports;
 with Raven.Tests.Library;
 with Raven.Tests.Macros;
@@ -92,6 +93,11 @@ package body Raven.Tests is
          VM.Report_State;
          VM.Close_VM;
       end;
+
+      --  A VM of its own, because it is the host that is under test
+      --  and the others all run on the terminal.
+
+      Raven.Tests.Host_IO.Run_Tests;
 
       Test_Heap_Size;
    end Run_Tests;

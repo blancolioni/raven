@@ -11,15 +11,49 @@ package Raven is
    type User_Data_Interface is interface;
    type User_Data_Reference is access all User_Data_Interface'Class;
 
+   --  Where a VM writes, where it writes what went wrong, and where
+   --  it reads.  A host that embeds raven gives New_VM one of these
+   --  to say where each of the three goes; a VM without one uses the
+   --  terminal it was started from.
+   --
+   --  Every operation is abstract rather than a default that does
+   --  nothing, because a host that forgets one should be told so
+   --  where it is compiled and not by output quietly going nowhere.
+   --  Write_Text_Handler and Read_File_Handler, which New_VM took and
+   --  nothing ever called, are what this replaces.
+   --
+   --  Files are not here.  Everything a VM reads today is either the
+   --  library it ships with, found on a path the host sets, or a path
+   --  the host itself handed to Import_Library, so there is nothing a
+   --  program can read that the host did not already choose.  File
+   --  ports are what change that, and are where this grows a way to
+   --  say no.
+
+   type IO_Interface is interface;
+   type IO_Reference is access all IO_Interface'Class;
+
+   procedure Put
+     (This : in out IO_Interface;
+      Ch   : Wide_Wide_Character)
+   is abstract;
+
+   procedure Put_Error
+     (This : in out IO_Interface;
+      Ch   : Wide_Wide_Character)
+   is abstract;
+
+   --  Available says whether there was a character to be had.  A host
+   --  that has none says so rather than waiting: read-char answers
+   --  with the end of the port, so a program is never held up by one
+   --  of these, and char-ready? is true whichever way it goes.
+
+   procedure Get
+     (This      : in out IO_Interface;
+      Ch        : out Wide_Wide_Character;
+      Available : out Boolean)
+   is abstract;
+
    type Raven_VM is tagged private;
-
-   type Write_Text_Handler is access
-     procedure (VM      : Raven_VM;
-                Message : String);
-
-   type Read_File_Handler is access
-     function (VM        : Raven_VM;
-               File_Name : String) return String;
 
    --  How many cells a VM's heap has.  The collector copies what is
    --  live into the other half of it, so a program has half of these
@@ -40,9 +74,11 @@ package Raven is
    --  that ships with raven wants; a host that keeps the library
    --  somewhere of its own says where.
 
+   --  IO is the host of this VM: where it writes, where it writes
+   --  what went wrong, and where it reads.  Null is the terminal.
+
    function New_VM
-     (Text_Writer   : Write_Text_Handler := null;
-      File_Reader   : Read_File_Handler  := null;
+     (IO            : IO_Reference := null;
       User_Data     : access User_Data_Interface'Class := null;
       Configuration : String := "";
       Library_Path  : String := "";
