@@ -143,6 +143,8 @@ package body Raven.Objects is
          return "#procedure";
       elsif Is_Vector (X) then
          return "#vector";
+      elsif Is_Bytevector (X) then
+         return "#bytevector";
       elsif Is_Foreign_Function (X) then
          return "#fn" & Integer'Image (-Integer (To_Foreign_Function_Id (X)));
       elsif Is_Pair (X) then

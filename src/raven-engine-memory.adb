@@ -98,6 +98,11 @@ package body Raven.Engine.Memory is
       Length : Natural)
       return Object;
 
+   overriding function New_Bytevector
+     (This   : in out Instance;
+      Length : Natural)
+      return Object;
+
    overriding function Vector_Length
      (This : Instance;
       V    : Object)
@@ -596,7 +601,9 @@ package body Raven.Engine.Memory is
             --  because the right of an assignment is worked out
             --  first.
 
-            if Raven.Objects.Is_Vector (Item) then
+            if Raven.Objects.Is_Vector (Item)
+              or else Raven.Objects.Is_Bytevector (Item)
+            then
                Cell.Car :=
                  Raven.Objects.To_Pair
                    (Copy_Block
@@ -621,6 +628,9 @@ package body Raven.Engine.Memory is
               (Raven.Objects.Get_Address (Cell.Car));
          elsif Raven.Objects.Is_Vector (Item) then
             return Raven.Objects.To_Vector
+              (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Bytevector (Item) then
+            return Raven.Objects.To_Bytevector
               (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
@@ -675,6 +685,25 @@ package body Raven.Engine.Memory is
 
       return Raven.Objects.To_Vector (Base);
    end New_Vector;
+
+   --------------------
+   -- New_Bytevector --
+   --------------------
+
+   overriding function New_Bytevector
+     (This   : in out Instance;
+      Length : Natural)
+      return Object
+   is
+      V : constant Object := This.New_Vector (Length);
+   begin
+      --  The same block, said to be a bytevector.  What tells them
+      --  apart is the tag and nothing else, because what a bytevector
+      --  may hold is checked where it is put in rather than by the
+      --  shape of the thing holding it.
+
+      return Raven.Objects.To_Bytevector (Raven.Objects.Get_Address (V));
+   end New_Bytevector;
 
    -------------------
    -- Vector_Length --

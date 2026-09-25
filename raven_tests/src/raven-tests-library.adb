@@ -128,6 +128,24 @@ package body Raven.Tests.Library is
       Test_Value (VM, "(vector-ref (vector 7 8) 1)", 8);
       Test_Value (VM, "(vector-length (make-vector 5 0))", 5);
 
+      --  Only a byte goes into a bytevector, which is what tells one
+      --  from a vector laid out the same way.
+
+      Test_Error (VM, "(bytevector-u8-set! (make-bytevector 1 0) 0 256)");
+      Test_Error (VM, "(bytevector-u8-set! (make-bytevector 1 0) 0 -1)");
+      Test_Error (VM, "(make-bytevector 1 256)");
+      Test_Error (VM, "(make-bytevector -1 0)");
+      Test_Error (VM, "(bytevector-u8-ref (make-bytevector 2 0) 2)");
+      Test_Error (VM, "(bytevector-u8-ref (vector 1 2) 0)");
+      Test_Error (VM, "(bytevector-length (vector 1 2))");
+      Test_Error (VM, "(utf8->string (vector 1 2))");
+      Test_Error (VM, "(string->utf8 (vector 1 2))");
+
+      --  And the byte at either end of the range goes in.
+
+      Test_Value (VM, "(bytevector-u8-ref (make-bytevector 1 255) 0)", 255);
+      Test_Value (VM, "(bytevector-u8-ref (make-bytevector 1 0) 0)", 0);
+
       --  A foreign function can be bound again under the same name,
       --  and the new handler is the one that runs.
 

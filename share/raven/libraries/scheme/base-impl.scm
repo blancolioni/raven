@@ -372,6 +372,49 @@
 (define (vector-for-each f . vs)
   (apply for-each f (map vector->list vs)))
 
+;;  Bytevectors.  Laid out the way a vector is and one element to a
+;;  slot, so a bytevector is as large as a vector of the same length;
+;;  what tells them apart is what may go into one, which is said where
+;;  it is put in.
+
+(define (make-bytevector n fill) (raven-make-bytevector n (optional fill 0)))
+
+(define (bytevector . bytes) (list->bytevector bytes))
+
+(define (list->bytevector bytes)
+  (fill-bytevector (make-bytevector (length bytes) 0) 0 bytes))
+
+(define (fill-bytevector v at bytes)
+  (if (null? bytes)
+      v
+      (begin (bytevector-u8-set! v at (car bytes))
+	     (fill-bytevector v (+ at 1) (cdr bytes)))))
+
+(define (bytevector->list v start end)
+  (bytevector-onto v (optional start 0)
+		   (- (optional end (bytevector-length v)) 1)))
+
+(define (bytevector-onto v first last)
+  (if (< last first) '() (bytevector-tail v first last '())))
+
+(define (bytevector-tail v first at acc)
+  (if (< at first)
+      acc
+      (bytevector-tail v first (- at 1) (cons (bytevector-u8-ref v at) acc))))
+
+(define (bytevector-copy v start end)
+  (list->bytevector (bytevector->list v start end)))
+
+(define (bytevector-append . vs)
+  (list->bytevector (concatenate (map bytevector->list vs))))
+
+;;  Through a list, so that one bytevector given twice with the ranges
+;;  lying over one another works as though everything read were read
+;;  before anything is written.
+
+(define (bytevector-copy! to at from start end)
+  (fill-bytevector to at (bytevector->list from start end)))
+
 (define (string-map f . ss)
   (list->string (apply map f (map string->list ss))))
 

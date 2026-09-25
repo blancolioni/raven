@@ -168,7 +168,7 @@ package body Raven is
       elsif Is_Pair (X) then
          B := This.Equal (This.Car (X), This.Car (Y))
            and then This.Equal (This.Cdr (X), This.Cdr (Y));
-      elsif Is_Vector (X) then
+      elsif Is_Vector (X) or else Is_Bytevector (X) then
 
          --  Element by element, the way a pair is car and cdr.  Two
          --  vectors of different lengths are not equal, and asking
@@ -561,6 +561,16 @@ package body Raven is
       Length : Natural)
       return Object
    is (This.Data.Memory.New_Vector (Length));
+
+   --------------------
+   -- New_Bytevector --
+   --------------------
+
+   function New_Bytevector
+     (This   : Raven_VM'Class;
+      Length : Natural)
+      return Object
+   is (This.Data.Memory.New_Bytevector (Length));
 
    -------------------
    -- Vector_Length --

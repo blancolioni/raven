@@ -198,12 +198,21 @@ package body Raven.Parser is
                Target.List_To_Vector;
 
             when Tok_Start_Bytevector =>
+
+               --  A literal, the way a vector written out is one, and
+               --  for the same reason: #u8(1 2) read as a call of
+               --  bytevector, so its elements were expressions.
+
                Lex.Scan;
-               Target.Push
-                 (Raven.Objects.To_Object
-                    (Target.To_Symbol_Id ("bytevector")));
-               Parse_Rest_Of_List;
-               Target.Cons;
+
+               if Lex.Tok = Tok_Right_Paren then
+                  Lex.Scan;
+                  Target.Push_Nil;
+               else
+                  Parse_Rest_Of_List;
+               end if;
+
+               Target.List_To_Bytevector;
 
             when Tok_Character =>
                Target.Push (Raven.Objects.To_Object (Lex.Tok_Character_Value));
