@@ -29,6 +29,12 @@ private package Raven.Parser is
       Target : Raven.Target.Reference)
      with Pre => not This.At_End;
 
+   --  The file and the line the reader is at, for a complaint about
+   --  the form that starts there.  Asked before the form is read,
+   --  because afterwards the reader has gone past it.
+
+   function Where (This : Instance) return String;
+
    procedure Close (This : in out Instance);
 
 private

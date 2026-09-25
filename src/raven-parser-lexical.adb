@@ -97,17 +97,39 @@ package body Raven.Parser.Lexical is
    is
       use Ada.Strings, Ada.Strings.Fixed;
       use Ada.Text_IO;
+      use type Raven.Target.Reference;
+
+      Text : constant String :=
+               Encode (To_Wide_Wide_String (This.Current_Stream.Identity))
+               & ":"
+               & Trim (Natural'Image (This.Current_Stream.Tok_Line), Left)
+               & ":"
+               & Trim (Natural'Image (This.Current_Stream.Tok_Column), Left)
+               & ": "
+               & Encode (Message);
    begin
-      Put_Line
-        (Standard_Error,
-         Encode (To_Wide_Wide_String (This.Current_Stream.Identity))
-         & ":"
-         & Trim (Natural'Image (This.Current_Stream.Tok_Line), Left)
-         & ":"
-         & Trim (Natural'Image (This.Current_Stream.Tok_Column), Left)
-         & ": "
-         & Encode (Message));
+      if This.Target = null then
+
+         --  Nothing has said where to send it, which is a lexer being
+         --  read outside a parse.  The terminal is all there is.
+
+         Put_Line (Standard_Error, Text);
+      else
+         This.Target.Report_Error (Text);
+      end if;
    end Error;
+
+   ----------------
+   -- Report_To --
+   ----------------
+
+   procedure Report_To
+     (This   : in out Instance;
+      Target : Raven.Target.Reference)
+   is
+   begin
+      This.Target := Target;
+   end Report_To;
 
    ---------------
    -- Hex_Digit --

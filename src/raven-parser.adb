@@ -1,3 +1,4 @@
+with Ada.Strings.Fixed;
 with Ada.Unchecked_Deallocation;
 with Raven.Objects;
 with Raven.Parser.Tokens;             use Raven.Parser.Tokens;
@@ -78,6 +79,22 @@ package body Raven.Parser is
    begin
       Parse_S_Expression (This.Data.Lex, Target);
    end Parse_Next;
+
+   -----------
+   -- Where --
+   -----------
+
+   function Where (This : Instance) return String is
+      use Ada.Strings, Ada.Strings.Fixed;
+   begin
+      if This.Data = null then
+         return "";
+      end if;
+
+      return This.Data.Lex.Current_File_Name
+        & ":"
+        & Trim (Natural'Image (This.Data.Lex.Current_Line), Left);
+   end Where;
 
    ------------------------
    -- Parse_S_Expression --
@@ -335,6 +352,12 @@ package body Raven.Parser is
       end Parse_Rest_Of_List;
 
    begin
+      --  What the lexer has to say goes where this target's host says
+      --  errors go.  It had no way of reaching one and wrote to the
+      --  terminal.
+
+      Lex.Report_To (Target);
+
       Parse_Expression;
    end Parse_S_Expression;
 

@@ -66,6 +66,7 @@ package body Raven.Engine.SECD is
      new Raven.Target.Abstraction with
       record
          VM          : Raven_VM;
+         Abandoned   : Natural := 0;
          St          : Stacks;
          Rs          : Registers;
          Syms        : Raven.Symbols.Reference;
@@ -212,6 +213,20 @@ package body Raven.Engine.SECD is
    is (This.Syms.To_String (Id));
 
    overriding procedure Report (This : Instance);
+
+   --  Where a complaint about a form goes, and a form given up on.
+   --  The machine is the only thing holding both a target and the VM
+   --  whose host is to hear about it, and it keeps the count itself
+   --  because it cannot see the inside of a VM to keep it there.
+
+   overriding procedure Report_Error
+     (This    : Instance;
+      Message : String);
+
+   overriding procedure Abandon_Form (This : in out Instance);
+
+   overriding function Forms_Abandoned (This : Instance) return Natural
+   is (This.Abandoned);
 
    overriding procedure Mark
      (This    : in out Instance;
@@ -525,6 +540,7 @@ package body Raven.Engine.SECD is
    is
       This : constant Instance_Reference := new Instance'
         (VM          => VM,
+         Abandoned   => 0,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
          --  Named explicitly, because Symbols is an anonymous access
@@ -1260,6 +1276,19 @@ package body Raven.Engine.SECD is
    ------------
    -- Report --
    ------------
+
+   overriding procedure Report_Error
+     (This    : Instance;
+      Message : String)
+   is
+   begin
+      Raven.Write_Error (This.VM, Message);
+   end Report_Error;
+
+   overriding procedure Abandon_Form (This : in out Instance) is
+   begin
+      This.Abandoned := This.Abandoned + 1;
+   end Abandon_Form;
 
    overriding procedure Report (This : Instance) is
    begin

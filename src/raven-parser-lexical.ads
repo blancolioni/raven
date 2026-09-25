@@ -28,6 +28,14 @@ private package Raven.Parser.Lexical is
    function Tok_Float_Value (This : in out Instance'Class)
                              return Float;
 
+   --  Where what the lexer has to say goes.  It wrote to the terminal
+   --  whatever the host asked for, because it had no way of reaching
+   --  one; the parser hands it the target it is reading into.
+
+   procedure Report_To
+     (This   : in out Instance;
+      Target : Raven.Target.Reference);
+
    procedure Error
      (This    : in out Instance;
       Message : Wide_Wide_String);
@@ -77,6 +85,7 @@ private
 
    type Instance is tagged
       record
+         Target               : Raven.Target.Reference := null;
          Source_Stream_Stack  : Source_Stream_Array;
          Current_Stream_Index : Natural := 0;
          Current_Stream       : Source_Stream;

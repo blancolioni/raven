@@ -107,6 +107,25 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(import (probe nowhere))");
       Test_Name (VM, "alpha-name", "alpha");
 
+      --  A form that cannot be run is given up on, the rest of the
+      --  file is read anyway, and the host can now tell that it
+      --  happened.  Nothing downstream could before.
+
+      declare
+         Before : constant Natural := VM.Forms_Abandoned;
+      begin
+         Evaluate (VM, "(import (probe abandoned))");
+
+         Test ("a form given up on is counted",
+               VM.Forms_Abandoned = Before + 1);
+      end;
+
+      --  The file carried on at the form after it, and what came
+      --  before it is there too.
+
+      Test_Number (VM, "abandoned-before", 1);
+      Test_Number (VM, "abandoned-after", 3);
+
       --  Two libraries that ask for each other: the second to ask
       --  gets what has been read of the first so far, which is
       --  reported, and both are readable afterwards.

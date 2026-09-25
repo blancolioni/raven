@@ -624,6 +624,18 @@ package body Raven is
       return This.Data.User_Data;
    end User_Data;
 
+   ---------------------
+   -- Forms_Abandoned --
+   ---------------------
+
+   function Forms_Abandoned (This : Raven_VM) return Natural is
+   begin
+      --  Kept by the target, because the machine is what counts them
+      --  and the machine cannot see the inside of a VM.
+
+      return This.Data.Target.Forms_Abandoned;
+   end Forms_Abandoned;
+
    --------------------
    -- Read_Character --
    --------------------
@@ -636,6 +648,23 @@ package body Raven is
    begin
       This.Data.IO.Get (Ch, Available);
    end Read_Character;
+
+   -----------------
+   -- Write_Error --
+   -----------------
+
+   procedure Write_Error
+     (This    : Raven_VM'Class;
+      Message : String)
+   is
+      Text : constant Wide_Wide_String := Decode (Message);
+   begin
+      for Ch of Text loop
+         This.Data.IO.Put_Error (Ch);
+      end loop;
+
+      This.Data.IO.Put_Error (Wide_Wide_Character'Val (10));
+   end Write_Error;
 
    ---------------------
    -- Write_Character --

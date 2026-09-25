@@ -1261,9 +1261,7 @@ package body Raven.Engine.SECD.Translator is
          --  form in a file, the way it already takes an undefined
          --  name: the file carries on at the form after it.
 
-         Ada.Text_IO.Put_Line
-           (Ada.Text_IO.Standard_Error,
-            Ada.Exceptions.Exception_Message (E));
+         Target.Report_Error (Ada.Exceptions.Exception_Message (E));
 
          --  And the code listing is for whoever is working on the
          --  translator, so it waits to be asked for.

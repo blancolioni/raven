@@ -53,6 +53,13 @@ package body Raven.Tests is
    function Library_Path return String
    is (Raven_Library_Resources.Resource_Path & "/libraries");
 
+   ----------------
+   -- Tests_Path --
+   ----------------
+
+   function Tests_Path return String
+   is (Raven_Tests_Resources.Resource_Path);
+
    ---------------
    -- Run_Tests --
    ---------------
@@ -77,9 +84,23 @@ package body Raven.Tests is
          --  values of a session, and the suites below allocate strings
          --  of their own.
 
-         VM.Import_Library
-           ("(test-suite)",
-            Raven_Tests_Resources.Resource_Path & "/test-suite.scm");
+         --  And say whether it was read whole.  A form that cannot be
+         --  run is reported and passed over, which is right for a
+         --  file being loaded and used to be the quietest thing in
+         --  raven: sixteen of the tests in this suite did not run for
+         --  a while, and it printed the same last line as a run where
+         --  every one of them had.
+
+         declare
+            Before : constant Natural := VM.Forms_Abandoned;
+         begin
+            VM.Import_Library
+              ("(test-suite)",
+               Raven_Tests_Resources.Resource_Path & "/test-suite.scm");
+
+            Test ("the scheme suite was read whole",
+                  VM.Forms_Abandoned = Before);
+         end;
 
          Raven.Engine.Tests.Run_Tests (VM);
          Raven.Tests.Parser.Run_Tests (VM);

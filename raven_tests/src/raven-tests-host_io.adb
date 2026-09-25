@@ -1,3 +1,4 @@
+with Ada.Strings.Fixed;
 with Ada.Strings.Wide_Wide_Unbounded;
 
 package body Raven.Tests.Host_IO is
@@ -39,6 +40,16 @@ package body Raven.Tests.Host_IO is
 
    procedure Give (Text : Wide_Wide_String);
 
+   procedure Forget;
+
+   --  Evaluates something the machine will object to, and says the
+   --  objection reached the host rather than the terminal.
+
+   procedure Complains
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
+
    procedure Test_True
      (VM         : Raven_VM;
       Expression : String;
@@ -58,6 +69,41 @@ package body Raven.Tests.Host_IO is
      (VM         : Raven_VM;
       Expression : String;
       Expected   : String);
+
+   ---------------
+   -- Complains --
+   ---------------
+
+   procedure Complains
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String)
+   is
+      use Ada.Strings.Fixed;
+   begin
+      begin
+         VM.Evaluate (Expression);
+      exception
+         when others =>
+
+            --  A form the machine refuses raises as well as saying
+            --  so, and what is under test here is the saying.
+
+            null;
+      end;
+
+      Test (Expression & " reaches the host", Index (Failed, Expected) > 0);
+   end Complains;
+
+   ------------
+   -- Forget --
+   ------------
+
+   procedure Forget is
+   begin
+      Host.Written := Null_Unbounded_Wide_Wide_String;
+      Host.Failed := Null_Unbounded_Wide_Wide_String;
+   end Forget;
 
    ---------
    -- Get --
@@ -201,6 +247,42 @@ package body Raven.Tests.Host_IO is
            ("(let ((p (open-output-string))) (display ""quiet"" p)"
             & " (get-output-string p))");
          Test ("a string port does not reach the host", Before, Written);
+      end;
+
+      --  What the machine itself has to say goes to the host too.
+      --  The loader, the translator and the lexer each wrote to the
+      --  terminal directly, whatever the host had asked for, so a
+      --  host given everything a program wrote still saw these go
+      --  past it.
+
+      Forget;
+      Complains (VM, "(set! 1 2)", "set!");
+      Forget;
+      Complains (VM, "(string-length ""\q"")", "bad escape");
+
+      --  And a form the loader gives up on, which says which file,
+      --  which line and which form, and is counted where the host can
+      --  ask.  The message named whatever was undefined at the moment
+      --  it failed and nothing else.
+
+      Forget;
+
+      declare
+         use Ada.Strings.Fixed;
+         Before : constant Natural := VM.Forms_Abandoned;
+      begin
+         VM.Import_Library
+           ("(probe abandoned)",
+            Tests_Path & "/libraries/probe/abandoned.scm");
+
+         Test ("a form given up on reaches the host",
+               Index (Failed, "abandoned") > 0);
+         Test ("and says which one",
+               Index (Failed, "(probe-no-such-procedure ...)") > 0);
+         Test ("and which file it was in",
+               Index (Failed, "abandoned.scm:") > 0);
+         Test ("and is counted", VM.Forms_Abandoned = Before + 1);
+         Test ("and none of it went where output goes", "", Written);
       end;
 
       VM.Close_VM;

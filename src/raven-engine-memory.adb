@@ -768,6 +768,15 @@ package body Raven.Engine.Memory is
 
    overriding procedure Report (This : Instance) is
    begin
+      --  This writes to the terminal and not to the host, which is
+      --  deliberate: it is a dump of the collector's state, asked for
+      --  by the host calling Report_State and by nothing a program
+      --  can do.  What goes to the host is what a program causes.
+      --
+      --  It is the one thing left writing where it likes.  If a host
+      --  ever wants this captured too, the honest answer is a way of
+      --  asking for the numbers rather than for a page of text.
+
       Ada.Text_IO.Put_Line
         ("Total number of cells:"
          & Address_Type'Image (This.Core'Length / 2));
