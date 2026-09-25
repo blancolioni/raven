@@ -2,7 +2,8 @@ with Raven.Objects;
 
 package body Raven.Strings is
 
-   procedure Display (VM : Raven_VM);
+   procedure Display_Text (VM : Raven_VM);
+   procedure Write_Text (VM : Raven_VM);
    procedure Is_String (VM : Raven_VM);
    procedure String_Length (VM : Raven_VM);
    procedure List_To_String (VM : Raven_VM);
@@ -35,13 +36,35 @@ package body Raven.Strings is
    -- Display --
    -------------
 
-   procedure Display (VM : Raven_VM) is
-      S : constant Wide_Wide_String := VM.Display (VM.Get_Slot (1));
+   --  The two renderings, each as the text it comes to.  display and
+   --  write in the library write that text; these are what they write.
+   --
+   --  R7RS has no way of asking for the text without writing it, so
+   --  neither of these is a name a program is offered.  The harness
+   --  asks for one, because a test that says what something writes as
+   --  has to hold the answer to compare it.
+
+   procedure Display_Text (VM : Raven_VM) is
+      S : constant Wide_Wide_String :=
+            VM.Display (VM.Get_Slot (1), Readable => False);
       V : constant Instance := (Foreign_Value_Instance with
                                 Length => S'Length, Value => S);
    begin
       VM.Set_Slot (1, VM.Create_Foreign_Value (V));
-   end Display;
+   end Display_Text;
+
+   ----------------
+   -- Write_Text --
+   ----------------
+
+   procedure Write_Text (VM : Raven_VM) is
+      S : constant Wide_Wide_String :=
+            VM.Display (VM.Get_Slot (1), Readable => True);
+      V : constant Instance := (Foreign_Value_Instance with
+                                Length => S'Length, Value => S);
+   begin
+      VM.Set_Slot (1, VM.Create_Foreign_Value (V));
+   end Write_Text;
 
    ------------------
    -- Enable_Trace --
@@ -156,7 +179,9 @@ package body Raven.Strings is
       Evaluator.Bind_Foreign_Function
         ("string?", Is_String'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("display", Display'Access, 1);
+        ("raven-display-text", Display_Text'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-write-text", Write_Text'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-string-length", String_Length'Access, 1);
       Evaluator.Bind_Foreign_Function
@@ -172,9 +197,59 @@ package body Raven.Strings is
    ----------
 
    overriding function Show (This : Instance) return String is
+
+      --  A string written so that the reader can read it back, which
+      --  means the quotation marks and an escape for everything that
+      --  would end the string or be read as something else.  It used
+      --  to be the quotation marks alone, so a string holding one of
+      --  them wrote as something that would not read.
+
+      Result : Wide_Wide_String (1 .. 2 * This.Value'Length + 2);
+      Last   : Natural := 0;
+
+      procedure Put (Ch : Wide_Wide_Character);
+
+      ---------
+      -- Put --
+      ---------
+
+      procedure Put (Ch : Wide_Wide_Character) is
+      begin
+         Last := Last + 1;
+         Result (Last) := Ch;
+      end Put;
+
    begin
-      return '"' & Encode (This.Value) & '"';
+      Put ('"');
+
+      for Ch of This.Value loop
+         case Wide_Wide_Character'Pos (Ch) is
+            when 7  => Put ('\'); Put ('a');
+            when 8  => Put ('\'); Put ('b');
+            when 9  => Put ('\'); Put ('t');
+            when 10 => Put ('\'); Put ('n');
+            when 13 => Put ('\'); Put ('r');
+            when 34 => Put ('\'); Put ('"');
+            when 92 => Put ('\'); Put ('\');
+            when others => Put (Ch);
+         end case;
+      end loop;
+
+      Put ('"');
+      return Encode (Result (1 .. Last));
    end Show;
+
+   -------------
+   -- Display --
+   -------------
+
+   overriding function Display (This : Instance) return String is
+   begin
+      --  The characters and nothing else: the quotation marks and the
+      --  escapes above are there for the reader and not for a person.
+
+      return Encode (This.Value);
+   end Display;
 
    -------------------
    -- String_Length --

@@ -11,9 +11,9 @@
           (newline)
           (set! passed-tests (+ 1 passed-tests)))
         (begin
-          (write-string "FAIL  ") (write-string name) (write-string ": expected ") (write-string (display expect))
+          (write-string "FAIL  ") (write-string name) (write-string ": expected ") (display expect)
           (write-string ", got ")
-          (write-string (display expr))
+          (display expr)
           (newline)
           (set! failed-tests (+ 1 failed-tests))))
   (set! num-tests (+ 1 num-tests)))
@@ -1278,7 +1278,8 @@
 ;;  And it shows as what it is rather than as the whole of its code
 ;;  and everything it closed over.
 
-(test "a procedure writes as one" "#procedure" (display (lambda (x) x)))
+(test "a procedure writes as one" "#procedure"
+      (raven-write-text (lambda (x) x)))
 
 ;;  A procedure is still itself, and two of them are not each other.
 
@@ -1692,6 +1693,97 @@
 (test "memq finds what is at the end" 5000
       (car (memq 5000 (build-list 5000 '()))))
 
+;;  R7RS has two ways of turning an object into text and they differ
+;;  on exactly two kinds of it: a string has its quotation marks and
+;;  its escapes when it is to be read back and not when it is to be
+;;  read, and a character has its #\ and its name.
+;;
+;;  There was one renderer and display was it, so write was display
+;;  with nothing added -- which made write right about strings,
+;;  because the renderer quoted them, and display wrong about them for
+;;  the same reason.
+;;
+;;  raven-write-text and raven-display-text are what write and display
+;;  write.  R7RS has no way of asking for the text without writing it,
+;;  so they are not names a program is offered; a test that says what
+;;  something writes as has to hold the answer to compare it.
+
+(test "write quotes a string" "\"a b\"" (raven-write-text "a b"))
+(test "display does not" "a b" (raven-display-text "a b"))
+(test "write quotes an empty string" "\"\"" (raven-write-text ""))
+(test "display of an empty string is nothing" "" (raven-display-text ""))
+
+(test "write marks a character" "#\\a" (raven-write-text #\a))
+(test "display gives the character" "a" (raven-display-text #\a))
+(test "write names a character that has one" "#\\space"
+      (raven-write-text #\space))
+(test "display gives that character too" " " (raven-display-text #\space))
+(test "write names a newline" "#\\newline" (raven-write-text #\newline))
+(test "write names a tab" "#\\tab" (raven-write-text #\tab))
+(test "write does not name a digit" "#\\7" (raven-write-text #\7))
+
+;;  The two things they agree about, which is everything else.
+
+(test "write and display agree about a number" #t
+      (string=? (raven-write-text 42) (raven-display-text 42)))
+(test "write and display agree about a symbol" #t
+      (string=? (raven-write-text 'abc) (raven-display-text 'abc)))
+(test "write and display agree about nil" #t
+      (string=? (raven-write-text '()) (raven-display-text '())))
+(test "write and display agree about a boolean" #t
+      (string=? (raven-write-text #t) (raven-display-text #t)))
+
+;;  And they differ all the way down a list rather than only at the
+;;  top of one.
+
+(test "write inside a list" "(1 \"two\" #\\3 four)"
+      (raven-write-text (list 1 "two" #\3 'four)))
+(test "display inside a list" "(1 two 3 four)"
+      (raven-display-text (list 1 "two" #\3 'four)))
+(test "write inside a list inside a list" "(\"a\" (#\\b \"c\"))"
+      (raven-write-text (list "a" (list #\b "c"))))
+(test "display inside a list inside a list" "(a (b c))"
+      (raven-display-text (list "a" (list #\b "c"))))
+(test "write down an improper tail" "(1 . \"two\")"
+      (raven-write-text (cons 1 "two")))
+
+;;  A string that holds what would end it, or what would be read as an
+;;  escape, is written with escapes -- so that what write produces is
+;;  something the reader takes back.  It used to be the quotation
+;;  marks alone, so such a string wrote as something that would not
+;;  read.
+
+(test "write escapes a quotation mark" 4
+      (string-length (raven-write-text (string (integer->char 34)))))
+(test "and display does not" 1
+      (string-length (raven-display-text (string (integer->char 34)))))
+(test "write escapes a backslash" 4
+      (string-length (raven-write-text (string (integer->char 92)))))
+(test "and display does not" 1
+      (string-length (raven-display-text (string (integer->char 92)))))
+(test "write escapes a newline" 4
+      (string-length (raven-write-text (string #\newline))))
+(test "write escapes a tab" 4
+      (string-length (raven-write-text (string #\tab))))
+(test "write leaves an ordinary character alone" 3
+      (string-length (raven-write-text "a")))
+
+;;  What write puts round a character is a backslash, which is one
+;;  character and not two.
+
+(test "write of a backslash character" 3
+      (string-length (raven-write-text (integer->char 92))))
+(test "write of a quotation mark character" 3
+      (string-length (raven-write-text (integer->char 34))))
+
+;;  Both of them write now and answer nothing in particular, where
+;;  display used to answer with the text and write nothing.  Writing
+;;  an empty string writes nothing, so this says what it answers
+;;  without saying anything.
+
+(test "display answers nothing in particular" '() (display ""))
+(test "write answers nothing in particular" '() (write ""))
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there
@@ -1709,15 +1801,15 @@
 ;;  it, once there were ninety-nine.
 
 (define (probe-strings n)
-  (if (= n 0) '() (cons (display n) (probe-strings (- n 1)))))
+  (if (= n 0) '() (cons (raven-display-text n) (probe-strings (- n 1)))))
 
 (test "five hundred live strings" 500 (length (probe-strings 500)))
 
 (write-string "Tests: ")
-(write-string (display num-tests))
+(display num-tests)
 (write-string ", Passed: ")
-(write-string (display passed-tests))
+(display passed-tests)
 (write-string ", Failed: ")
-(write-string (display failed-tests))
+(display failed-tests)
 (newline)
 

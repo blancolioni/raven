@@ -152,8 +152,16 @@ private package Raven.Target is
       return Object
    is abstract;
 
-   function Show (This : Abstraction'Class;
-                  X    : Object)
+   --  R7RS has two ways of turning an object into text and they
+   --  differ on exactly two kinds of it: a string has its quotation
+   --  marks and its escapes when it is to be read back and not when it
+   --  is to be read, and a character has its #\ and its name.
+   --  Readable picks which, and is the one every caller but display
+   --  wants.
+
+   function Show (This     : Abstraction'Class;
+                  X        : Object;
+                  Readable : Boolean := True)
                   return String;
 
    procedure Set_Parameter

@@ -47,6 +47,7 @@ private
       end record;
 
    overriding function Show (This : Instance) return String;
+   overriding function Display (This : Instance) return String;
 
    overriding function Equal
      (This : Instance;

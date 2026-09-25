@@ -127,14 +127,22 @@ package body Raven is
    -------------
 
    function Display
-     (This : Raven_VM'Class;
-      Value : Object)
+     (This     : Raven_VM'Class;
+      Value    : Object;
+      Readable : Boolean := True)
       return Wide_Wide_String
    is
-      Image : constant String := This.Data.Target.Show (Value);
+      Image : constant String := This.Data.Target.Show (Value, Readable);
    begin
       return Decode (Image);
    end Display;
+
+   -------------
+   -- Display --
+   -------------
+
+   function Display (This : Foreign_Value_Instance) return String
+   is (Foreign_Value_Instance'Class (This).Show);
 
    -----------
    -- Equal --
