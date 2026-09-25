@@ -2269,6 +2269,185 @@
 (test "nothing is held back, so nothing is pushed out" '()
       (flush-output-port (current-output-port)))
 
+;;  Binary ports: a port opened on a bytevector, read and written a
+;;  byte at a time.  Every port used to be textual, so binary-port?
+;;  answered #f whatever it was given and textual-port? was port?
+;;  under another name.
+
+(test "an output bytevector port is a port" #t
+      (port? (open-output-bytevector)))
+(test "and a binary one" #t (binary-port? (open-output-bytevector)))
+(test "and not a textual one" #f (textual-port? (open-output-bytevector)))
+(test "and an output one" #t (output-port? (open-output-bytevector)))
+(test "and not an input one" #f (input-port? (open-output-bytevector)))
+
+(test "an input bytevector port is binary" #t
+      (binary-port? (open-input-bytevector '#u8(1))))
+(test "and an input one" #t (input-port? (open-input-bytevector '#u8(1))))
+(test "and not an output one" #f
+      (output-port? (open-input-bytevector '#u8(1))))
+
+;;  And the ports that were here already are still textual.
+
+(test "a string port is textual" #t (textual-port? (open-output-string)))
+(test "and not binary" #f (binary-port? (open-output-string)))
+(test "the host's port is textual" #t (textual-port? (current-output-port)))
+(test "and not binary" #f (binary-port? (current-output-port)))
+(test "the host's input is textual too" #t
+      (textual-port? (current-input-port)))
+(test "a number is not a binary port" #f (binary-port? 4))
+(test "a number is not a textual port" #f (textual-port? 4))
+
+;;  Writing a byte at a time.
+
+(test "nothing written yet" '#u8()
+      (get-output-bytevector (open-output-bytevector)))
+(test "write-u8" '#u8(7)
+      (let ((p (open-output-bytevector)))
+        (write-u8 7 p) (get-output-bytevector p)))
+(test "several of them" '#u8(1 2 3)
+      (let ((p (open-output-bytevector)))
+        (write-u8 1 p) (write-u8 2 p) (write-u8 3 p)
+        (get-output-bytevector p)))
+(test "the largest byte" '#u8(255)
+      (let ((p (open-output-bytevector)))
+        (write-u8 255 p) (get-output-bytevector p)))
+(test "and the smallest" '#u8(0)
+      (let ((p (open-output-bytevector)))
+        (write-u8 0 p) (get-output-bytevector p)))
+(test "reading it out does not empty it" '#u8(1 1)
+      (let ((p (open-output-bytevector)))
+        (write-u8 1 p) (get-output-bytevector p) (write-u8 1 p)
+        (get-output-bytevector p)))
+(test "two of them are two ports" #f
+      (eq? (open-output-bytevector) (open-output-bytevector)))
+
+(test "write-bytevector" '#u8(1 2 3)
+      (let ((p (open-output-bytevector)))
+        (write-bytevector '#u8(1 2 3) p) (get-output-bytevector p)))
+(test "write-bytevector of nothing" '#u8()
+      (let ((p (open-output-bytevector)))
+        (write-bytevector '#u8() p) (get-output-bytevector p)))
+(test "write-bytevector from an index" '#u8(2 3)
+      (let ((p (open-output-bytevector)))
+        (write-bytevector '#u8(1 2 3) p 1) (get-output-bytevector p)))
+(test "write-bytevector between two" '#u8(2)
+      (let ((p (open-output-bytevector)))
+        (write-bytevector '#u8(1 2 3) p 1 2) (get-output-bytevector p)))
+(test "write-bytevector onto what is there" '#u8(1 2)
+      (let ((p (open-output-bytevector)))
+        (write-u8 1 p) (write-bytevector '#u8(2) p)
+        (get-output-bytevector p)))
+
+;;  Reading a byte at a time.  The order two reads happen in has to be
+;;  said, the same as it does for characters.
+
+(test "read-u8" 1 (read-u8 (open-input-bytevector '#u8(1 2))))
+(test "reading goes on from where it got to" '(1 2)
+      (let* ((p (open-input-bytevector '#u8(1 2)))
+             (a (read-u8 p))
+             (b (read-u8 p)))
+        (list a b)))
+(test "read-u8 of an empty port is the end" #t
+      (eof-object? (read-u8 (open-input-bytevector '#u8()))))
+(test "and so is reading past the last" #t
+      (let* ((p (open-input-bytevector '#u8(1)))
+             (a (read-u8 p)))
+        (eof-object? (read-u8 p))))
+(test "a byte of zero is not the end" #f
+      (eof-object? (read-u8 (open-input-bytevector '#u8(0)))))
+
+(test "peek-u8 does not take the byte" '(1 1)
+      (let* ((p (open-input-bytevector '#u8(1 2)))
+             (a (peek-u8 p))
+             (b (read-u8 p)))
+        (list a b)))
+(test "so peeking twice peeks at the same one" 1
+      (let* ((p (open-input-bytevector '#u8(1 2)))
+             (a (peek-u8 p)))
+        (peek-u8 p)))
+(test "peek-u8 at the end is the end" #t
+      (eof-object? (peek-u8 (open-input-bytevector '#u8()))))
+
+(test "a bytevector port always has a byte ready" #t
+      (u8-ready? (open-input-bytevector '#u8(1))))
+(test "even when it has run out" #t
+      (u8-ready? (open-input-bytevector '#u8())))
+
+;;  And a bytevector of up to this many bytes.
+
+(test "read-bytevector" '#u8(1 2)
+      (read-bytevector 2 (open-input-bytevector '#u8(1 2 3))))
+(test "which takes what it read" 3
+      (let* ((p (open-input-bytevector '#u8(1 2 3)))
+             (v (read-bytevector 2 p)))
+        (read-u8 p)))
+(test "read-bytevector past the end is what there was" '#u8(1 2)
+      (read-bytevector 9 (open-input-bytevector '#u8(1 2))))
+(test "read-bytevector of none is nothing" '#u8()
+      (read-bytevector 0 (open-input-bytevector '#u8(1))))
+(test "and takes nothing" 1
+      (let* ((p (open-input-bytevector '#u8(1)))
+             (v (read-bytevector 0 p)))
+        (read-u8 p)))
+(test "read-bytevector at the end is the end" #t
+      (eof-object? (read-bytevector 2 (open-input-bytevector '#u8()))))
+
+;;  Into a bytevector that is already there, between start and end,
+;;  which are read the way bytevector-copy! reads them.
+
+(test "read-bytevector! says how many arrived" 2
+      (read-bytevector! (make-bytevector 2 0)
+                        (open-input-bytevector '#u8(9 8 7))))
+(test "and puts them in" '#u8(9 8)
+      (let ((v (make-bytevector 2 0)))
+        (read-bytevector! v (open-input-bytevector '#u8(9 8 7)))
+        v))
+(test "fewer than asked for when the port runs out" 2
+      (read-bytevector! (make-bytevector 3 0)
+                        (open-input-bytevector '#u8(9 8))))
+(test "and the rest is left alone" '#u8(9 8 0)
+      (let ((v (make-bytevector 3 0)))
+        (read-bytevector! v (open-input-bytevector '#u8(9 8)))
+        v))
+(test "read-bytevector! from an index" '#u8(0 9 8)
+      (let ((v (make-bytevector 3 0)))
+        (read-bytevector! v (open-input-bytevector '#u8(9 8 7)) 1)
+        v))
+(test "read-bytevector! between two" '#u8(0 9 0)
+      (let ((v (make-bytevector 3 0)))
+        (read-bytevector! v (open-input-bytevector '#u8(9 8 7)) 1 2)
+        v))
+(test "read-bytevector! takes only what it put in" 7
+      (let* ((p (open-input-bytevector '#u8(9 8 7)))
+             (n (read-bytevector! (make-bytevector 2 0) p)))
+        (read-u8 p)))
+(test "read-bytevector! with no room is none" 0
+      (read-bytevector! (make-bytevector 0 0)
+                        (open-input-bytevector '#u8(1))))
+(test "read-bytevector! at the end is the end" #t
+      (eof-object? (read-bytevector! (make-bytevector 2 0)
+                                     (open-input-bytevector '#u8()))))
+
+;;  Closing one is closing a port, the same as any other, and what it
+;;  holds can still be asked for after.
+
+(test "a closed binary port is not open" #f
+      (let ((p (open-output-bytevector))) (close-port p)
+           (output-port-open? p)))
+(test "and still has what was written to it" '#u8(1)
+      (let ((p (open-output-bytevector)))
+        (write-u8 1 p) (close-port p) (get-output-bytevector p)))
+
+;;  What one writes as says which it is.
+
+(test "what a binary input port writes as" "#binary-input-port"
+      (raven-write-text (open-input-bytevector '#u8())))
+(test "and a binary output port" "#binary-output-port"
+      (raven-write-text (open-output-bytevector)))
+(test "a textual one still says what it said" "#output-port"
+      (raven-write-text (open-output-string)))
+
 ;;  A port is a foreign value, so it is collected, and its place in
 ;;  the machine's table has to come back with it -- which is what made
 ;;  Free start being called at all.  Two thousand ports, only one of
@@ -2276,6 +2455,9 @@
 
 (define kept-port (open-output-string))
 (write-char #\a kept-port)
+
+(define kept-binary-port (open-output-bytevector))
+(write-u8 1 kept-binary-port)
 
 (define (churn-ports n)
   (if (= n 0)
@@ -2287,6 +2469,9 @@
 (test "and is still open" #t (output-port-open? kept-port))
 (test "and can still be written to" "ab"
       (begin (write-char #\b kept-port) (get-output-string kept-port)))
+(test "a binary port survives one too" '#u8(1)
+      (get-output-bytevector kept-binary-port))
+(test "and is still binary" #t (binary-port? kept-binary-port))
 
 (write-string "Tests: ")
 (display num-tests)

@@ -15,6 +15,7 @@
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
 ;;  bytevector->list, bytevector-onto, bytevector-tail, write-char-list,
 ;;  read-line-from, read-line-onto, read-string-from, read-chars,
+;;  write-u8-list, read-u8s, read-bytevector-from, read-bytevector-into,
 ;;  raven-the-eof-object, raven-output-port, raven-error-port,
 ;;  raven-input-port, optional and
 ;;  caddr, which the expander
@@ -98,9 +99,7 @@
 
    ;;  ports, and what is written and read through one.  Everything
    ;;  went to one place through one foreign function and nothing
-   ;;  could be read at all; what is not here is the binary half --
-   ;;  read-u8, write-u8, the bytevector ports -- which wants the
-   ;;  same table and its own kind of port.
+   ;;  could be read at all.
    port? input-port? output-port? textual-port? binary-port?
    current-output-port current-error-port current-input-port
    open-input-string open-output-string get-output-string
@@ -108,6 +107,13 @@
    input-port-open? output-port-open? call-with-port flush-output-port
    eof-object eof-object?
    read-char peek-char read-line read-string char-ready?
+
+   ;;  and the same a byte at a time, through a port opened on a
+   ;;  bytevector.  What is not here is a port on a file, which is
+   ;;  where the host gets a say in what may be read at all.
+   open-input-bytevector open-output-bytevector get-output-bytevector
+   read-u8 peek-u8 u8-ready? write-u8
+   read-bytevector read-bytevector! write-bytevector
 
    ;;  output
    write write-char write-string newline display

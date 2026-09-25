@@ -187,6 +187,69 @@ package body Raven.Tests.Library is
          & " (write-char #\a p) (close-port p) (get-output-string p)))",
          1);
 
+      --  A binary port answers for none of the textual operations and
+      --  a textual one for none of the binary.  R7RS lets a port be
+      --  both; none here is, and the host's three are textual.
+
+      Test_Error (VM, "(read-u8 (open-input-string ""x""))");
+      Test_Error (VM, "(peek-u8 (open-input-string ""x""))");
+      Test_Error (VM, "(u8-ready? (open-input-string ""x""))");
+      Test_Error (VM, "(write-u8 1 (open-output-string))");
+      Test_Error (VM, "(read-char (open-input-bytevector '#u8(1)))");
+      Test_Error (VM, "(peek-char (open-input-bytevector '#u8(1)))");
+      Test_Error (VM, "(char-ready? (open-input-bytevector '#u8(1)))");
+      Test_Error (VM, "(write-char #\a (open-output-bytevector))");
+      Test_Error (VM, "(read-u8 (current-input-port))");
+      Test_Error (VM, "(write-u8 1 (current-output-port))");
+
+      --  And a binary port is read from or written to and not both.
+
+      Test_Error (VM, "(read-u8 (open-output-bytevector))");
+      Test_Error (VM, "(peek-u8 (open-output-bytevector))");
+      Test_Error (VM, "(write-u8 1 (open-input-bytevector '#u8(1)))");
+      Test_Error (VM, "(read-u8 4)");
+      Test_Error (VM, "(write-u8 1 4)");
+
+      --  Only a byte goes into one, which is what tells it from a
+      --  textual port the way it tells a bytevector from a vector.
+
+      Test_Error (VM, "(write-u8 256 (open-output-bytevector))");
+      Test_Error (VM, "(write-u8 -1 (open-output-bytevector))");
+
+      Test_Value
+        (VM,
+         "(bytevector-u8-ref (let ((p (open-output-bytevector)))"
+         & " (write-u8 255 p) (get-output-bytevector p)) 0)",
+         255);
+      Test_Value
+        (VM,
+         "(bytevector-u8-ref (let ((p (open-output-bytevector)))"
+         & " (write-u8 0 p) (get-output-bytevector p)) 0)",
+         0);
+
+      --  Each of the two answers for what it was opened on and not
+      --  for the other.
+
+      Test_Error (VM, "(get-output-bytevector (open-output-string))");
+      Test_Error (VM, "(get-output-string (open-output-bytevector))");
+      Test_Error
+        (VM, "(get-output-bytevector (open-input-bytevector '#u8()))");
+      Test_Error (VM, "(get-output-bytevector 4)");
+      Test_Error (VM, "(open-input-bytevector ""x"")");
+      Test_Error (VM, "(open-input-bytevector (vector 1 2))");
+      Test_Error (VM, "(open-input-bytevector 4)");
+
+      --  A closed binary port is not written to or read from either.
+
+      Test_Error
+        (VM,
+         "(write-u8 1 (let ((p (open-output-bytevector)))"
+         & " (close-port p) p))");
+      Test_Error
+        (VM,
+         "(read-u8 (let ((p (open-input-bytevector '#u8(1))))"
+         & " (close-port p) p))");
+
       --  The library asks for the host's three by number.  Nothing
       --  else should ask at all, and asking for any other number used
       --  to hand out a port on a place in the table no one had opened.

@@ -1064,8 +1064,8 @@
 (define (current-error-port) raven-error-port)
 (define (current-input-port) raven-input-port)
 
-(define (textual-port? p) (port? p))
-(define (binary-port? p) #f)
+;;  textual-port? and binary-port? are the machine's to answer now.
+;;  Every port was textual, so one was port? and the other was #f.
 
 (define (close-port p) (raven-close-port p))
 (define (close-input-port p) (raven-close-port p))
@@ -1153,3 +1153,68 @@
 
 (define (read-string k port)
   (read-string-from k (optional port (current-input-port))))
+
+;;  And the same over again a byte at a time, for a port opened on a
+;;  bytevector.  A binary port answers for none of the above and a
+;;  textual one for none of these: R7RS lets a port be both, and none
+;;  here is.
+;;
+;;  The host's three are textual, so (read-u8) with no port is an
+;;  error rather than a read of the terminal -- which is what R7RS
+;;  says a binary read of a textual port is.
+
+(define (write-u8 byte port)
+  (raven-write-u8-to byte (optional port (current-output-port))))
+
+(define (write-u8-list bytes port)
+  (if (null? bytes)
+      '()
+      (begin (write-u8 (car bytes) port)
+	     (write-u8-list (cdr bytes) port))))
+
+(define (write-bytevector v port start end)
+  (write-u8-list (bytevector->list v (optional start 0)
+				   (optional end (bytevector-length v)))
+		 (optional port (current-output-port))))
+
+(define (read-u8 port)
+  (raven-read-u8 (optional port (current-input-port))))
+
+(define (peek-u8 port)
+  (raven-peek-u8 (optional port (current-input-port))))
+
+(define (u8-ready? port)
+  (raven-u8-ready? (optional port (current-input-port))))
+
+;;  Up to this many bytes, which is fewer when the port runs out first
+;;  and the end of it when it had already.
+
+(define (read-u8s p k acc)
+  (if (= k 0)
+      acc
+      (let ((byte (read-u8 p)))
+	(if (eof-object? byte) acc (read-u8s p (- k 1) (cons byte acc))))))
+
+(define (read-bytevector-from k p)
+  (let ((bytes (reverse (read-u8s p k '()))))
+    (if (null? bytes)
+	(if (= k 0) (bytevector) (eof-object))
+	(list->bytevector bytes))))
+
+(define (read-bytevector k port)
+  (read-bytevector-from k (optional port (current-input-port))))
+
+;;  Into a bytevector that is already there rather than into a new
+;;  one, between start and end, answering with how many bytes arrived.
+;;  start and end are read the way bytevector-copy! reads them.
+
+(define (read-bytevector-into v p at end)
+  (let ((bytes (reverse (read-u8s p (- end at) '()))))
+    (if (null? bytes)
+	(if (= at end) 0 (eof-object))
+	(begin (fill-bytevector v at bytes) (length bytes)))))
+
+(define (read-bytevector! v port start end)
+  (read-bytevector-into v (optional port (current-input-port))
+			(optional start 0)
+			(optional end (bytevector-length v))))
