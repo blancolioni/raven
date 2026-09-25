@@ -281,7 +281,7 @@ package body Raven.Tests.Host_IO is
                Index (Failed, "(probe-no-such-procedure ...)") > 0);
          Test ("and which file it was in",
                Index (Failed, "abandoned.scm:") > 0);
-         Test ("and is counted", VM.Forms_Abandoned = Before + 1);
+         Test ("and is counted", VM.Forms_Abandoned = Before + 2);
          Test ("and none of it went where output goes", "", Written);
       end;
 

@@ -57,14 +57,23 @@ package body Raven.Loader is
       Path   : String)
       return Raven.Target.Library_Id;
 
+   --  Abandoned counts the forms of this library that could not be
+   --  run, and is what says at the end whether the library read
+   --  whole.  It counts only the library's own: one it imports keeps
+   --  its own count and is refused on its own account.
+
    procedure Read_Begin
-     (Target  : Raven.Target.Reference;
-      Library : Raven.Target.Real_Library_Id);
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Source    : String;
+      Abandoned : in out Natural);
 
    procedure Read_Declaration
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
-      Directory : String);
+      Directory : String;
+      Source    : String;
+      Abandoned : in out Natural);
 
    procedure Read_Export
      (Target  : Raven.Target.Reference;
@@ -81,7 +90,8 @@ package body Raven.Loader is
       Library   : Raven.Target.Real_Library_Id;
       Name      : String;
       Source    : String;
-      Directory : String);
+      Directory : String;
+      Abandoned : in out Natural);
 
    procedure Read_Import
      (Target  : Raven.Target.Reference;
@@ -90,11 +100,13 @@ package body Raven.Loader is
    procedure Read_Include
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
-      Directory : String);
+      Directory : String;
+      Abandoned : in out Natural);
 
    procedure Read_Library
      (Target    : Raven.Target.Reference;
-      Directory : String);
+      Directory : String;
+      Source    : String);
 
    function Read_Names
      (Target : Raven.Target.Reference)
@@ -116,10 +128,19 @@ package body Raven.Loader is
    --  reporting a single failure.
 
    procedure Abandon
+     (Target    : Raven.Target.Reference;
+      Start     : String;
+      Head      : String;
+      What      : String;
+      Abandoned : in out Natural);
+
+   --  The library to import, or none where it did not read whole.
+
+   function Usable
      (Target : Raven.Target.Reference;
-      Start  : String;
-      Head   : String;
-      What   : String);
+      Name   : String;
+      Id     : Raven.Target.Library_Id)
+      return Raven.Target.Library_Id;
 
    --  The head of the form on the target's stack, for saying which
    --  form was given up on.  Only the head, because the form itself
@@ -127,6 +148,11 @@ package body Raven.Loader is
 
    function Form_Head
      (Target : Raven.Target.Reference)
+      return String;
+
+   function Form_Head_Of
+     (Target : Raven.Target.Reference;
+      Form   : Object)
       return String;
 
    ----------------------
@@ -144,9 +170,11 @@ package body Raven.Loader is
       elsif Is_Head (Target, "define-library") then
 
          --  A library typed at the host has no file, so an include in
-         --  it is looked for beside where the host is running.
+         --  it is looked for beside where the host is running, and a
+         --  form of it that cannot be run has nowhere to say it came
+         --  from but the host itself.
 
-         Read_Library (Target, ".");
+         Read_Library (Target, ".", "user input");
          return True;
       else
          return False;
@@ -218,7 +246,7 @@ package body Raven.Loader is
       Path   : String)
    is
       Library : constant Raven.Target.Library_Id :=
-                  Load_File (Target, Name, Path);
+                  Usable (Target, Name, Load_File (Target, Name, Path));
    begin
       if Library /= Raven.Target.No_Library then
          Target.Add_Import (Target.Interaction_Library, Library);
@@ -283,7 +311,7 @@ package body Raven.Loader is
          Report (Target, "import: " & Name & " imports itself");
          return Loaded;
       elsif Loaded /= Raven.Target.No_Library then
-         return Loaded;
+         return Usable (Target, Name, Loaded);
       end if;
 
       declare
@@ -293,7 +321,7 @@ package body Raven.Loader is
             Report (Target, "import: no library " & Name);
             return Raven.Target.No_Library;
          end if;
-         return Load_File (Target, Name, Path);
+         return Usable (Target, Name, Load_File (Target, Name, Path));
       end;
    end Load;
 
@@ -319,9 +347,25 @@ package body Raven.Loader is
       --  name, because a complaint saying which file and line to open
       --  is worth more than one naming the library it was in.
 
-      Read_Forms
-        (Target, Library, Path, Read_File (Path),
-         Ada.Directories.Containing_Directory (Path));
+      declare
+         Abandoned : Natural := 0;
+      begin
+         Read_Forms
+           (Target, Library, Path, Read_File (Path),
+            Ada.Directories.Containing_Directory (Path), Abandoned);
+
+         --  A file read under a library's name is that library, so a
+         --  form of it that could not be run leaves it half made in
+         --  the same way one inside a define-library does.
+
+         if Abandoned > 0 then
+            Target.Set_Incomplete (Library);
+            Report
+              (Target,
+               Name & " did not read whole:" & Abandoned'Image
+               & " of its forms could not be run");
+         end if;
+      end;
 
       Loading.Delete_Last;
       return Library;
@@ -340,8 +384,10 @@ package body Raven.Loader is
    ----------------
 
    procedure Read_Begin
-     (Target  : Raven.Target.Reference;
-      Library : Raven.Target.Real_Library_Id)
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Source    : String;
+      Abandoned : in out Natural)
    is
    begin
       --  What is left to read stays on the stack, which the collector
@@ -351,10 +397,48 @@ package body Raven.Loader is
       Target.Push (Target.Cdr (Target.Pop));
 
       while Raven.Objects.Is_Pair (Target.Top) loop
-         Target.Push (Target.Car (Target.Top));
-         Target.Translate (Library);
-         Target.Execute;
-         Target.Drop;
+
+         --  A form that cannot be run used to take the rest of the
+         --  library with it: it raised out of this loop and out of
+         --  the declaration, and the whole define-library was given
+         --  up on, so everything after the bad form went undefined
+         --  and only the first of them was ever heard about.
+         --
+         --  Carrying on means saying where to carry on from, because
+         --  a form that fails part way through leaves the machine's
+         --  stack wherever it had got to, and the rest of this list
+         --  is on it.
+
+         Target.Hold_Stack;
+
+         declare
+            --  The file, and no line: the whole library was read as
+            --  one form, so nothing recorded where inside it each of
+            --  these started.
+
+            Start : constant String := Source;
+            Head  : constant String := Form_Head_Of (Target,
+                                                     Target.Car
+                                                       (Target.Top));
+         begin
+            Target.Push (Target.Car (Target.Top));
+            Target.Translate (Library);
+            Target.Execute;
+            Target.Drop;
+            Target.Release_Stack (Restore => False);
+         exception
+            when E : Raven.Target.Undefined_Symbol =>
+               Target.Release_Stack (Restore => True);
+               Abandon
+                 (Target, Start, Head,
+                  "undefined: " & Ada.Exceptions.Exception_Message (E),
+                  Abandoned);
+
+            when Raven.Target.Translation_Error =>
+               Target.Release_Stack (Restore => True);
+               Abandon (Target, Start, Head, "", Abandoned);
+         end;
+
          Target.Push (Target.Cdr (Target.Pop));
       end loop;
 
@@ -368,7 +452,9 @@ package body Raven.Loader is
    procedure Read_Declaration
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
-      Directory : String)
+      Directory : String;
+      Source    : String;
+      Abandoned : in out Natural)
    is
    begin
       if Is_Head (Target, "export") then
@@ -376,9 +462,9 @@ package body Raven.Loader is
       elsif Is_Head (Target, "import") then
          Read_Import (Target, Library);
       elsif Is_Head (Target, "begin") then
-         Read_Begin (Target, Library);
+         Read_Begin (Target, Library, Source, Abandoned);
       elsif Is_Head (Target, "include") then
-         Read_Include (Target, Library, Directory);
+         Read_Include (Target, Library, Directory, Abandoned);
       else
          Report
            (Target,
@@ -439,7 +525,8 @@ package body Raven.Loader is
       Library   : Raven.Target.Real_Library_Id;
       Name      : String;
       Source    : String;
-      Directory : String)
+      Directory : String;
+      Abandoned : in out Natural)
    is
       use Ada.Strings.Unbounded;
       Reader : Raven.Parser.Instance;
@@ -470,7 +557,12 @@ package body Raven.Loader is
             if Is_Head (Target, "import") then
                Read_Import (Target, Library);
             elsif Is_Head (Target, "define-library") then
-               Read_Library (Target, Directory);
+
+               --  A library keeps a count of its own: a file that
+               --  holds one is not made incomplete by it, and the
+               --  library is refused on its own account.
+
+               Read_Library (Target, Directory, Name);
             else
                Target.Translate (Library);
                Target.Execute;
@@ -480,7 +572,8 @@ package body Raven.Loader is
             when E : Raven.Target.Undefined_Symbol =>
                Abandon
                  (Target, Start, To_String (Head),
-                  "undefined: " & Ada.Exceptions.Exception_Message (E));
+                  "undefined: " & Ada.Exceptions.Exception_Message (E),
+                  Abandoned);
 
             --  A form the translator refuses is reported and the file
             --  goes on to the one after it, which is what an
@@ -493,7 +586,7 @@ package body Raven.Loader is
             --  further.
 
             when Raven.Target.Translation_Error =>
-               Abandon (Target, Start, To_String (Head), "");
+               Abandon (Target, Start, To_String (Head), "", Abandoned);
          end;
       end loop;
 
@@ -551,7 +644,8 @@ package body Raven.Loader is
    procedure Read_Include
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
-      Directory : String)
+      Directory : String;
+      Abandoned : in out Natural)
    is
       Files : String_Vectors.Vector;
       It    : Object := Target.Cdr (Target.Top);
@@ -571,7 +665,7 @@ package body Raven.Loader is
          Read_Forms
            (Target, Library, Directory & "/" & File,
             Read_File (Directory & "/" & File),
-            Directory);
+            Directory, Abandoned);
       end loop;
    end Read_Include;
 
@@ -581,8 +675,10 @@ package body Raven.Loader is
 
    procedure Read_Library
      (Target    : Raven.Target.Reference;
-      Directory : String)
+      Directory : String;
+      Source    : String)
    is
+      Abandoned : Natural := 0;
       Name    : constant String :=
                   Library_Name (Target, Target.Cadr (Target.Top));
       Found   : constant Raven.Target.Library_Id := Target.Library (Name);
@@ -605,11 +701,25 @@ package body Raven.Loader is
 
       while Raven.Objects.Is_Pair (Target.Top) loop
          Target.Push (Target.Car (Target.Top));
-         Read_Declaration (Target, Library, Directory);
+         Read_Declaration (Target, Library, Directory, Source, Abandoned);
          Target.Push (Target.Cdr (Target.Pop));
       end loop;
 
       Target.Drop;
+
+      --  Every form of it has been read, so every bad one in it has
+      --  been heard about and not only the first.  And now nothing
+      --  imports it: a library is a unit or it is nothing, and the
+      --  names it never got round to defining would otherwise go
+      --  undefined at each use, a long way from the reason.
+
+      if Abandoned > 0 then
+         Target.Set_Incomplete (Library);
+         Report
+           (Target,
+            Name & " did not read whole:" & Abandoned'Image
+            & " of its forms could not be run");
+      end if;
    end Read_Library;
 
    ----------------
@@ -680,10 +790,11 @@ package body Raven.Loader is
    -------------
 
    procedure Abandon
-     (Target : Raven.Target.Reference;
-      Start  : String;
-      Head   : String;
-      What   : String)
+     (Target    : Raven.Target.Reference;
+      Start     : String;
+      Head      : String;
+      What      : String;
+      Abandoned : in out Natural)
    is
       Where : constant String := (if Start = "" then "" else Start & ": ");
       Which : constant String :=
@@ -691,8 +802,28 @@ package body Raven.Loader is
       Why   : constant String := (if What = "" then "" else ": " & What);
    begin
       Target.Abandon_Form;
+      Abandoned := Abandoned + 1;
       Report (Target, Where & Which & " abandoned" & Why);
    end Abandon;
+
+   ------------
+   -- Usable --
+   ------------
+
+   function Usable
+     (Target : Raven.Target.Reference;
+      Name   : String;
+      Id     : Raven.Target.Library_Id)
+      return Raven.Target.Library_Id
+   is
+   begin
+      if Id /= Raven.Target.No_Library and then Target.Is_Incomplete (Id) then
+         Report (Target, "import: " & Name & " did not read whole");
+         return Raven.Target.No_Library;
+      end if;
+
+      return Id;
+   end Usable;
 
    ---------------
    -- Form_Head --
@@ -701,14 +832,23 @@ package body Raven.Loader is
    function Form_Head
      (Target : Raven.Target.Reference)
       return String
+   is (Form_Head_Of (Target, Target.Top));
+
+   ------------------
+   -- Form_Head_Of --
+   ------------------
+
+   function Form_Head_Of
+     (Target : Raven.Target.Reference;
+      Form   : Object)
+      return String
    is
-      Form : constant Object := Target.Top;
    begin
       if Raven.Objects.Is_Pair (Form) then
          return "(" & Target.Show (Target.Car (Form)) & " ...)";
       else
          return Target.Show (Form);
       end if;
-   end Form_Head;
+   end Form_Head_Of;
 
 end Raven.Loader;

@@ -45,11 +45,46 @@ private package Raven.Target is
    function Forms_Abandoned (This : Abstraction) return Natural
    is abstract;
 
+   --  Where the machine's stack stands, kept where the collector can
+   --  see it, and put back there.  A form that fails part way through
+   --  leaves the stack wherever it had got to, so a caller holding
+   --  something on it -- the forms of a library it is half way down,
+   --  say -- has nowhere to carry on from unless it said where first.
+   --
+   --  Held while the form runs, and let go either way: released
+   --  without restoring when the form ran, and with when it did not.
+
+   procedure Hold_Stack (This : in out Abstraction) is abstract;
+
+   procedure Release_Stack
+     (This    : in out Abstraction;
+      Restore : Boolean)
+   is abstract;
+
    type Library_Id is new Natural;
 
    No_Library : constant Library_Id := 0;
 
    subtype Real_Library_Id is Library_Id range 1 .. Library_Id'Last;
+
+   --  A library with a form in it that could not be run.  Nothing
+   --  imports one: a file being read carries on at the form after a
+   --  bad one, so that every bad form in it is heard about and not
+   --  only the first, but a library is a unit or it is nothing, and
+   --  half of one is worse than none -- the names it never got round
+   --  to defining would go undefined at each use instead, a long way
+   --  from the reason.
+
+   procedure Set_Incomplete
+     (This    : in out Abstraction;
+      Library : Real_Library_Id)
+   is abstract;
+
+   function Is_Incomplete
+     (This    : Abstraction;
+      Library : Library_Id)
+      return Boolean
+   is abstract;
 
    --  Where a form typed at the host, rather than read out of a
    --  library, is translated.
