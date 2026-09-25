@@ -13,7 +13,10 @@
 ;;  rests, string->copy, chars=?, chars<?, str=?, str<?, do-next,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
-;;  bytevector->list, bytevector-onto, bytevector-tail, optional and
+;;  bytevector->list, bytevector-onto, bytevector-tail, write-char-list,
+;;  read-line-from, read-line-onto, read-string-from, read-chars,
+;;  raven-the-eof-object, raven-output-port, raven-error-port,
+;;  raven-input-port, optional and
 ;;  caddr, which the expander
 ;;  uses and which a program asks (scheme cxr) for.
 ;;
@@ -92,6 +95,19 @@
    string make-string string-ref substring string-copy
    string=? string<? string>? string<=? string>=?
    string-map string-for-each
+
+   ;;  ports, and what is written and read through one.  Everything
+   ;;  went to one place through one foreign function and nothing
+   ;;  could be read at all; what is not here is the binary half --
+   ;;  read-u8, write-u8, the bytevector ports -- which wants the
+   ;;  same table and its own kind of port.
+   port? input-port? output-port? textual-port? binary-port?
+   current-output-port current-error-port current-input-port
+   open-input-string open-output-string get-output-string
+   close-port close-input-port close-output-port
+   input-port-open? output-port-open? call-with-port flush-output-port
+   eof-object eof-object?
+   read-char peek-char read-line read-string char-ready?
 
    ;;  output
    write write-char write-string newline display

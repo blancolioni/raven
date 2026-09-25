@@ -33,9 +33,6 @@ package body Raven is
          IO          : Raven.IO.Reference;
       end record;
 
-   procedure Write_Character
-     (This : Raven_VM);
-
    ----------------------
    -- Add_Library_Path --
    ----------------------
@@ -369,8 +366,6 @@ package body Raven is
                    Target      => null));
    begin
       This.Data.Evaluator := Raven.Engine.Create (This, Memory, Configuration);
-      This.Bind_Foreign_Function
-        ("raven-write-char", Write_Character'Access, 1);
       This.Data.Target    := This.Data.Evaluator.Target;
 
       This.Add_Library_Path (Libraries);
@@ -632,17 +627,34 @@ package body Raven is
       return This.Data.User_Data;
    end User_Data;
 
+   --------------------
+   -- Read_Character --
+   --------------------
+
+   procedure Read_Character
+     (This      : Raven_VM'Class;
+      Ch        : out Wide_Wide_Character;
+      Available : out Boolean)
+   is
+   begin
+      This.Data.IO.Get (Ch, Available);
+   end Read_Character;
+
    ---------------------
    -- Write_Character --
    ---------------------
 
    procedure Write_Character
-     (This : Raven_VM)
+     (This   : Raven_VM'Class;
+      Ch     : Wide_Wide_Character;
+      Errors : Boolean)
    is
-      X    : constant Object := This.Get_Slot (1);
-      Ch   : constant Wide_Wide_Character :=
-               Raven.Objects.To_Character (X);
    begin
+      --  There is one place the host writes, so an error goes to it
+      --  as well.  Telling the two apart is the host's to do and
+      --  wants Raven.IO to have somewhere else to put a character.
+
+      pragma Unreferenced (Errors);
       This.Data.IO.Put (Ch);
    end Write_Character;
 

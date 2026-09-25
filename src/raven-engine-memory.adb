@@ -503,6 +503,13 @@ package body Raven.Engine.Memory is
             if Foreign_Value_Lists.Has_Element (Val)
               and then not Foreign_Value_Lists.Element (Val).Marked
             then
+               --  Free is what a foreign value holding something of
+               --  the host's is told by, and it was never called: the
+               --  value was deleted and whatever it stood for was
+               --  left.  A string has nothing to give back and did
+               --  not notice; a port has a file.
+
+               This.Value_List (Val).Free;
                This.Value_List.Delete (Val);
                This.Value_Ids (Id) := Foreign_Value_Lists.No_Element;
                This.Free_Ids.Append (Id);

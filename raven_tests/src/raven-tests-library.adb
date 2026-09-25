@@ -146,6 +146,54 @@ package body Raven.Tests.Library is
       Test_Value (VM, "(bytevector-u8-ref (make-bytevector 1 255) 0)", 255);
       Test_Value (VM, "(bytevector-u8-ref (make-bytevector 1 0) 0)", 0);
 
+      --  A port is read from or written to and not both, and what is
+      --  not a port is not one.
+
+      Test_Error (VM, "(read-char (open-output-string))");
+      Test_Error (VM, "(peek-char (open-output-string))");
+      Test_Error (VM, "(write-char #\a (open-input-string ""x""))");
+      Test_Error (VM, "(read-char 4)");
+      Test_Error (VM, "(write-char #\a 4)");
+      Test_Error (VM, "(close-port 4)");
+      Test_Error (VM, "(char-ready? ""x"")");
+      Test_Error (VM, "(open-input-string 4)");
+      Test_Error (VM, "(get-output-string 4)");
+
+      --  get-output-string is for a port opened on a string it is
+      --  building up, and no other kind answers for one.
+
+      Test_Error (VM, "(get-output-string (open-input-string ""x""))");
+      Test_Error (VM, "(get-output-string (current-output-port))");
+
+      --  A closed port is not written to or read from, though what it
+      --  holds can still be asked for.
+
+      Test_Error
+        (VM,
+         "(write-char #\a (let ((p (open-output-string)))"
+         & " (close-port p) p))");
+      Test_Error
+        (VM,
+         "(read-char (let ((p (open-input-string ""x"")))"
+         & " (close-port p) p))");
+      Test_Error
+        (VM,
+         "(peek-char (let ((p (open-input-string ""x"")))"
+         & " (close-port p) p))");
+      Test_Value
+        (VM,
+         "(string-length (let ((p (open-output-string)))"
+         & " (write-char #\a p) (close-port p) (get-output-string p)))",
+         1);
+
+      --  The library asks for the host's three by number.  Nothing
+      --  else should ask at all, and asking for any other number used
+      --  to hand out a port on a place in the table no one had opened.
+
+      Test_Error (VM, "(raven-standard-port 0)");
+      Test_Error (VM, "(raven-standard-port 4)");
+      Test_Error (VM, "(raven-standard-port 900)");
+
       --  A foreign function can be bound again under the same name,
       --  and the new handler is the one that runs.
 

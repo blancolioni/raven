@@ -482,16 +482,6 @@
 ;;  is what object->string would do and not what display does.  Both
 ;;  of them write now, and answer nothing in particular.
 
-(define (write x) (write-string (raven-write-text x)))
-(define (display x) (write-string (raven-display-text x)))
-
-(define (write-char ch) (raven-write-char ch))
-
-(define (write-char-list chars) (if (null? chars) '() (begin (write-char (car chars)) (write-char-list (cdr chars)))))
-
-(define (write-string string) (write-char-list (string->list string)))
-
-(define (newline) (write-char #\newline))
 
 (define (sum-list xs) (if (null? xs) 0 (+ (car xs) (sum-list (cdr xs)))))
 (define sum (lambda xs (sum-list xs)))
@@ -1048,3 +1038,118 @@
 ;;  predicates, because or is now one of the forms above.
 
 (define (boolean? x) (or (eq? x #t) (eq? x #f)))
+
+;;  Ports.  Everything raven could write went to one place through
+;;  one foreign function, and nothing could read at all.
+;;
+;;  They come after the derived syntax because they are written with
+;;  let, and let is derived here.  Above it, (let ((x ...)) ...) is
+;;  not a binding form at all but a call of something named let, and
+;;  every procedure written with one failed at the name it had bound
+;;  -- quietly, because a form that names something undefined is
+;;  reported and passed over, so the tests of it simply did not run.
+;;
+;;  The host's three keep their places in the machine's table, so
+;;  asking for one twice is asking for the same port; they are held in
+;;  names here so that asking for one does not make another object
+;;  every time.
+
+(define raven-the-eof-object (raven-eof-object))
+
+(define raven-output-port (raven-standard-port 1))
+(define raven-error-port (raven-standard-port 2))
+(define raven-input-port (raven-standard-port 3))
+
+(define (current-output-port) raven-output-port)
+(define (current-error-port) raven-error-port)
+(define (current-input-port) raven-input-port)
+
+(define (textual-port? p) (port? p))
+(define (binary-port? p) #f)
+
+(define (close-port p) (raven-close-port p))
+(define (close-input-port p) (raven-close-port p))
+(define (close-output-port p) (raven-close-port p))
+
+(define (input-port-open? p) (if (input-port? p) (raven-port-open? p) #f))
+(define (output-port-open? p) (if (output-port? p) (raven-port-open? p) #f))
+
+(define (call-with-port p f) (let ((answer (f p))) (close-port p) answer))
+
+;;  Nothing is held back, so there is nothing to push out.
+
+(define (flush-output-port p) '())
+
+;;  Reading and writing.  Each of these takes the port to use and
+;;  uses the one the host gave when it is not given one.
+
+(define (eof-object) raven-the-eof-object)
+(define (eof-object? x) (eq? x raven-the-eof-object))
+
+(define (write-char ch port)
+  (raven-write-char-to ch (optional port (current-output-port))))
+
+(define (write-char-list chars port)
+  (if (null? chars)
+      '()
+      (begin (write-char (car chars) port)
+	     (write-char-list (cdr chars) port))))
+
+(define (write-string string port)
+  (write-char-list (string->list string)
+		   (optional port (current-output-port))))
+
+(define (newline port) (write-char #\newline port))
+
+(define (write x port) (write-string (raven-write-text x) port))
+(define (display x port) (write-string (raven-display-text x) port))
+
+;;  A port that has run out answers with the end of file object, which
+;;  is one object and nothing else.
+
+(define (read-char port)
+  (raven-read-char (optional port (current-input-port))))
+
+(define (peek-char port)
+  (raven-peek-char (optional port (current-input-port))))
+
+(define (char-ready? port)
+  (raven-char-ready? (optional port (current-input-port))))
+
+;;  A line is up to the next newline, which is read and thrown away.
+;;  A port with nothing left at all answers with the end of it; one
+;;  with a line and no newline after it answers with the line.
+
+(define (read-line-onto p ch acc)
+  (if (eof-object? ch)
+      acc
+      (if (eq? ch #\newline)
+	  acc
+	  (read-line-onto p (read-char p) (cons ch acc)))))
+
+(define (read-line-from p)
+  (let ((first (read-char p)))
+    (if (eof-object? first)
+	first
+	(list->string (reverse (read-line-onto p first '()))))))
+
+(define (read-line port)
+  (read-line-from (optional port (current-input-port))))
+
+;;  And a string of up to this many characters, which is shorter when
+;;  the port runs out first and the end of it when it had already.
+
+(define (read-chars p k acc)
+  (if (= k 0)
+      acc
+      (let ((ch (read-char p)))
+	(if (eof-object? ch) acc (read-chars p (- k 1) (cons ch acc))))))
+
+(define (read-string-from k p)
+  (let ((chars (reverse (read-chars p k '()))))
+    (if (null? chars)
+	(if (= k 0) "" (eof-object))
+	(list->string chars))))
+
+(define (read-string k port)
+  (read-string-from k (optional port (current-input-port))))

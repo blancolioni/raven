@@ -1,6 +1,7 @@
 with Raven.Objects;
 with Raven.Strings;
 with Raven.Scheme.Numerics;
+with Raven.Ports;
 with Raven.Vectors;
 
 package body Raven.Scheme is
@@ -241,6 +242,7 @@ package body Raven.Scheme is
       Raven.Scheme.Numerics.Load_Numeric_Library (Evaluator);
       Raven.Strings.Load_String_Library (Evaluator);
       Raven.Vectors.Load_Vector_Library (Evaluator);
+      Raven.Ports.Load_Port_Library (Evaluator);
    end Load_Base_Primitives;
 
    -----------------

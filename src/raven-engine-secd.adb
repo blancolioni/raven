@@ -597,6 +597,21 @@ package body Raven.Engine.SECD is
                return It;
             end if;
          end loop;
+
+         --  A frame shorter than the index wanted is a call with
+         --  fewer arguments than the procedure has parameters, and
+         --  what it did not get is nil -- which is what optional
+         --  reads, and how the library gives a procedure an argument
+         --  it need not be given.
+         --
+         --  The loop said so for every index but the first, which
+         --  does not go round it at all: a procedure of one parameter
+         --  called with none asked for the car of an empty frame.
+
+         if It = Objects.Nil then
+            return It;
+         end if;
+
          return This.Car (It);
       end Nth;
 
@@ -638,6 +653,13 @@ package body Raven.Engine.SECD is
                return It;
             end if;
          end loop;
+
+         --  And the same where one is assigned to rather than read.
+
+         if It = Objects.Nil then
+            return It;
+         end if;
+
          return This.Rplaca (It, New_Value);
       end Replace_Nth;
 
