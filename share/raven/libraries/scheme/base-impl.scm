@@ -293,6 +293,85 @@
 ;;  given and stop at the shortest, because map and for-each do: each
 ;;  is the list one with the strings taken apart on the way in.
 
+;;  Vectors.  The machine holds a vector's elements in the cells after
+;;  its length, so make-vector, vector-length, vector-ref and
+;;  vector-set! are arithmetic rather than walks, and everything below
+;;  is written on those four.
+;;
+;;  #(1 2 3) reads as a call of vector, which is why vector is the one
+;;  that has to exist for the syntax to mean anything.
+
+(define (make-vector n fill) (raven-make-vector n (optional fill '())))
+
+(define (vector . elements) (list->vector elements))
+
+(define (list->vector elements)
+  (fill-vector (make-vector (length elements) '()) 0 elements))
+
+(define (fill-vector v at elements)
+  (if (null? elements)
+      v
+      (begin (vector-set! v at (car elements))
+	     (fill-vector v (+ at 1) (cdr elements)))))
+
+(define (vector->list v start end)
+  (vector-onto v (optional start 0) (- (optional end (vector-length v)) 1)))
+
+;;  Backwards, so that what is built up is what comes out and nothing
+;;  has to be turned round afterwards.
+
+(define (vector-onto v first last)
+  (if (< last first)
+      '()
+      (vector-tail v first last '())))
+
+(define (vector-tail v first at acc)
+  (if (< at first)
+      acc
+      (vector-tail v first (- at 1) (cons (vector-ref v at) acc))))
+
+(define (vector-copy v start end)
+  (list->vector (vector->list v start end)))
+
+(define (vector-append . vs)
+  (list->vector (concatenate (map vector->list vs))))
+
+(define (vector-fill! v fill start end)
+  (fill-range v fill
+	      (optional start 0)
+	      (- (optional end (vector-length v)) 1)))
+
+(define (fill-range v fill at last)
+  (if (> at last)
+      v
+      (begin (vector-set! v at fill) (fill-range v fill (+ at 1) last))))
+
+;;  vector-copy! may be given the same vector twice with the ranges
+;;  over one another, and R7RS says it works as though what is read
+;;  were read before any of it is written.  Going through a list is
+;;  what makes that so.
+
+(define (vector-copy! to at from start end)
+  (fill-vector-at to at (vector->list from start end)))
+
+(define (fill-vector-at v at elements)
+  (if (null? elements)
+      v
+      (begin (vector-set! v at (car elements))
+	     (fill-vector-at v (+ at 1) (cdr elements)))))
+
+(define (vector->string v start end)
+  (list->string (vector->list v start end)))
+
+(define (string->vector string start end)
+  (list->vector (string->list string start end)))
+
+(define (vector-map f . vs)
+  (list->vector (apply map f (map vector->list vs))))
+
+(define (vector-for-each f . vs)
+  (apply for-each f (map vector->list vs)))
+
 (define (string-map f . ss)
   (list->string (apply map f (map string->list ss))))
 

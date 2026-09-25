@@ -115,6 +115,24 @@ private package Raven.Objects is
 
    Max_Addressable_Cells : constant := 2 ** Extended_Payload_Bits;
 
+   --  A vector: its length and then its elements, packed two to a
+   --  cell in the cells after it.  The object names the header, so
+   --  everything about it is found by arithmetic rather than by
+   --  walking, which is what a vector is for.
+   --
+   --  The collector walks it without being told how: every element is
+   --  an Object and a cell of two of them is what the scan already
+   --  reads, and the length is an integer, which it passes over.  What
+   --  it does have to be told is how many cells to copy, which is the
+   --  length again.
+
+   function Is_Vector (X : Object) return Boolean;
+   function To_Vector (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Vector (To_Vector'Result)
+     and then Has_Address (To_Vector'Result)
+     and then Get_Address (To_Vector'Result) = Address;
+
    function Is_Closure (X : Object) return Boolean;
    function To_Closure (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -202,6 +220,7 @@ private
    External_Tag    : constant := Escape_Tag + 4 * Extended_Step;
    Foreign_Tag     : constant := Escape_Tag + 5 * Extended_Step;
    Closure_Tag     : constant := Escape_Tag + 6 * Extended_Step;
+   Vector_Tag      : constant := Escape_Tag + 7 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -322,7 +341,9 @@ private
    --  environment exactly as it walks a pair's car and cdr.
 
    function Has_Address (X : Object) return Boolean
-   is (Tag (X) = Pair_Tag or else Full_Tag (X) = Closure_Tag);
+   is (Tag (X) = Pair_Tag
+       or else Full_Tag (X) = Closure_Tag
+       or else Full_Tag (X) = Vector_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -337,6 +358,12 @@ private
 
    function To_Closure (Address : Address_Type) return Object
    is (Extend (Object (Address), Closure_Tag));
+
+   function Is_Vector (X : Object) return Boolean
+   is (Full_Tag (X) = Vector_Tag);
+
+   function To_Vector (Address : Address_Type) return Object
+   is (Extend (Object (Address), Vector_Tag));
 
    function Is_Pair (X : Object) return Boolean
    is (Tag (X) = Pair_Tag);

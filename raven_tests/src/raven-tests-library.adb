@@ -104,6 +104,30 @@ package body Raven.Tests.Library is
       Test_Value (VM, "((lambda (x) (+ x 1)) 41)", 42);
       Test_Value (VM, "(car '(1 2))", 1);
 
+      --  An index has to be one the vector has.  Reading past the end
+      --  would read the cell after it, which belongs to whatever was
+      --  made next.
+
+      Test_Error (VM, "(vector-ref (vector 1 2) 2)");
+      Test_Error (VM, "(vector-ref (vector 1 2) 5)");
+      Test_Error (VM, "(vector-ref (vector) 0)");
+      Test_Error (VM, "(vector-set! (vector 1 2) 2 'x)");
+      Test_Error (VM, "(vector-ref '(1 2) 0)");
+      Test_Error (VM, "(vector-length '(1 2))");
+      Test_Error (VM, "(make-vector -1 'x)");
+
+      --  And a vector is not a pair, so the two that take a pair
+      --  apart refuse one.
+
+      Test_Error (VM, "(car (vector 1 2))");
+      Test_Error (VM, "(cdr (vector 1 2))");
+
+      --  What is within it answers.
+
+      Test_Value (VM, "(vector-ref (vector 7 8) 0)", 7);
+      Test_Value (VM, "(vector-ref (vector 7 8) 1)", 8);
+      Test_Value (VM, "(vector-length (make-vector 5 0))", 5);
+
       --  A foreign function can be bound again under the same name,
       --  and the new handler is the one that runs.
 

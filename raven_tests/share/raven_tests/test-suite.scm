@@ -1784,6 +1784,165 @@
 (test "display answers nothing in particular" '() (display ""))
 (test "write answers nothing in particular" '() (write ""))
 
+;;  Vectors.  A vector's elements are in the cells after its length,
+;;  so an index is arithmetic and not a walk, which is what tells one
+;;  from a list and what #43 was really about.
+
+(test "vector? of a vector" #t (vector? (vector 1 2)))
+(test "vector? of a list" #f (vector? '(1 2)))
+(test "vector? of nothing" #f (vector? '()))
+(test "vector? of a string" #f (vector? "ab"))
+(test "a vector is not a pair" #f (pair? (vector 1)))
+(test "a vector is not a list" #f (list? (vector 1)))
+
+(test "make-vector" '#(z z z) (make-vector 3 'z))
+(test "make-vector of none" '#() (make-vector 0 'z))
+(test "make-vector with no fill is still that long" 3
+      (vector-length (make-vector 3)))
+(test "vector" '#(1 2 3) (vector 1 2 3))
+(test "vector of none" '#() (vector))
+(test "vector-length" 3 (vector-length (vector 1 2 3)))
+(test "vector-length of none" 0 (vector-length (vector)))
+
+(test "vector-ref at the front" 1 (vector-ref (vector 1 2 3) 0))
+(test "vector-ref in the middle" 2 (vector-ref (vector 1 2 3) 1))
+(test "vector-ref at the end" 3 (vector-ref (vector 1 2 3) 2))
+
+(test "vector-set!" '#(a 2 3)
+      (let ((v (vector 1 2 3))) (vector-set! v 0 'a) v))
+(test "vector-set! at the end" '#(1 2 c)
+      (let ((v (vector 1 2 3))) (vector-set! v 2 'c) v))
+(test "vector-set! answers with the vector" #t
+      (let ((v (vector 1))) (eq? v (vector-set! v 0 'a))))
+
+;;  An odd length leaves half a cell over, which has to be as safe to
+;;  walk as any other.
+
+(test "a vector of an odd length" '#(1 2 3 4 5) (vector 1 2 3 4 5))
+(test "the last element of an odd one" 5 (vector-ref (vector 1 2 3 4 5) 4))
+
+;;  Between a vector and a list, both ways, with and without a range.
+
+(test "vector->list" '(1 2 3) (vector->list (vector 1 2 3)))
+(test "vector->list of none" '() (vector->list (vector)))
+(test "vector->list from an index" '(2 3) (vector->list (vector 1 2 3) 1))
+(test "vector->list between two" '(2 3) (vector->list (vector 1 2 3 4) 1 3))
+(test "vector->list of an empty range" '() (vector->list (vector 1 2) 1 1))
+(test "list->vector" '#(1 2 3) (list->vector '(1 2 3)))
+(test "list->vector of nothing" '#() (list->vector '()))
+
+(test "vector-copy" '#(1 2 3) (vector-copy (vector 1 2 3)))
+(test "vector-copy from an index" '#(2 3) (vector-copy (vector 1 2 3) 1))
+(test "vector-copy between two" '#(2 3) (vector-copy (vector 1 2 3 4) 1 3))
+(test "a copy is a different vector" #f
+      (let ((v (vector 1 2))) (eq? v (vector-copy v))))
+
+(test "vector-append" '#(1 2 3) (vector-append (vector 1 2) (vector 3)))
+(test "vector-append of none" '#() (vector-append))
+(test "vector-append of one" '#(1) (vector-append (vector 1)))
+(test "vector-append with an empty one" '#(1 2)
+      (vector-append (vector 1) (vector) (vector 2)))
+
+(test "vector-fill!" '#(x x x)
+      (let ((v (make-vector 3 0))) (vector-fill! v 'x) v))
+(test "vector-fill! from an index" '#(0 x x)
+      (let ((v (make-vector 3 0))) (vector-fill! v 'x 1) v))
+(test "vector-fill! between two" '#(0 x 0)
+      (let ((v (make-vector 3 0))) (vector-fill! v 'x 1 2) v))
+
+;;  vector-copy! may be given one vector twice with the ranges lying
+;;  over one another, and R7RS says it works as though everything
+;;  read were read before anything is written.
+
+(test "vector-copy!" '#(1 9 8 4)
+      (let ((v (vector 1 2 3 4))) (vector-copy! v 1 (vector 9 8)) v))
+(test "vector-copy! over itself, forwards" '#(2 3 4 4 5)
+      (let ((v (vector 1 2 3 4 5))) (vector-copy! v 0 v 1 4) v))
+(test "vector-copy! over itself, backwards" '#(1 1 2 3 5)
+      (let ((v (vector 1 2 3 4 5))) (vector-copy! v 1 v 0 3) v))
+
+(test "vector->string" "ab" (vector->string (vector #\a #\b)))
+(test "string->vector" '#(#\a #\b) (string->vector "ab"))
+(test "string->vector between two" '#(#\b) (string->vector "abc" 1 2))
+
+;;  map and for-each over as many vectors as they are given, stopping
+;;  at the shortest, because the list ones do.
+
+(test "vector-map" '#(2 3 4)
+      (vector-map (lambda (x) (+ x 1)) (vector 1 2 3)))
+(test "vector-map over none" '#() (vector-map (lambda (x) x) (vector)))
+(test "vector-map over two" '#((1 x) (2 y))
+      (vector-map (lambda (a b) (list a b)) '#(1 2) '#(x y)))
+(test "vector-map stops at the shorter" 2
+      (vector-length (vector-map (lambda (a b) a) '#(1 2 3) '#(x y))))
+
+(define vector-seen '())
+(vector-for-each (lambda (x) (set! vector-seen (cons x vector-seen)))
+                 '#(1 2 3))
+(test "vector-for-each walks every element" '(1 2 3) (reverse vector-seen))
+
+(define vector-pairs 0)
+(vector-for-each (lambda (a b) (set! vector-pairs (+ vector-pairs 1)))
+                 '#(1 2 3) '#(x y))
+(test "vector-for-each stops at the shorter" 2 vector-pairs)
+
+;;  equal? walks a vector the way it walks a pair.
+
+(test "equal? over two the same" #t (equal? '#(1 2) '#(1 2)))
+(test "equal? over two that differ" #f (equal? '#(1 2) '#(1 3)))
+(test "equal? over different lengths" #f (equal? '#(1 2) '#(1 2 3)))
+(test "equal? over two empty" #t (equal? '#() '#()))
+(test "equal? all the way down" #t (equal? '#(1 #(2 "a")) '#(1 #(2 "a"))))
+(test "equal? of a vector and a list" #f (equal? '#(1 2) '(1 2)))
+(test "eq? of two vectors that read alike" #f (eq? (vector 1) (vector 1)))
+
+;;  A vector written out is a literal, so its elements are data.  It
+;;  read as a call of vector, which made them expressions: #(1 2 3)
+;;  came out right because a number stands for itself, and #(a b) was
+;;  "undefined: a".
+
+(test "a vector of numbers" '#(1 2 3) (vector 1 2 3))
+(test "a vector of names" #t (symbol? (vector-ref '#(a b) 0)))
+(test "and the name is the name" 'a (vector-ref '#(a b) 0))
+(test "a vector of several kinds" 4 (vector-length '#(1 "two" #\3 four)))
+(test "an empty vector written out" 0 (vector-length '#()))
+(test "a vector inside a vector" 3 (vector-ref (vector-ref '#(1 #(2 3)) 1) 1))
+(test "a vector inside a list" #t (vector? (car (cdr (list 1 '#(2))))))
+(test "a vector written out is quoted by the reader" '#(a) '#(a))
+
+;;  What it writes as, which is what the reader takes back.
+
+(test "a vector writes as one" "#(1 2 3)" (raven-write-text '#(1 2 3)))
+(test "an empty vector writes as one" "#()" (raven-write-text '#()))
+(test "write goes down a vector" "#(\"a\" #\\b)"
+      (raven-write-text (vector "a" #\b)))
+(test "display goes down one too" "#(a b)"
+      (raven-display-text (vector "a" #\b)))
+
+;;  And all of it survives a collection: a vector is as many cells as
+;;  it has elements and the collector copies them together, so what
+;;  comes back has to be a vector again and not the pair its
+;;  forwarding pointer was written as.
+
+(define (vector-churn n)
+  (if (= n 0) '() (cons n (vector-churn (- n 1)))))
+
+(define kept-vector (vector 1 2 3))
+(define kept-big (make-vector 400 0))
+(vector-set! kept-big 399 'last)
+(define kept-mixed (vector "a string" (lambda (x) x) (vector 9)))
+
+(vector-churn 3000)
+
+(test "a vector survives a collection" '#(1 2 3) kept-vector)
+(test "and is still a vector" #t (vector? kept-vector))
+(test "a long vector survives one" 400 (vector-length kept-big))
+(test "with what was put at the end of it" 'last (vector-ref kept-big 399))
+(test "a vector of things that move survives" "a string"
+      (vector-ref kept-mixed 0))
+(test "including a procedure" #t (procedure? (vector-ref kept-mixed 1)))
+(test "and a vector" '#(9) (vector-ref kept-mixed 2))
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there

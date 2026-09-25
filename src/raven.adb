@@ -168,6 +168,25 @@ package body Raven is
       elsif Is_Pair (X) then
          B := This.Equal (This.Car (X), This.Car (Y))
            and then This.Equal (This.Cdr (X), This.Cdr (Y));
+      elsif Is_Vector (X) then
+
+         --  Element by element, the way a pair is car and cdr.  Two
+         --  vectors of different lengths are not equal, and asking
+         --  the shorter one for an element it has not got would read
+         --  the cell after it.
+
+         B := This.Vector_Length (X) = This.Vector_Length (Y);
+
+         if B then
+            for I in 0 .. This.Vector_Length (X) - 1 loop
+               if not This.Equal (This.Vector_Element (X, I),
+                                  This.Vector_Element (Y, I))
+               then
+                  B := False;
+                  exit;
+               end if;
+            end loop;
+         end if;
       elsif Is_Atom (X) then
          B := False;
       else
@@ -532,6 +551,51 @@ package body Raven is
    begin
       return This.Data.Memory.To_Foreign_Value (Value);
    end To_Foreign_Value;
+
+   ----------------
+   -- New_Vector --
+   ----------------
+
+   function New_Vector
+     (This   : Raven_VM'Class;
+      Length : Natural)
+      return Object
+   is (This.Data.Memory.New_Vector (Length));
+
+   -------------------
+   -- Vector_Length --
+   -------------------
+
+   function Vector_Length
+     (This : Raven_VM'Class;
+      V    : Object)
+      return Natural
+   is (This.Data.Memory.Vector_Length (V));
+
+   --------------------
+   -- Vector_Element --
+   --------------------
+
+   function Vector_Element
+     (This  : Raven_VM'Class;
+      V     : Object;
+      Index : Natural)
+      return Object
+   is (This.Data.Memory.Vector_Element (V, Index));
+
+   ------------------------
+   -- Set_Vector_Element --
+   ------------------------
+
+   procedure Set_Vector_Element
+     (This  : Raven_VM'Class;
+      V     : Object;
+      Index : Natural;
+      Value : Object)
+   is
+   begin
+      This.Data.Memory.Set_Vector_Element (V, Index, Value);
+   end Set_Vector_Element;
 
    ---------------
    -- To_Symbol --

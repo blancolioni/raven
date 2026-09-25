@@ -32,6 +32,38 @@ private package Raven.Memory is
       return Object
       is abstract;
 
+   --  A vector of this many elements, every one of them nil.  The
+   --  cells it takes are contiguous, so an element is reached by
+   --  arithmetic; asking for one may collect, and nothing of the
+   --  vector exists until it answers, so there is nothing of it to
+   --  keep alive across that.
+
+   function New_Vector
+     (This   : in out Abstraction;
+      Length : Natural)
+      return Object
+   is abstract;
+
+   function Vector_Length
+     (This : Abstraction;
+      V    : Object)
+      return Natural
+   is abstract;
+
+   function Vector_Element
+     (This  : Abstraction;
+      V     : Object;
+      Index : Natural)
+      return Object
+   is abstract;
+
+   procedure Set_Vector_Element
+     (This  : in out Abstraction;
+      V     : Object;
+      Index : Natural;
+      Value : Object)
+   is abstract;
+
    procedure Add_Container
      (This      : in out Abstraction;
       Container : not null access Raven.Containers.Abstraction'Class)
