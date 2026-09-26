@@ -348,6 +348,304 @@ package body Raven is
       end if;
    end Kind;
 
+
+   ----------------
+   -- Check_Kind --
+   ----------------
+
+   procedure Check_Kind
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      Expected : Value_Kind;
+      Name     : String)
+   is
+   begin
+      if This.Kind (Index) /= Expected then
+         raise Constraint_Error with
+           Name & ": slot" & Index'Image & " holds "
+           & Encode (This.Display (This.Get_Slot (Index)))
+           & ", which is not " & Name;
+      end if;
+   end Check_Kind;
+
+   --------------
+   -- Get_Slot --
+   --------------
+
+   function Get_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Float
+   is
+   begin
+      Check_Kind (This, Index, Float_Kind, "a float");
+      return Raven.Objects.To_Float (This.Get_Slot (Index));
+   end Get_Slot;
+
+   --------------
+   -- Get_Slot --
+   --------------
+
+   function Get_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Wide_Wide_Character
+   is
+   begin
+      Check_Kind (This, Index, Character_Kind, "a character");
+      return Raven.Objects.To_Character (This.Get_Slot (Index));
+   end Get_Slot;
+
+   --------------
+   -- Set_Slot --
+   --------------
+
+   procedure Set_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Value : Float)
+   is
+   begin
+      This.Set_Slot (Index, Raven.Objects.To_Object (Value));
+   end Set_Slot;
+
+   --------------
+   -- Set_Slot --
+   --------------
+
+   procedure Set_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Value : Wide_Wide_Character)
+   is
+   begin
+      This.Set_Slot (Index, Raven.Objects.To_Object (Value));
+   end Set_Slot;
+
+   -----------------
+   -- Symbol_Name --
+   -----------------
+
+   function Symbol_Name
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return String
+   is
+   begin
+      Check_Kind (This, Index, Symbol_Kind, "a symbol");
+      return This.Data.Target.To_String
+        (Raven.Objects.To_Symbol (This.Get_Slot (Index)));
+   end Symbol_Name;
+
+   ----------------------
+   -- Set_Slot_Symbol --
+   ----------------------
+
+   procedure Set_Slot_Symbol
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Name  : String)
+   is
+   begin
+      This.Set_Slot (Index, This.Data.Target.To_Symbol (Name));
+   end Set_Slot_Symbol;
+
+   --------------
+   -- Slot_Car --
+   --------------
+
+   procedure Slot_Car
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Into  : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Pair_Kind, "a pair");
+      This.Set_Slot (Into, This.Car (This.Get_Slot (Index)));
+   end Slot_Car;
+
+   --------------
+   -- Slot_Cdr --
+   --------------
+
+   procedure Slot_Cdr
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Into  : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Pair_Kind, "a pair");
+      This.Set_Slot (Into, This.Cdr (This.Get_Slot (Index)));
+   end Slot_Cdr;
+
+   ------------------
+   -- Slot_Set_Car --
+   ------------------
+
+   procedure Slot_Set_Car
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      From  : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Pair_Kind, "a pair");
+      This.Set_Car (This.Get_Slot (Index), This.Get_Slot (From));
+   end Slot_Set_Car;
+
+   ------------------
+   -- Slot_Set_Cdr --
+   ------------------
+
+   procedure Slot_Set_Cdr
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      From  : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Pair_Kind, "a pair");
+      This.Set_Cdr (This.Get_Slot (Index), This.Get_Slot (From));
+   end Slot_Set_Cdr;
+
+   ---------------------
+   -- Slot_New_Vector --
+   ---------------------
+
+   procedure Slot_New_Vector
+     (This   : Raven_VM;
+      Index  : Slot_Index;
+      Length : Natural)
+   is
+   begin
+      This.Set_Slot (Index, This.New_Vector (Length));
+   end Slot_New_Vector;
+
+   ------------------------
+   -- Slot_Vector_Length --
+   ------------------------
+
+   function Slot_Vector_Length
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Natural
+   is
+   begin
+      Check_Kind (This, Index, Vector_Kind, "a vector");
+      return This.Vector_Length (This.Get_Slot (Index));
+   end Slot_Vector_Length;
+
+   -------------------------
+   -- Slot_Vector_Element --
+   -------------------------
+
+   procedure Slot_Vector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      Into     : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Vector_Kind, "a vector");
+      This.Set_Slot
+        (Into, This.Vector_Element (This.Get_Slot (Index), At_Index));
+   end Slot_Vector_Element;
+
+   -----------------------------
+   -- Slot_Set_Vector_Element --
+   -----------------------------
+
+   procedure Slot_Set_Vector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      From     : Slot_Index)
+   is
+   begin
+      Check_Kind (This, Index, Vector_Kind, "a vector");
+      This.Set_Vector_Element
+        (This.Get_Slot (Index), At_Index, This.Get_Slot (From));
+   end Slot_Set_Vector_Element;
+
+   -------------------------
+   -- Slot_New_Bytevector --
+   -------------------------
+
+   procedure Slot_New_Bytevector
+     (This   : Raven_VM;
+      Index  : Slot_Index;
+      Length : Natural)
+   is
+   begin
+      This.Set_Slot (Index, This.New_Bytevector (Length));
+   end Slot_New_Bytevector;
+
+   ----------------------------
+   -- Slot_Bytevector_Length --
+   ----------------------------
+
+   function Slot_Bytevector_Length
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Natural
+   is
+   begin
+      Check_Kind (This, Index, Bytevector_Kind, "a bytevector");
+      return This.Vector_Length (This.Get_Slot (Index));
+   end Slot_Bytevector_Length;
+
+   -----------------------------
+   -- Slot_Bytevector_Element --
+   -----------------------------
+
+   function Slot_Bytevector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural)
+      return Natural
+   is
+   begin
+      Check_Kind (This, Index, Bytevector_Kind, "a bytevector");
+      return Raven.Objects.To_Integer
+        (This.Vector_Element (This.Get_Slot (Index), At_Index));
+   end Slot_Bytevector_Element;
+
+   ---------------------------------
+   -- Slot_Set_Bytevector_Element --
+   ---------------------------------
+
+   procedure Slot_Set_Bytevector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      Value    : Natural)
+   is
+   begin
+      Check_Kind (This, Index, Bytevector_Kind, "a bytevector");
+
+      --  What tells a bytevector from a vector is what may go into
+      --  one, and this is a way in that did not exist before.
+
+      if Value not in 0 .. 255 then
+         raise Constraint_Error with
+           "bytevector:" & Value'Image & " is not a byte";
+      end if;
+
+      This.Set_Vector_Element
+        (This.Get_Slot (Index), At_Index, Raven.Objects.To_Object (Value));
+   end Slot_Set_Bytevector_Element;
+
+   ----------------
+   -- Slot_Equal --
+   ----------------
+
+   function Slot_Equal
+     (This        : Raven_VM;
+      Left, Right : Slot_Index)
+      return Boolean
+   is
+   begin
+      return This.Equal (This.Get_Slot (Left), This.Get_Slot (Right));
+   end Slot_Equal;
+
    ---------------
    -- Show_Slot --
    ---------------
@@ -585,10 +883,12 @@ package body Raven is
       Value : String)
    is
    begin
-      This.Set_Slot
-        (Index,
-         Raven.Objects.To_Object
-           (This.Data.Target.To_Symbol_Id (Value)));
+      --  A string, which is what Get_Slot of one answers with.  This
+      --  made a symbol of the name, so the two were not each other's
+      --  opposite and a foreign function had no way at all to answer
+      --  with a string.
+
+      Raven.Strings.Write_String (This, Index, Value);
    end Set_Slot;
 
    --------------

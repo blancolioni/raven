@@ -734,6 +734,15 @@ package body Raven.Engine.Memory is
       --  apart is the tag and nothing else, because what a bytevector
       --  may hold is checked where it is put in rather than by the
       --  shape of the thing holding it.
+      --
+      --  Which is why the elements are set: a vector's are nil, and
+      --  nil is not a byte, so a bytevector straight out of here was
+      --  not a bytevector until somebody filled it.  Every caller did
+      --  that at once and none of them noticed.
+
+      for Index in 0 .. Length - 1 loop
+         This.Set_Vector_Element (V, Index, Raven.Objects.To_Object (Integer'(0)));
+      end loop;
 
       return Raven.Objects.To_Bytevector (Raven.Objects.Get_Address (V));
    end New_Bytevector;
