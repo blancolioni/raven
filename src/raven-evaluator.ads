@@ -25,6 +25,22 @@ private package Raven.Evaluator is
       return Object_Lists.Cursor
       is abstract;
 
+   --  A handle on an object that is already in hand, and giving one
+   --  back.  The list they live in is what Mark walks, so holding one
+   --  is what keeps an object where the host can find it and letting
+   --  it go is what stops.
+
+   function Hold
+     (This  : in out Abstraction;
+      Value : Object)
+      return Object_Lists.Cursor
+      is abstract;
+
+   procedure Release
+     (This     : in out Abstraction;
+      Position : in out Object_Lists.Cursor)
+   is abstract;
+
    procedure Bind_Foreign_Function
      (This           : in out Abstraction;
       Name           : String;

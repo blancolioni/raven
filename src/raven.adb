@@ -303,8 +303,33 @@ package body Raven is
       return Handle
    is
    begin
-      return Handle'(Position => Object_Lists.No_Element);
+      --  A slot is where a foreign function is handed its arguments
+      --  and leaves its answer, and it holds them only until the
+      --  machine runs again.  A handle on what is in one is how a
+      --  host keeps it: the handle is a root, so what it names stays
+      --  where it can be found and is moved with everything else.
+      --
+      --  This used to answer with nothing at all, so the only handle
+      --  a host could get was on a name it looked up -- which meant a
+      --  foreign value could not keep a value it was given.
+
+      return Handle'
+        (Position => This.Data.Evaluator.Hold (This.Get_Slot (Index)));
    end Get_Slot;
+
+   -------------
+   -- Release --
+   -------------
+
+   procedure Release
+     (This  : Raven_VM;
+      Value : in out Handle)
+   is
+   begin
+      if not Is_Null (Value) then
+         This.Data.Evaluator.Release (Value.Position);
+      end if;
+   end Release;
 
    --------------------
    -- Import_Library --
