@@ -241,6 +241,11 @@ package Raven is
       Index : Slot_Index;
       Value : Integer);
 
+   --  A string, which is what Get_Slot of one answers with.  This
+   --  used to make a symbol of the name, so the two were not each
+   --  other's opposite and there was no way at all to answer with a
+   --  string.  Set_Slot_Symbol is where the symbol went.
+
    procedure Set_Slot
      (This  : Raven_VM;
       Index : Slot_Index;
@@ -278,6 +283,127 @@ package Raven is
      (This     : Raven_VM;
       Index    : Slot_Index;
       Car_Slot : Slot_Index);
+
+   --  The kinds a slot could carry in neither direction: a float, a
+   --  character, and a symbol, which is a name rather than a string
+   --  and says so.
+   --
+   --  Each of these is wrong to call on the wrong kind and says so.
+   --  Kind is how a host finds out first.
+
+   function Get_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Float;
+
+   function Get_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Wide_Wide_Character;
+
+   procedure Set_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Value : Float);
+
+   procedure Set_Slot
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Value : Wide_Wide_Character);
+
+   function Symbol_Name
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return String;
+
+   procedure Set_Slot_Symbol
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Name  : String);
+
+   --  Taking a pair apart.  Slot_Cons could build one and nothing
+   --  could read one, so a host handed a list could do nothing with
+   --  it whatever.  Into may be Index, which is how a list is walked.
+
+   procedure Slot_Car
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Into  : Slot_Index);
+
+   procedure Slot_Cdr
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Into  : Slot_Index);
+
+   procedure Slot_Set_Car
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      From  : Slot_Index);
+
+   procedure Slot_Set_Cdr
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      From  : Slot_Index);
+
+   --  Vectors.  Making one may collect, so it is made into a slot
+   --  rather than handed back, and what goes in it comes from a slot
+   --  for the same reason.
+
+   procedure Slot_New_Vector
+     (This   : Raven_VM;
+      Index  : Slot_Index;
+      Length : Natural);
+
+   function Slot_Vector_Length
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Natural;
+
+   procedure Slot_Vector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      Into     : Slot_Index);
+
+   procedure Slot_Set_Vector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      From     : Slot_Index);
+
+   --  Bytevectors, whose elements are bytes rather than values and so
+   --  need no slot to travel in.
+
+   procedure Slot_New_Bytevector
+     (This   : Raven_VM;
+      Index  : Slot_Index;
+      Length : Natural);
+
+   function Slot_Bytevector_Length
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Natural;
+
+   function Slot_Bytevector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural)
+      return Natural;
+
+   procedure Slot_Set_Bytevector_Element
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      At_Index : Natural;
+      Value    : Natural);
+
+   --  equal?, which walks what it is given.  A host had the equality
+   --  Ada gives a private type, which is eq?: two lists of the same
+   --  numbers were not equal by it.
+
+   function Slot_Equal
+     (This         : Raven_VM;
+      Left, Right  : Slot_Index)
+      return Boolean;
 
    procedure Evaluate
      (This       : Raven_VM;
