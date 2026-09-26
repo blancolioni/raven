@@ -755,10 +755,54 @@ package body Raven.Engine.SECD.Translator is
                          Hold (Table, Target.Cdr (Get (X)));
                Macro : constant Raven.Target.Macro_Id :=
                          Head_Macro (Get (F));
+
+               --  What follows a special form has to be the shape the
+               --  form is about to take apart, and every one of these
+               --  used to find that out by taking it apart: (define)
+               --  asked for the car of nil, which is a precondition
+               --  on Raven.Pairs and so an assertion failure -- out
+               --  of the machine and saying nothing about the form --
+               --  rather than something a badly written program can
+               --  be told.
+               --
+               --  Most is Natural'Last where a form takes as many as
+               --  it is given.
+
+               procedure Expect
+                 (Least : Natural;
+                  Most  : Natural;
+                  Shape : String);
+
+               ------------
+               -- Expect --
+               ------------
+
+               procedure Expect
+                 (Least : Natural;
+                  Most  : Natural;
+                  Shape : String)
+               is
+                  Count : Natural := 0;
+                  It    : Object  := Get (A);
+               begin
+                  while Raven.Objects.Is_Pair (It) loop
+                     Count := Count + 1;
+                     It := Target.Cdr (It);
+                  end loop;
+
+                  if Count < Least or else Count > Most then
+                     raise Raven.Target.Translation_Error with Shape;
+                  end if;
+               end Expect;
+
             begin
                if Get (F) = Raven.Objects.Quote then
+                  Expect (1, 1, "quote takes one datum: (quote x)");
                   Load_Constant (Target.Cadr (Get (X)));
                elsif Get (F) = Raven.Objects.If_Obj then
+                  Expect (2, 3,
+                          "if takes a test, what to do, and what to do "
+                          & "otherwise: (if test then else)");
                   declare
                      Args : constant Root := Hold (Table, Get (A));
 
@@ -777,7 +821,13 @@ package body Raven.Engine.SECD.Translator is
                      This.Append (if Tail then TSEL else SEL);
                      Set (Args, Target.Cdr (Get (Args)));
                      Nested (Target.Car (Get (Args)), Ends, Tail);
-                     if Objects.Is_Pair (Get (Args)) then
+                     --  Whether there is an else, which is whether
+                     --  anything follows the then -- not whether the
+                     --  then is there, which it is by now.  Asking
+                     --  the wrong one of those made (if #t 1) ask
+                     --  for the cadr of a list of one.
+
+                     if Objects.Is_Pair (Target.Cdr (Get (Args))) then
                         Nested (Target.Cadr (Get (Args)), Ends, Tail);
                      else
                         Nested (Objects.Nil, Ends, Tail);
@@ -806,11 +856,16 @@ package body Raven.Engine.SECD.Translator is
                      end loop;
                   end;
                elsif Get (F) = Raven.Objects.Lambda then
+                  Expect (2, Natural'Last,
+                          "lambda takes a parameter list and a body: "
+                          & "(lambda (x ...) body ...)");
                   Build_Env (Target.Car (Get (A)));
                   This.Append (LDF);
                   Nested_Sequence (Target.Cdr (Get (A)), RTN, Tail => True);
                   Close_Scope;
                elsif Get (F) = S_Set then
+                  Expect (2, 2,
+                          "set! takes a name and a value: (set! x v)");
                   if not Raven.Objects.Is_Symbol (Target.Car (Get (A)))
                   then
                      raise Raven.Target.Translation_Error with
@@ -820,16 +875,21 @@ package body Raven.Engine.SECD.Translator is
                   This.Append (ST);
                   Locate (Target.Car (Get (A)));
                elsif Get (F) = S_Eq then
+                  Expect (2, 2,
+                          "raven-eq? takes two forms: (raven-eq? a b)");
                   Go (Target.Car (Get (A)));
                   Go (Target.Cadr (Get (A)));
                   This.Append (EQ);
                elsif Get (F) = S_Car then
+                  Expect (1, 1, "car takes one form: (car x)");
                   Go (Target.Car (Get (A)));
                   This.Append (CAR);
                elsif Get (F) = S_Cdr then
+                  Expect (1, 1, "cdr takes one form: (cdr x)");
                   Go (Target.Car (Get (A)));
                   This.Append (CDR);
                elsif Get (F) = S_Cons then
+                  Expect (2, 2, "cons takes two forms: (cons a b)");
                   Go (Target.Cadr (Get (A)));
                   Go (Target.Car (Get (A)));
                   This.Append (CONS);
@@ -869,24 +929,29 @@ package body Raven.Engine.SECD.Translator is
                      end Compile_Spread;
 
                   begin
-                     if Get (A) = Objects.Nil
-                       or else Target.Cdr (Get (A)) = Objects.Nil
-                     then
-                        raise Raven.Target.Translation_Error with
-                          "apply requires a procedure and a list of arguments";
-                     end if;
+                     Expect (2, Natural'Last,
+                             "apply takes a procedure and a list of "
+                             & "arguments: (apply f xs)");
 
                      Compile_Spread (Target.Cdr (Get (A)));
                      Go (Target.Car (Get (A)));
                      This.Append (if Tail then TAP else AP);
                   end;
                elsif Get (F) = S_Pair then
+                  Expect (1, 1, "pair? takes one form: (pair? x)");
                   Go (Target.Car (Get (A)));
                   This.Append (PAIR);
                elsif Get (F) = S_Quasiquote then
+                  Expect (1, 1, "quasiquote takes one datum: (quasiquote x)");
                   Compile_QQ (Target.Car (Get (A)), 1);
                elsif Get (F) = S_Define then
+                  Expect (2, Natural'Last,
+                          "define takes a name and a value, or a header "
+                          & "and a body: (define x v), (define (f x) body)");
                   if Raven.Objects.Is_Symbol (Target.Car (Get (A))) then
+                     Expect (2, 2,
+                             "define of a name takes one value: "
+                             & "(define x v)");
                      Undefine_Macro (Target.Car (Get (A)));
                      Go (Target.Cadr (Get (A)));
                      This.Append (DFN);
@@ -900,9 +965,14 @@ package body Raven.Engine.SECD.Translator is
                      This.Append (DFN);
                      Append_Definition (Target.Caar (Get (A)));
                   else
-                     raise Program_Error with "invalid define";
+                     raise Raven.Target.Translation_Error with
+                       "define takes a name or a header, not "
+                       & Target.Show (Target.Car (Get (A)));
                   end if;
                elsif Get (F) = S_Define_Macro then
+                  Expect (2, Natural'Last,
+                          "define-macro takes a header and a body: "
+                          & "(define-macro (name params ...) body ...)");
                   if not Raven.Objects.Is_Pair (Target.Car (Get (A)))
                     or else not Raven.Objects.Is_Symbol
                                   (Target.Caar (Get (A)))
