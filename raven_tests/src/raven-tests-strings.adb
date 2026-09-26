@@ -163,8 +163,12 @@ package body Raven.Tests.Strings is
    is
    begin
       Evaluate (VM, Expression);
+      --  As a person reads it: this suite compares a string to its
+      --  characters and a number to its digits, which is the display
+      --  rendering of each rather than the readable one.
+
       Test ("evaluate: " & Expression,
-            VM.Get_Slot (1),
+            VM.Show_Slot (1, Readable => False),
             Expected);
    end Test_String;
 

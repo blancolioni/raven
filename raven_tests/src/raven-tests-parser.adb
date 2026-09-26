@@ -104,7 +104,7 @@ package body Raven.Tests.Parser is
    begin
       VM.Evaluate (Expression);
       Test ("evaluate: " & Expression,
-            VM.Get_Slot (1),
+            VM.Show_Slot (1),
             Expected);
    end Test_Parser;
 

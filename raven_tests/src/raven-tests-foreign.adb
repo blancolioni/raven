@@ -268,7 +268,7 @@ package body Raven.Tests.Foreign is
    is
    begin
       VM.Evaluate (Expression);
-      Test (Expression, Expected, VM.Get_Slot (1));
+      Test (Expression, Expected, VM.Show_Slot (1));
    end Test_Value;
 
 end Raven.Tests.Foreign;

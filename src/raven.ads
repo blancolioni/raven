@@ -153,6 +153,57 @@ package Raven is
 
    type Slot_Index is range 1 .. 16;
 
+   --  What is in a slot, so that a host can find out before it asks.
+   --  Every one of the getters below but the boolean one is wrong to
+   --  call on the wrong kind of value, and there used to be no way of
+   --  telling which was the right one: raven's own primitives ask
+   --  Raven.Objects directly, which a host cannot reach.
+   --
+   --  A string is a value of the host's rather than of the machine's,
+   --  and says so, because a host that is handed one almost always
+   --  wants its characters.  Any other one says Foreign_Kind and
+   --  wants To_Foreign_Value.
+   --
+   --  Other_Kind is for what a program cannot hold and a host has no
+   --  business with -- an instruction, an undefined -- and is here so
+   --  that this is a total answer rather than an error of its own.
+
+   type Value_Kind is
+     (Nil_Kind,
+      Boolean_Kind,
+      Integer_Kind,
+      Float_Kind,
+      Character_Kind,
+      Symbol_Kind,
+      String_Kind,
+      Pair_Kind,
+      Vector_Kind,
+      Bytevector_Kind,
+      Procedure_Kind,
+      Eof_Kind,
+      Foreign_Kind,
+      Other_Kind);
+
+   function Kind
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Value_Kind;
+
+   --  What the value in a slot would be written as, whatever kind it
+   --  is.  Readable says which of the two renderings is wanted, the
+   --  way write and display differ.
+   --
+   --  Get_Slot returning a String used to do this for anything that
+   --  was not a string, so a host asking for a string and given a
+   --  list got a rendering of the list and no way to know.  It says
+   --  so now, and this is where the old answer went.
+
+   function Show_Slot
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      Readable : Boolean := True)
+      return String;
+
    function Get_Slot
      (This  : Raven_VM;
       Index : Slot_Index)
@@ -162,6 +213,9 @@ package Raven is
      (This  : Raven_VM;
       Index : Slot_Index)
       return Integer;
+
+   --  It is an error to ask for a string from a slot that does not
+   --  hold one.  Ask Kind first.
 
    function Get_Slot
      (This  : Raven_VM;

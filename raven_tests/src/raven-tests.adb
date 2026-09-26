@@ -13,6 +13,7 @@ with Raven.Tests.Memory;
 with Raven.Tests.Numbers;
 with Raven.Tests.Objects;
 with Raven.Tests.Parser;
+with Raven.Tests.Slots;
 with Raven.Tests.Strings;
 
 with Raven_Tests_Config;
@@ -112,6 +113,7 @@ package body Raven.Tests is
          Raven.Tests.Macros.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);
          Raven.Tests.Strings.Run_Tests (VM);
+         Raven.Tests.Slots.Run_Tests (VM);
          Raven.Tests.Foreign.Run_Tests (VM);
          Report_Scheme_Suite (VM);
          VM.Report_State;
