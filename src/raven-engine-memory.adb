@@ -577,6 +577,17 @@ package body Raven.Engine.Memory is
       Item : Object)
       return Object
    is
+      procedure Trace (Value : in out Object);
+
+      -----------
+      -- Trace --
+      -----------
+
+      procedure Trace (Value : in out Object) is
+      begin
+         Value := Move (This, Value);
+      end Trace;
+
    begin
       if Objects.Is_Foreign_Value (Item) then
          declare
@@ -587,7 +598,22 @@ package body Raven.Engine.Memory is
             Value    : Foreign_Value_Instance'Class renames
                          This.Value_List (Position);
          begin
-            Value.Marked := True;
+            --  On the way from unmarked to marked and not on every
+            --  encounter.  The flag is the guard as well as the
+            --  answer: a value holding an object that holds the value
+            --  would not otherwise come back.
+            --
+            --  What it hands over is moved from here, which is the
+            --  scan's own Move, so an object first reached inside a
+            --  foreign value is copied into to-space and the scan
+            --  walks it like any other.  The sweep that frees what is
+            --  unmarked runs after the scan, so a value reached only
+            --  through another value is marked in time.
+
+            if not Value.Marked then
+               Value.Marked := True;
+               Value.Mark (Trace'Access);
+            end if;
          end;
       end if;
 

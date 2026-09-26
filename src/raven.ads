@@ -11,6 +11,19 @@ package Raven is
    type User_Data_Interface is interface;
    type User_Data_Reference is access all User_Data_Interface'Class;
 
+   --  A value of the machine's, held without being looked into.  What
+   --  it is made of is the encoding's business and is private, but a
+   --  host has to be able to keep one: a foreign value that stands
+   --  for something of the host's and refers to something of the
+   --  program's has nowhere else to put it.
+   --
+   --  Keeping one is not free.  The collector moves what it copies,
+   --  so a value kept anywhere the collector does not walk is wrong
+   --  after the next collection.  Foreign_Value_Instance.Mark is how
+   --  a foreign value hands over what it keeps.
+
+   type Object is private;
+
    --  Where a VM writes, where it writes what went wrong, and where
    --  it reads.  A host that embeds raven gives New_VM one of these
    --  to say where each of the three goes; a VM without one uses the
@@ -191,7 +204,20 @@ package Raven is
 
    function Show (This : Foreign_Value_Instance) return String is abstract;
    function Display (This : Foreign_Value_Instance) return String;
-   procedure Mark (This : in out Foreign_Value_Instance) is null;
+   --  What this value holds that the collector must know about.
+   --  Process is called with each object in it, and may replace it:
+   --  the collector moves what it copies, so a value that keeps an
+   --  object and does not hand it over here has it collected while it
+   --  is still named, and left pointing into the half of the heap
+   --  that was abandoned even when something else kept it alive.
+   --
+   --  Null for a value holding nothing of the machine's, which is
+   --  every one raven has of its own.
+
+   procedure Mark
+     (This    : in out Foreign_Value_Instance;
+      Process : not null access procedure (Value : in out Object))
+   is null;
    procedure Free (This : in out Foreign_Value_Instance) is null;
    function Equal (This : Foreign_Value_Instance;
                    To   : Foreign_Value_Instance)
@@ -245,6 +271,10 @@ private
    Extended_Tag_Bits     : constant := 6;
    Full_Tag_Bits         : constant := Object_Tag_Bits + Extended_Tag_Bits;
    Extended_Payload_Bits : constant := Object_Size - Full_Tag_Bits;
+
+   --  Completing the private type above.  A child of Raven sees this
+   --  and works with the bits; anything outside holds it and hands it
+   --  to Mark.
 
    type Object is mod 2 ** Object_Size;
 

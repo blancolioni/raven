@@ -3,6 +3,7 @@ with Ada.Text_IO;
 
 with Raven.Engine.Tests;
 with Raven.Tests.Define;
+with Raven.Tests.Foreign;
 with Raven.Tests.Forms;
 with Raven.Tests.Host_IO;
 with Raven.Tests.Imports;
@@ -111,6 +112,7 @@ package body Raven.Tests is
          Raven.Tests.Macros.Run_Tests (VM);
          Raven.Tests.Numbers.Run_Tests (VM);
          Raven.Tests.Strings.Run_Tests (VM);
+         Raven.Tests.Foreign.Run_Tests (VM);
          Report_Scheme_Suite (VM);
          VM.Report_State;
          VM.Close_VM;
