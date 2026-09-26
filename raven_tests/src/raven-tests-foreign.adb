@@ -1,3 +1,5 @@
+with Probe_Host;
+
 package body Raven.Tests.Foreign is
 
    --  A box: a foreign value whose whole content is one object of the
@@ -100,6 +102,15 @@ package body Raven.Tests.Foreign is
 
    procedure Run_Tests (VM : Raven_VM) is
    begin
+      --  A foreign value written outside raven, using nothing but
+      --  what a host can see.  Every suite here is a child of Raven
+      --  and sees its private part, so none of them could say whether
+      --  the public interface is enough to write one with: this one
+      --  is a root unit, and stops compiling if anything it needs
+      --  stops being public.
+
+      Probe_Host.Bind (VM);
+
       VM.Bind_Foreign_Function ("probe-box", Make_Box'Access, 1);
       VM.Bind_Foreign_Function ("probe-unbox", Open_Box'Access, 1);
 
@@ -156,6 +167,20 @@ package body Raven.Tests.Foreign is
       Test_Value (VM, "(begin (probe-box (cons 6 7)) 'made)", "made");
       VM.Evaluate ("(vector-churn 3000)");
       Test_Value (VM, "(car (probe-unbox probe-kept))", "1");
+
+      --  What a host outside raven can do with the same mechanism.
+      --  It holds two objects, hands both to the collector, and is
+      --  still holding them after three thousand collections.
+
+      Test_Value (VM, "(probe-left (probe-couple 1 2))", "1");
+      Test_Value (VM, "(probe-right (probe-couple 1 2))", "2");
+
+      VM.Evaluate
+        ("(define probe-pair (probe-couple (cons 8 9) (cons 6 7)))");
+      VM.Evaluate ("(vector-churn 3000)");
+
+      Test_Value (VM, "(car (probe-left probe-pair))", "8");
+      Test_Value (VM, "(cdr (probe-right probe-pair))", "7");
 
       --  A handle on what is in a slot.  A slot holds what a foreign
       --  function was given only until the machine runs again, so a

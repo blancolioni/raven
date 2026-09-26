@@ -197,6 +197,29 @@ package Raven is
       Index : Slot_Index;
       Value : Handle);
 
+   --  And the same for an object, which is the whole of a value
+   --  rather than one of the kinds above.  These are what a foreign
+   --  value that holds something of the program's is written with: it
+   --  takes one out of a slot, keeps it, hands it to Mark when the
+   --  collector asks, and puts it back in a slot to answer with.
+   --
+   --  An object is only safe where the collector can find it: in a
+   --  slot, or inside something whose Mark hands it over.  Kept in an
+   --  Ada variable across anything that might allocate, it is wrong
+   --  by the next collection and says nothing about it.  A handle is
+   --  the answer where that is not good enough -- it is a root in its
+   --  own right, and costs an entry in a table and a release.
+
+   function Get_Slot
+     (This  : Raven_VM'Class;
+      Index : Slot_Index)
+      return Object;
+
+   procedure Set_Slot
+     (This  : Raven_VM'Class;
+      Index : Slot_Index;
+      Value : Object);
+
    procedure Slot_Cons
      (This     : Raven_VM;
       Index    : Slot_Index;
@@ -220,6 +243,7 @@ package Raven is
 
    function Show (This : Foreign_Value_Instance) return String is abstract;
    function Display (This : Foreign_Value_Instance) return String;
+
    --  What this value holds that the collector must know about.
    --  Process is called with each object in it, and may replace it:
    --  the collector moves what it copies, so a value that keeps an
@@ -234,11 +258,38 @@ package Raven is
      (This    : in out Foreign_Value_Instance;
       Process : not null access procedure (Value : in out Object))
    is null;
+
+   --  Told when the collector has given this value up, so that
+   --  whatever it stood for can be given back.
+   --
+   --  No VM: a collection is under way when this is called, and that
+   --  is not the moment to call back into the machine.  So a value
+   --  that keeps a handle cannot release it here, which is a reason
+   --  to keep objects and a Mark rather than handles.  Wren's
+   --  finalize has the same shape for the same reason.
+
    procedure Free (This : in out Foreign_Value_Instance) is null;
+
    function Equal (This : Foreign_Value_Instance;
                    To   : Foreign_Value_Instance)
                    return Boolean
                    is abstract;
+
+   --  Making one of these values and getting it back.  Without them a
+   --  host could derive from Foreign_Value_Instance and override
+   --  every one of its operations and had no way to make one or to
+   --  reach one it had been handed: the type was public and the two
+   --  things to do with it were not.
+
+   function Create_Foreign_Value
+     (This  : Raven_VM'Class;
+      Value : Foreign_Value_Instance'Class)
+      return Object;
+
+   function To_Foreign_Value
+     (This  : Raven_VM'Class;
+      Value : Object)
+      return Foreign_Value_Instance'Class;
 
    type Foreign_Function_Handler is access
      procedure (VM : Raven_VM);
@@ -320,16 +371,6 @@ private
       record
          Data : Raven_VM_Access;
       end record;
-
-   function Get_Slot
-     (This  : Raven_VM'Class;
-      Index : Slot_Index)
-      return Object;
-
-   procedure Set_Slot
-     (This  : Raven_VM'Class;
-      Index : Slot_Index;
-      Value : Object);
 
    function New_Symbol
      (This   : Raven_VM'Class;
@@ -415,16 +456,6 @@ private
       record
          Marked : Boolean := False;
       end record;
-
-   function Create_Foreign_Value
-     (This  : Raven_VM'Class;
-      Value : Foreign_Value_Instance'Class)
-      return Object;
-
-   function To_Foreign_Value
-     (This  : Raven_VM'Class;
-      Value : Object)
-      return Foreign_Value_Instance'Class;
 
    --  Readable says which of the two is wanted: what the reader could
    --  read back, or what a person reads.  It is the first by default,
