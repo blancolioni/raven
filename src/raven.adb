@@ -286,12 +286,81 @@ package body Raven is
       return String
    is
    begin
-      if Raven.Strings.Is_String (This, Index) then
-         return Raven.Strings.Get_String (This, Index);
-      else
-         return This.Data.Target.Show (This.Get_Slot (Index));
+      --  This used to answer with a rendering of whatever was there,
+      --  so a host that asked for a string and was given a list got
+      --  something that looked like an answer.  Show_Slot is where
+      --  that went, under a name that says what it does.
+
+      if not Raven.Strings.Is_String (This, Index) then
+         raise Constraint_Error with
+           "slot" & Index'Image & " holds "
+           & Encode (This.Display (This.Get_Slot (Index)))
+           & ", which is not a string";
       end if;
+
+      return Raven.Strings.Get_String (This, Index);
    end Get_Slot;
+
+   ----------
+   -- Kind --
+   ----------
+
+   function Kind
+     (This  : Raven_VM;
+      Index : Slot_Index)
+      return Value_Kind
+   is
+      use Raven.Objects;
+      X : constant Object := This.Get_Slot (Index);
+   begin
+      if X = Nil then
+         return Nil_Kind;
+      elsif X = To_Object (True) or else X = To_Object (False) then
+         return Boolean_Kind;
+      elsif Is_Eof (X) then
+         return Eof_Kind;
+      elsif Is_Integer (X) then
+         return Integer_Kind;
+      elsif Is_Float (X) then
+         return Float_Kind;
+      elsif Is_Character (X) then
+         return Character_Kind;
+      elsif Is_Symbol (X) then
+         return Symbol_Kind;
+      elsif Is_Pair (X) then
+         return Pair_Kind;
+      elsif Is_Vector (X) then
+         return Vector_Kind;
+      elsif Is_Bytevector (X) then
+         return Bytevector_Kind;
+      elsif Is_Closure (X) or else Is_Foreign_Function (X) then
+         return Procedure_Kind;
+      elsif Is_Foreign_Value (X) then
+
+         --  A string is one of these, and is the one a host is most
+         --  likely to be handed, so it answers for itself.
+
+         return (if Raven.Strings.Is_String (This, Index)
+                 then String_Kind
+                 else Foreign_Kind);
+      else
+         return Other_Kind;
+      end if;
+   end Kind;
+
+   ---------------
+   -- Show_Slot --
+   ---------------
+
+   function Show_Slot
+     (This     : Raven_VM;
+      Index    : Slot_Index;
+      Readable : Boolean := True)
+      return String
+   is
+   begin
+      return Encode (This.Display (This.Get_Slot (Index), Readable));
+   end Show_Slot;
 
    --------------
    -- Get_Slot --

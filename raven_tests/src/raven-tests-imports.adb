@@ -275,7 +275,13 @@ package body Raven.Tests.Imports is
    is
    begin
       Evaluate (VM, Expression);
-      Test ("library: " & Expression, VM.Get_Slot (1), Expected);
+      --  As a person reads it rather than as the reader would read
+      --  it back: this asks for a name, and a name that came from
+      --  symbol->string is a string, which quotes itself when it is
+      --  written readably.
+
+      Test ("library: " & Expression,
+            VM.Show_Slot (1, Readable => False), Expected);
    end Test_Name;
 
    -----------------
