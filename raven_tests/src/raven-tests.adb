@@ -3,6 +3,7 @@ with Ada.Text_IO;
 
 with Raven.Engine.Tests;
 with Raven.Tests.Define;
+with Raven.Tests.Forms;
 with Raven.Tests.Host_IO;
 with Raven.Tests.Imports;
 with Raven.Tests.Library;
@@ -119,6 +120,11 @@ package body Raven.Tests is
       --  and the others all run on the terminal.
 
       Raven.Tests.Host_IO.Run_Tests;
+
+      --  A VM of its own as well: this one provokes a complaint about
+      --  thirty times on purpose, and hears none of them.
+
+      Raven.Tests.Forms.Run_Tests;
 
       Test_Heap_Size;
    end Run_Tests;

@@ -634,22 +634,23 @@ package body Raven.Engine.SECD is
       is
          It : Object := L;
       begin
-         for I in 1 .. Index loop
-            It := This.Cdr (It);
-            if It = Objects.Nil then
-               return It;
-            end if;
-         end loop;
-
          --  A frame shorter than the index wanted is a call with
          --  fewer arguments than the procedure has parameters, and
          --  what it did not get is nil -- which is what optional
          --  reads, and how the library gives a procedure an argument
          --  it need not be given.
          --
-         --  The loop said so for every index but the first, which
-         --  does not go round it at all: a procedure of one parameter
-         --  called with none asked for the car of an empty frame.
+         --  The test comes before the step and not after it, because
+         --  a frame can be empty before a single step is taken: a
+         --  procedure of two parameters called with none asked for
+         --  the cdr of nil on the way to the second, which is a
+         --  precondition on Raven.Pairs.  Guarding the car alone --
+         --  which is all the first parameter needed -- left that.
+
+         for I in 1 .. Index loop
+            exit when It = Objects.Nil;
+            It := This.Cdr (It);
+         end loop;
 
          if It = Objects.Nil then
             return It;
@@ -690,14 +691,12 @@ package body Raven.Engine.SECD is
       is
          It : Object := L;
       begin
-         for I in 1 .. Index loop
-            It := This.Cdr (It);
-            if It = Objects.Nil then
-               return It;
-            end if;
-         end loop;
-
          --  And the same where one is assigned to rather than read.
+
+         for I in 1 .. Index loop
+            exit when It = Objects.Nil;
+            It := This.Cdr (It);
+         end loop;
 
          if It = Objects.Nil then
             return It;
