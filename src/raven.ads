@@ -130,6 +130,22 @@ package Raven is
 
    function Is_Null (This : Handle) return Boolean;
 
+   --  Giving a handle back.  Until this, the list they live in was
+   --  only ever appended to, so every handle kept what it named for
+   --  the rest of the session and every collection walked all of
+   --  them.
+   --
+   --  The one released is left null, which Is_Null answers for.  A
+   --  copy of it taken beforehand is not, and using one of those is
+   --  the same fault as using anything else that has been given back.
+   --
+   --  One handle per call and one release each: asking twice for a
+   --  handle on the same object gives two, and both want releasing.
+
+   procedure Release
+     (This  : Raven_VM;
+      Value : in out Handle);
+
    function Bind_Name
      (This : Raven_VM;
       Name : String)

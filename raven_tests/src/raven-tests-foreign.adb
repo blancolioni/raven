@@ -11,6 +11,15 @@ package body Raven.Tests.Foreign is
 
    overriding function Show (This : Box) return String;
 
+   --  How many boxes the collector has given back, which is how a
+   --  test can see that letting go of a handle let go of what it
+   --  named.  Nothing else can: an object that has been collected
+   --  says nothing about it.
+
+   Freed : Natural := 0;
+
+   overriding procedure Free (This : in out Box);
+
    --  Equal is given no VM either, so a box cannot compare what it
    --  holds any more than it can print it.  Two boxes are the same
    --  box or they are not.
@@ -48,6 +57,16 @@ package body Raven.Tests.Foreign is
 
       Process (This.Held);
    end Mark;
+
+   ----------
+   -- Free --
+   ----------
+
+   overriding procedure Free (This : in out Box) is
+      pragma Unreferenced (This);
+   begin
+      Freed := Freed + 1;
+   end Free;
 
    --------------
    -- Make_Box --
@@ -137,6 +156,65 @@ package body Raven.Tests.Foreign is
       Test_Value (VM, "(begin (probe-box (cons 6 7)) 'made)", "made");
       VM.Evaluate ("(vector-churn 3000)");
       Test_Value (VM, "(car (probe-unbox probe-kept))", "1");
+
+      --  A handle on what is in a slot.  A slot holds what a foreign
+      --  function was given only until the machine runs again, so a
+      --  handle is how a host keeps one -- and it used to answer with
+      --  nothing at all, so the only handle to be had was on a name.
+
+      VM.Evaluate ("(cons 11 22)");
+
+      declare
+         Held : Handle := VM.Get_Slot (1);
+      begin
+         Test ("a handle on a slot is a handle", not Is_Null (Held));
+
+         --  Nothing else names that pair now, and the collector runs
+         --  a great many times before it is asked for again.  It has
+         --  to be kept, and it has to be moved with everything else:
+         --  a root that is not updated is worse than none.
+
+         VM.Set_Slot_Nil (1);
+         VM.Evaluate ("(vector-churn 3000)");
+         VM.Set_Slot (1, Held);
+
+         Test ("and what it names survives a collection",
+               "(11 . 22)", Encode (VM.Display (VM.Get_Slot (1))));
+
+         VM.Release (Held);
+         Test ("a released handle is null", Is_Null (Held));
+      end;
+
+      --  And letting go of one lets go of what it named.  A box says
+      --  when it is collected, which is the only way to watch this
+      --  from outside.
+
+      declare
+         Before : constant Natural := Freed;
+      begin
+         VM.Evaluate ("(probe-box 99)");
+
+         declare
+            Held : Handle := VM.Get_Slot (1);
+         begin
+            for Index in Slot_Index loop
+               VM.Set_Slot_Nil (Index);
+            end loop;
+
+            VM.Evaluate ("(vector-churn 3000)");
+            Test ("a box a handle names is not collected", Before = Freed);
+
+            VM.Release (Held);
+
+            for Index in Slot_Index loop
+               VM.Set_Slot_Nil (Index);
+            end loop;
+
+            VM.Evaluate ("(vector-churn 3000)");
+            Test ("and is collected once the handle goes",
+                  Before + 1 = Freed);
+         end;
+      end;
    end Run_Tests;
 
    ----------
