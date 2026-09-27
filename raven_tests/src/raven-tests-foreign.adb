@@ -220,6 +220,75 @@ package body Raven.Tests.Foreign is
          Test ("a couple's accessor refuses a box, and says so", Refused);
       end;
 
+      --  A host calling a procedure it has been handed.  From inside
+      --  a foreign function first, which is where a callback is: the
+      --  machine is part way through the program that called it, and
+      --  has to be where it was afterwards -- the pending addition, the
+      --  local it closes over, the value computed before the call.
+
+      Test_Value (VM, "(probe-apply (lambda (x) (* x 2)) 21)", "42");
+      Test_Value (VM, "(+ 1 (probe-apply (lambda (x) (* x 10)) 4))", "41");
+      Test_Value
+        (VM, "(let ((a 5)) (+ a (probe-apply (lambda (x) (+ x a)) 1) a))",
+         "16");
+      Test_Value (VM, "(probe-apply2 (lambda (x y) (- x y)) 10 3)", "7");
+      Test_Value (VM, "(probe-apply2 < 1 2)", "#t");
+      Test_Value (VM, "(probe-apply raven-string-length ""abc"")", "3");
+
+      --  A callback that calls back, which is a run inside a run inside
+      --  a run.
+
+      Test_Value
+        (VM, "(probe-apply (lambda (x)"
+         & " (probe-apply (lambda (y) (* y y)) x)) 7)",
+         "49");
+
+      --  A collection in the middle of one, with the arguments, the
+      --  answer and what the outer program was holding all moved.
+
+      Test_Value
+        (VM, "(probe-apply (lambda (x) (vector-churn 3000) x) (list 1 2))",
+         "(1 2)");
+      Test_Value
+        (VM, "(let ((keep (list 7 8)))"
+         & " (probe-apply (lambda (x) (vector-churn 3000) x) 0) keep)",
+         "(7 8)");
+
+      --  What goes wrong in one is raised out of it, and the machine is
+      --  put back first: a host that handles it goes on, and so does the
+      --  program that called the host.
+
+      Test_Value
+        (VM, "(list 1 (probe-try (lambda (x) (car x)) 5) 3)", "(1 failed 3)");
+      Test_Value (VM, "(list 1 (probe-try (lambda (x) x) 2) 3)", "(1 2 3)");
+
+      --  And from outside the machine, where a host holds a procedure it
+      --  kept and has nothing running.  Every slot but the answer's is
+      --  as the host left it.
+
+      VM.Evaluate ("(lambda (x y) (vector-churn 300) (+ x y))");
+      VM.Set_Slot (2, Integer'(20));
+      VM.Set_Slot (3, Integer'(22));
+      VM.Set_Slot (4, Integer'(99));
+      VM.Slot_Apply (1, 2);
+      Test ("a host applies a procedure", VM.Show_Slot (1) = "42");
+      Test ("and its arguments are where it left them",
+            VM.Show_Slot (2) = "20" and then VM.Show_Slot (3) = "22");
+      Test ("and so is a slot it was not using", VM.Show_Slot (4) = "99");
+
+      declare
+         Refused : Boolean := False;
+      begin
+         VM.Set_Slot (1, Integer'(5));
+         begin
+            VM.Slot_Apply (1, 0);
+         exception
+            when Constraint_Error =>
+               Refused := True;
+         end;
+         Test ("applying what is not a procedure is refused", Refused);
+      end;
+
       declare
          Before : constant Natural := Probe_Host.Couples_Freed;
       begin

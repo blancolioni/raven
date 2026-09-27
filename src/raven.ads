@@ -371,6 +371,33 @@ package Raven is
       At_Index : Natural;
       From     : Slot_Index);
 
+   --  Calling a procedure the host has been handed: the procedure in
+   --  Index, its arguments in the Count slots after it, and the answer
+   --  left in Index.  It is how a host calls back into a program -- a
+   --  comparator, a handler, anything where the program decides and
+   --  the host asks -- and it may be called from inside a foreign
+   --  function as well as from outside the machine.
+   --
+   --  The machine runs again to do it, and three things follow.
+   --
+   --  Every slot but Index is as it was afterwards, arguments included,
+   --  whatever the procedure did with the slots while it ran.
+   --
+   --  It may collect, which moves every object.  One the host holds in
+   --  an Ada variable across the call is left naming where the object
+   --  used to be; hold it in a slot or a handle instead.
+   --
+   --  What goes wrong inside it is raised out of it, as it would be out
+   --  of Evaluate, and the machine is put back first: a foreign function
+   --  that handles the exception finds the program it was called from
+   --  as it left it, and can go on.
+
+   procedure Slot_Apply
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Count : Natural)
+     with Pre => Natural (Index) + Count <= Natural (Slot_Index'Last);
+
    --  Bytevectors, whose elements are bytes rather than values and so
    --  need no slot to travel in.
 

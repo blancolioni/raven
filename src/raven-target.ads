@@ -183,6 +183,18 @@ private package Raven.Target is
      (This   : in out Abstraction)
    is abstract;
 
+   --  Apply the procedure in slot Index of the machine's VM to the Count
+   --  arguments in the slots after it, running the machine to do it,
+   --  and leave the answer in Index.  Whatever the machine was doing
+   --  when this was called is put back afterwards, and so is every other
+   --  slot, whether the procedure returns or raises.
+
+   procedure Apply
+     (This  : in out Abstraction;
+      Index : Slot_Index;
+      Count : Natural)
+   is abstract;
+
    procedure Bind_Foreign_Function
      (This           : in out Abstraction;
       Name           : String;

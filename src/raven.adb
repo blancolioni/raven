@@ -817,6 +817,20 @@ package body Raven is
       return Encode (This.Display (This.Get_Slot (Index), Readable));
    end Show_Slot;
 
+   ----------------
+   -- Slot_Apply --
+   ----------------
+
+   procedure Slot_Apply
+     (This  : Raven_VM;
+      Index : Slot_Index;
+      Count : Natural)
+   is
+   begin
+      Check_Kind (This, Index, Procedure_Kind, "a procedure");
+      This.Data.Target.Apply (Index, Count);
+   end Slot_Apply;
+
    -----------------------------
    -- Slot_Bytevector_Element --
    -----------------------------
