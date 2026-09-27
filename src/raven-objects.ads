@@ -181,9 +181,10 @@ private package Raven.Objects is
    --  How many foreign values can be live at once.  An id is given
    --  back when the collector finds nothing naming the value, so this
    --  is not how many a program may make; it is how many it may hold.
-   --  Every string is one.
+   --  Every string is one, and so every port.  The ceiling is what the
+   --  payload of an extended object holds, as it is for a symbol.
 
-   type Foreign_Value_Id is range 1 .. 9_999;
+   type Foreign_Value_Id is range 1 .. 2 ** Extended_Payload_Bits - 1;
 
    function Is_Foreign_Value (X : Object) return Boolean;
    function To_Foreign_Value_Id (X : Object) return Foreign_Value_Id

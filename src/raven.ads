@@ -631,9 +631,15 @@ private
       Index : Natural;
       Value : Object);
 
+   --  Table_Id is the value's id, set by the memory that holds it, so
+   --  that the collector can sweep the values there are and still know
+   --  which id each gives back.  It is a Natural rather than the id
+   --  type because that belongs to Raven.Objects, which is below here.
+
    type Foreign_Value_Instance is abstract tagged
       record
-         Marked : Boolean := False;
+         Marked   : Boolean := False;
+         Table_Id : Natural := 0;
       end record;
 
    --  Readable says which of the two is wanted: what the reader could

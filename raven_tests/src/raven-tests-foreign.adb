@@ -281,6 +281,32 @@ package body Raven.Tests.Foreign is
                   Before + 1 = Freed);
          end;
       end;
+
+      --  The collector sweeps the values there are rather than every
+      --  id there has been, and still finds every one it should: more
+      --  boxes than the old ceiling on foreign values, all live at
+      --  once, and then all of them freed.
+
+      declare
+         Before : constant Natural := Freed;
+      begin
+         VM.Evaluate
+           ("(define (probe-boxes v n)"
+            & " (if (= n 0) v"
+            & " (begin (vector-set! v (- n 1) (probe-box n))"
+            & " (probe-boxes v (- n 1)))))");
+         VM.Evaluate
+           ("(vector-length (probe-boxes (make-vector 10500 #f) 10500))");
+         Test ("more boxes than there were foreign values",
+               VM.Show_Slot (1) = "10500");
+
+         for Index in Slot_Index loop
+            VM.Set_Slot_Nil (Index);
+         end loop;
+
+         VM.Evaluate ("(vector-churn 3000)");
+         Test ("and every one of them is freed", Before + 10_500 = Freed);
+      end;
    end Run_Tests;
 
    ----------
