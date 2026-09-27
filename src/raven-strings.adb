@@ -391,14 +391,13 @@ package body Raven.Strings is
    -- String_Length --
    -------------------
 
+   --  Without copying the string to measure it, which it did twice,
+   --  once for an assertion: a loop that asks for the length of the
+   --  string it walks would copy the string every time round.
+
    procedure String_Length (VM : Raven_VM) is
-      use Raven.Objects;
-      X : constant Object := VM.Get_Slot (1);
-      pragma Assert
-        (Is_Foreign_Value (X)
-         and then VM.To_Foreign_Value (X) in Instance'Class);
    begin
-      VM.Set_Slot (1, Instance'Class (VM.To_Foreign_Value (X)).Length);
+      VM.Set_Slot (1, Checked_Length (VM, "string-length", 1));
    end String_Length;
 
    ----------------
