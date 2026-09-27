@@ -11,7 +11,10 @@ package body Raven.Tests.Foreign is
          Held : Object;
       end record;
 
-   overriding function Show (This : Box) return String;
+   overriding function Show
+     (This        : Box;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
 
    --  How many boxes the collector has given back, which is how a
    --  test can see that letting go of a handle let go of what it
@@ -22,15 +25,15 @@ package body Raven.Tests.Foreign is
 
    overriding procedure Free (This : in out Box);
 
-   --  Equal is given no VM either, so a box cannot compare what it
-   --  holds any more than it can print it.  Two boxes are the same
-   --  box or they are not.
+   --  Two boxes are equal when what they hold is: equal?, not eq?, on
+   --  the object inside, which is what the machine hands Equal to ask.
 
    overriding function Equal
-     (This : Box;
-      To   : Box)
+     (This         : Box;
+      To           : Box;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
       return Boolean
-   is (This.Held = To.Held);
+   is (Equal_Object (This.Held, To.Held));
 
    overriding procedure Mark
      (This    : in out Box;
@@ -307,21 +310,46 @@ package body Raven.Tests.Foreign is
          VM.Evaluate ("(vector-churn 3000)");
          Test ("and every one of them is freed", Before + 10_500 = Freed);
       end;
+
+      --  What a box holds, shown and compared.  Show and Equal were
+      --  given nothing of the machine's, so a box showed as #box
+      --  whatever was in it and compared by the word it held: two
+      --  boxes of equal lists were not equal?, and equal? stopped at
+      --  a box in the middle of anything it walked.
+
+      Test_Value (VM, "(probe-box (list 1 2))", "#<box (1 2)>");
+      Test_Value (VM, "(probe-box (probe-box 'a))", "#<box #<box a>>");
+      Test_Value (VM, "(raven-write-text (probe-box ""hi""))",
+                  """#<box \""hi\"">""");
+      Test_Value (VM, "(raven-display-text (probe-box ""hi""))",
+                  """#<box hi>""");
+
+      Test_Value (VM, "(equal? (probe-box (list 1 2)) (probe-box (list 1 2)))",
+                  "#t");
+      Test_Value (VM, "(equal? (probe-box (list 1 2)) (probe-box (list 1 3)))",
+                  "#f");
+      Test_Value (VM, "(eq? (probe-box 1) (probe-box 1))", "#f");
+      Test_Value
+        (VM, "(equal? (list 0 (probe-box (vector 1 ""x"")))"
+         & " (list 0 (probe-box (vector 1 ""x""))))",
+         "#t");
+      Test_Value
+        (VM, "(equal? (list 0 (probe-box (vector 1 ""x"")))"
+         & " (list 0 (probe-box (vector 1 ""y""))))",
+         "#f");
    end Run_Tests;
 
    ----------
    -- Show --
    ----------
 
-   overriding function Show (This : Box) return String is
-      pragma Unreferenced (This);
+   overriding function Show
+     (This        : Box;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is
    begin
-      --  Show is given no VM, so a box cannot say what it holds.
-      --  Which is the same omission as the one this suite is about,
-      --  in a place where getting it wrong is a poor answer rather
-      --  than a corrupted heap.
-
-      return "#box";
+      return "#<box " & Show_Object (This.Held) & ">";
    end Show;
 
    ----------------

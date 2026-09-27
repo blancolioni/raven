@@ -70,12 +70,23 @@ private
          end case;
       end record;
 
-   overriding function Show (This : Instance) return String;
-   overriding function Display (This : Instance) return String;
+   --  A string holds nothing of the machine's, so neither is asked of
+   --  the callbacks the machine hands over.
+
+   overriding function Show
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
+
+   overriding function Display
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
 
    overriding function Equal
-     (This : Instance;
-      To   : Instance)
+     (This         : Instance;
+      To           : Instance;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
       return Boolean
    is (This.Wide = To.Wide
        and then This.Length = To.Length

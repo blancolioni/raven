@@ -138,7 +138,12 @@ package body Raven.Strings is
    -- Display --
    -------------
 
-   overriding function Display (This : Instance) return String is
+   overriding function Display
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is
+      pragma Unreferenced (Show_Object);
    begin
       --  The characters and nothing else: the quotation marks and the
       --  escapes above are there for the reader and not for a person.
@@ -385,7 +390,12 @@ package body Raven.Strings is
    -- Show --
    ----------
 
-   overriding function Show (This : Instance) return String is
+   overriding function Show
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is
+      pragma Unreferenced (Show_Object);
 
       --  A string written so that the reader can read it back, which
       --  means the quotation marks and an escape for everything that
