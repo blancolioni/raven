@@ -18,11 +18,6 @@ package body Raven.Engine.SECD.Translator is
    package Object_Lists is
      new Ada.Containers.Doubly_Linked_Lists (Object);
 
-   function Show_Code
-     (Code : Object_Lists.List;
-      Target : Raven.Target.Reference)
-      return String;
-
    package Object_List_Vectors is
      new Ada.Containers.Vectors
        (Positive, Object_Lists.List, Object_Lists."=");
@@ -123,15 +118,6 @@ package body Raven.Engine.SECD.Translator is
          Roots   : aliased Root_Vectors.Vector;
       end record;
 
-   overriding procedure Translate
-     (This    : in out Instance;
-      Target  : Raven.Target.Reference;
-      Library : Raven.Target.Real_Library_Id);
-
-   overriding procedure Mark
-     (This    : in out Instance;
-      Process : not null access procedure (Value : in out Object));
-
    procedure Append
      (This : in out Instance'Class;
       I    : Instruction);
@@ -140,6 +126,20 @@ package body Raven.Engine.SECD.Translator is
      (This : in out Instance'Class;
       C    : Object)
      with Pre => Objects.Is_Atom (C);
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object));
+
+   function Show_Code
+     (Code : Object_Lists.List;
+      Target : Raven.Target.Reference)
+      return String;
+
+   overriding procedure Translate
+     (This    : in out Instance;
+      Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id);
 
    ------------
    -- Append --

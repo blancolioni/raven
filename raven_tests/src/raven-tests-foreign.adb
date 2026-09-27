@@ -11,16 +11,12 @@ package body Raven.Tests.Foreign is
          Held : Object;
       end record;
 
-   overriding function Show (This : Box) return String;
-
    --  How many boxes the collector has given back, which is how a
    --  test can see that letting go of a handle let go of what it
    --  named.  Nothing else can: an object that has been collected
    --  says nothing about it.
 
    Freed : Natural := 0;
-
-   overriding procedure Free (This : in out Box);
 
    --  Equal is given no VM either, so a box cannot compare what it
    --  holds any more than it can print it.  Two boxes are the same
@@ -32,33 +28,22 @@ package body Raven.Tests.Foreign is
       return Boolean
    is (This.Held = To.Held);
 
+   overriding procedure Free (This : in out Box);
+
+   procedure Make_Box (VM : Raven_VM);
+
    overriding procedure Mark
      (This    : in out Box;
       Process : not null access procedure (Value : in out Object));
 
-   procedure Make_Box (VM : Raven_VM);
    procedure Open_Box (VM : Raven_VM);
+
+   overriding function Show (This : Box) return String;
 
    procedure Test_Value
      (VM         : Raven_VM;
       Expression : String;
       Expected   : String);
-
-   ----------
-   -- Mark --
-   ----------
-
-   overriding procedure Mark
-     (This    : in out Box;
-      Process : not null access procedure (Value : in out Object))
-   is
-   begin
-      --  In out, because being told is not enough: the collector
-      --  moves what it copies, so what this holds is somewhere else
-      --  afterwards and has to be written back.
-
-      Process (This.Held);
-   end Mark;
 
    ----------
    -- Free --
@@ -80,6 +65,22 @@ package body Raven.Tests.Foreign is
       VM.Set_Slot
         (1, VM.Create_Foreign_Value (Box'(Foreign_Value_Instance with Held)));
    end Make_Box;
+
+   ----------
+   -- Mark --
+   ----------
+
+   overriding procedure Mark
+     (This    : in out Box;
+      Process : not null access procedure (Value : in out Object))
+   is
+   begin
+      --  In out, because being told is not enough: the collector
+      --  moves what it copies, so what this holds is somewhere else
+      --  afterwards and has to be written back.
+
+      Process (This.Held);
+   end Mark;
 
    --------------
    -- Open_Box --

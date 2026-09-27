@@ -38,59 +38,6 @@ package body Raven.Objects is
    function Single_Mantissa (W : Object) return Object
    is (W mod 2 ** Mantissa_Bits);
 
-   ---------------------
-   -- Is_Representable --
-   ---------------------
-
-   function Is_Representable (F : Float) return Boolean is
-      W : constant Object := To_Word (F);
-      E : constant Object := Single_Exponent (W);
-   begin
-      --  An empty exponent is zero, or a subnormal -- and every
-      --  subnormal single is far below the smallest exponent here can
-      --  say, so zero is the whole of what it can be.
-
-      if E = 0 then
-         return Single_Mantissa (W) = 0;
-      else
-         return E in Least_Exponent .. Most_Exponent;
-      end if;
-   end Is_Representable;
-
-   ---------------
-   -- To_Object --
-   ---------------
-
-   function To_Object (F : Float) return Object is
-      W : constant Object := To_Word (F);
-      E : constant Object := Single_Exponent (W);
-      P : constant Object :=
-            Single_Sign (W) * 2 ** Sign_Shift
-              + (if E = 0
-                 then 0
-                 else (E - Exponent_Shift) * 2 ** Mantissa_Bits
-                        + Single_Mantissa (W));
-   begin
-      return Tag (P, Float_Tag);
-   end To_Object;
-
-   --------------
-   -- To_Float --
-   --------------
-
-   function To_Float (X : Object) return Float is
-      P : constant Object := Payload (X);
-      S : constant Object := P / 2 ** Sign_Shift;
-      E : constant Object := (P / 2 ** Mantissa_Bits) mod 2 ** Exponent_Bits;
-      M : constant Object := P mod 2 ** Mantissa_Bits;
-   begin
-      return To_Single
-        (S * 2 ** 31
-         + (if E = 0
-            then 0
-            else (E + Exponent_Shift) * 2 ** Mantissa_Bits + M));
-   end To_Float;
-
    function Image
      (X : Object)
       return String
@@ -155,5 +102,58 @@ package body Raven.Objects is
          return X'Image;
       end if;
    end Image;
+
+   ---------------------
+   -- Is_Representable --
+   ---------------------
+
+   function Is_Representable (F : Float) return Boolean is
+      W : constant Object := To_Word (F);
+      E : constant Object := Single_Exponent (W);
+   begin
+      --  An empty exponent is zero, or a subnormal -- and every
+      --  subnormal single is far below the smallest exponent here can
+      --  say, so zero is the whole of what it can be.
+
+      if E = 0 then
+         return Single_Mantissa (W) = 0;
+      else
+         return E in Least_Exponent .. Most_Exponent;
+      end if;
+   end Is_Representable;
+
+   --------------
+   -- To_Float --
+   --------------
+
+   function To_Float (X : Object) return Float is
+      P : constant Object := Payload (X);
+      S : constant Object := P / 2 ** Sign_Shift;
+      E : constant Object := (P / 2 ** Mantissa_Bits) mod 2 ** Exponent_Bits;
+      M : constant Object := P mod 2 ** Mantissa_Bits;
+   begin
+      return To_Single
+        (S * 2 ** 31
+         + (if E = 0
+            then 0
+            else (E + Exponent_Shift) * 2 ** Mantissa_Bits + M));
+   end To_Float;
+
+   ---------------
+   -- To_Object --
+   ---------------
+
+   function To_Object (F : Float) return Object is
+      W : constant Object := To_Word (F);
+      E : constant Object := Single_Exponent (W);
+      P : constant Object :=
+            Single_Sign (W) * 2 ** Sign_Shift
+              + (if E = 0
+                 then 0
+                 else (E - Exponent_Shift) * 2 ** Mantissa_Bits
+                        + Single_Mantissa (W));
+   begin
+      return Tag (P, Float_Tag);
+   end To_Object;
 
 end Raven.Objects;

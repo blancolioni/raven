@@ -12,6 +12,18 @@ package body Raven.Tests.Forms is
 
    type Quiet is new IO_Interface with null record;
 
+   --  A form of the right shape is not refused.  A check on a shape
+   --  that refuses the shape it means to allow is worse than none.
+
+   procedure Allowed
+     (VM         : Raven_VM;
+      Expression : String);
+
+   overriding procedure Get
+     (This      : in out Quiet;
+      Ch        : out Wide_Wide_Character;
+      Available : out Boolean);
+
    overriding procedure Put
      (This : in out Quiet;
       Ch   : Wide_Wide_Character)
@@ -21,13 +33,6 @@ package body Raven.Tests.Forms is
      (This : in out Quiet;
       Ch   : Wide_Wide_Character)
    is null;
-
-   overriding procedure Get
-     (This      : in out Quiet;
-      Ch        : out Wide_Wide_Character;
-      Available : out Boolean);
-
-   Host : aliased Quiet;
 
    --  A form of the wrong shape is refused, and what it is told is
    --  what the form takes.  Both halves matter: after #56 a refusal
@@ -40,12 +45,7 @@ package body Raven.Tests.Forms is
       Expression : String;
       Expected   : String);
 
-   --  And one of the right shape is not refused.  A check on a shape
-   --  that refuses the shape it means to allow is worse than none.
-
-   procedure Allowed
-     (VM         : Raven_VM;
-      Expression : String);
+   Host : aliased Quiet;
 
    -------------
    -- Allowed --

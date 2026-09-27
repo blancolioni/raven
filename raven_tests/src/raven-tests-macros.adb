@@ -14,11 +14,11 @@ package body Raven.Tests.Macros is
    Repeat_Count : constant := 300;
    Body_Length  : constant := 150;
 
-   function Local_Macro_Form return String;
-
    procedure Evaluate
      (VM         : Raven_VM;
       Expression : String);
+
+   function Local_Macro_Form return String;
 
    procedure Test_Macro
      (VM         : Raven_VM;

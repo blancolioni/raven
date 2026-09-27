@@ -12,25 +12,25 @@ package body Raven.Parser.Lexical is
 
    package Chars renames Ada.Wide_Wide_Characters.Handling;
 
-   procedure Open_Stream (This : in out Instance; Identity : String);
-
-   procedure Next_Character (This : in out Instance'Class);
-   procedure Start_Token (This : in out Instance'Class);
-   procedure Stop_Token (This : in out Instance'Class);
-
-   function Peek (This : Instance'Class) return Wide_Wide_Character;
-
-   function Is_White_Space (This : Instance'Class) return Boolean;
-   function Is_Alphanumeric (This : Instance'Class) return Boolean;
-   function End_Of_Stream (This : Instance) return Boolean;
    function End_Of_Line (This : Instance) return Boolean;
+   function End_Of_Stream (This : Instance) return Boolean;
+
    function Hex_To_Character
      (Hex : Wide_Wide_String)
       return Wide_Wide_Character;
 
+   function Is_Alphanumeric (This : Instance'Class) return Boolean;
+   function Is_White_Space (This : Instance'Class) return Boolean;
+   procedure Next_Character (This : in out Instance'Class);
+   procedure Open_Stream (This : in out Instance; Identity : String);
+   function Peek (This : Instance'Class) return Wide_Wide_Character;
+
    function Read_Character (This       : in out Instance'Class;
       Long_Names : Boolean)
                             return Wide_Wide_Character;
+
+   procedure Start_Token (This : in out Instance'Class);
+   procedure Stop_Token (This : in out Instance'Class);
 
    -----------
    -- Close --
@@ -118,18 +118,6 @@ package body Raven.Parser.Lexical is
          This.Target.Report_Error (Text);
       end if;
    end Error;
-
-   ----------------
-   -- Report_To --
-   ----------------
-
-   procedure Report_To
-     (This   : in out Instance;
-      Target : Raven.Target.Reference)
-   is
-   begin
-      This.Target := Target;
-   end Report_To;
 
    ---------------
    -- Hex_Digit --
@@ -229,22 +217,6 @@ package body Raven.Parser.Lexical is
       end if;
    end Next_Character;
 
-   -----------------
-   -- Open_Stream --
-   -----------------
-
-   procedure Open_Stream (This : in out Instance; Identity : String) is
-   begin
-      if This.Current_Stream_Index = Max_Source_Files then
-         raise Program_Error with "maximum source file nesting exceeded";
-      end if;
-      This.Current_Stream_Index := @ + 1;
-      This.Current_Stream := new Source_Stream_Record'(Empty_Stream);
-      This.Current_Stream.Identity :=
-        To_Unbounded_Wide_Wide_String (Decode (Identity));
-      This.Current_Stream.EOF := False;
-   end Open_Stream;
-
    ----------
    -- Open --
    ----------
@@ -281,6 +253,22 @@ package body Raven.Parser.Lexical is
       end;
       This.Scan;
    end Open;
+
+   -----------------
+   -- Open_Stream --
+   -----------------
+
+   procedure Open_Stream (This : in out Instance; Identity : String) is
+   begin
+      if This.Current_Stream_Index = Max_Source_Files then
+         raise Program_Error with "maximum source file nesting exceeded";
+      end if;
+      This.Current_Stream_Index := @ + 1;
+      This.Current_Stream := new Source_Stream_Record'(Empty_Stream);
+      This.Current_Stream.Identity :=
+        To_Unbounded_Wide_Wide_String (Decode (Identity));
+      This.Current_Stream.EOF := False;
+   end Open_Stream;
 
    ----------
    -- Peek --
@@ -407,6 +395,18 @@ package body Raven.Parser.Lexical is
          end;
       end if;
    end Read_Character;
+
+   ----------------
+   -- Report_To --
+   ----------------
+
+   procedure Report_To
+     (This   : in out Instance;
+      Target : Raven.Target.Reference)
+   is
+   begin
+      This.Target := Target;
+   end Report_To;
 
    ----------
    -- Scan --

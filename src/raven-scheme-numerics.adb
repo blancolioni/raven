@@ -49,6 +49,26 @@ package body Raven.Scheme.Numerics is
       VM.Set_Slot (1, X <= Y);
    end Leq;
 
+   --------------------------
+   -- Load_Numeric_Library --
+   --------------------------
+
+   procedure Load_Numeric_Library
+     (Evaluator : not null access Raven.Evaluator.Abstraction'Class)
+   is
+   begin
+      Evaluator.Bind_Foreign_Function
+        ("raven-add", Add'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-leq", Leq'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-sub", Sub'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-mul", Multiply'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-div", Divide'Access, 2);
+   end Load_Numeric_Library;
+
    --------------
    -- Multiply --
    --------------
@@ -70,26 +90,6 @@ package body Raven.Scheme.Numerics is
    begin
       VM.Set_Slot (1, X - Y);
    end Sub;
-
-   --------------------------
-   -- Load_Numeric_Library --
-   --------------------------
-
-   procedure Load_Numeric_Library
-     (Evaluator : not null access Raven.Evaluator.Abstraction'Class)
-   is
-   begin
-      Evaluator.Bind_Foreign_Function
-        ("raven-add", Add'Access, 2);
-      Evaluator.Bind_Foreign_Function
-        ("raven-leq", Leq'Access, 2);
-      Evaluator.Bind_Foreign_Function
-        ("raven-sub", Sub'Access, 2);
-      Evaluator.Bind_Foreign_Function
-        ("raven-mul", Multiply'Access, 2);
-      Evaluator.Bind_Foreign_Function
-        ("raven-div", Divide'Access, 2);
-   end Load_Numeric_Library;
 
 
 end Raven.Scheme.Numerics;

@@ -64,75 +64,10 @@ package body Raven.Engine.Memory is
      (This      : in out Instance;
       Container : not null access Raven.Containers.Abstraction'Class);
 
-   overriding function Create_Foreign_Value
-     (This  : in out Instance;
-      Value : Foreign_Value_Instance'Class)
-      return Object;
-
-   overriding function To_Foreign_Value
-     (This : Instance;
-      Value : Object)
-      return Foreign_Value_Instance'Class
-   is (Foreign_Value_Lists.Element
-       (This.Value_Ids (Objects.To_Foreign_Value_Id (Value))));
-
-   overriding function Get
-     (This    : Instance;
-      Address : Address_Type)
-      return Raven.Memory.Cell_Type
-   is (This.Core (Address));
-
-   overriding procedure Set
-     (This    : in out Instance;
-      Address : Address_Type;
-      Cell    : Raven.Memory.Cell_Type);
-
-   overriding function Cons
-     (This : in out Instance;
-      Car  : Object;
-      Cdr  : Object)
-      return Object;
-
-   overriding function New_Vector
-     (This   : in out Instance;
-      Length : Natural)
-      return Object;
-
-   overriding function New_Bytevector
-     (This   : in out Instance;
-      Length : Natural)
-      return Object;
-
-   overriding function Vector_Length
-     (This : Instance;
-      V    : Object)
-      return Natural;
-
-   overriding function Vector_Element
-     (This  : Instance;
-      V     : Object;
-      Index : Natural)
-      return Object;
-
-   overriding procedure Set_Vector_Element
-     (This  : in out Instance;
-      V     : Object;
-      Index : Natural;
-      Value : Object);
-
-   overriding procedure Mark
-     (This : in out Instance;
-      Item : in out Object);
-
-   overriding procedure Close (This : in out Instance);
-
-   overriding procedure Report (This : Instance);
-
-   function Quick_Allocate
-     (This   : in out Instance'Class;
-      Car    : Object;
-      Cdr    : Object)
-      return Object;
+   function Allocate_Block
+     (This  : in out Instance'Class;
+      Count : Address_Type)
+      return Address_Type;
 
    --  How many cells a vector of this many elements takes: one for
    --  the length, and then the elements two to a cell.  A vector of
@@ -141,9 +76,17 @@ package body Raven.Engine.Memory is
    function Cells_For (Length : Natural) return Address_Type
    is (Address_Type (1 + (Length + 1) / 2));
 
-   function Allocate_Block
-     (This  : in out Instance'Class;
-      Count : Address_Type)
+   overriding procedure Close (This : in out Instance);
+
+   overriding function Cons
+     (This : in out Instance;
+      Car  : Object;
+      Cdr  : Object)
+      return Object;
+
+   function Copy
+     (This    : in out Instance'Class;
+      Address : Address_Type)
       return Address_Type;
 
    function Copy_Block
@@ -151,6 +94,11 @@ package body Raven.Engine.Memory is
       Address : Address_Type;
       Count   : Address_Type)
       return Address_Type;
+
+   overriding function Create_Foreign_Value
+     (This  : in out Instance;
+      Value : Foreign_Value_Instance'Class)
+      return Object;
 
    --  Where an element sits: the cell after the header it falls in,
    --  and which half of that cell.
@@ -160,26 +108,6 @@ package body Raven.Engine.Memory is
       Index : Natural)
       return Address_Type
    is (Raven.Objects.Get_Address (V) + 1 + Address_Type (Index / 2));
-
-   function In_From_Space
-     (This   : Instance'Class;
-      Item   : Object)
-      return Boolean;
-
-   function In_To_Space
-     (This   : Instance'Class;
-      Item   : Object)
-      return Boolean;
-
-   function Copy
-     (This    : in out Instance'Class;
-      Address : Address_Type)
-      return Address_Type;
-
-   function Move
-     (This : in out Instance'Class;
-      Item : Object)
-      return Object;
 
    procedure Flip (This : in out Instance'Class);
 
@@ -192,10 +120,82 @@ package body Raven.Engine.Memory is
    procedure GC
      (This : in out Instance'Class);
 
+   overriding function Get
+     (This    : Instance;
+      Address : Address_Type)
+      return Raven.Memory.Cell_Type
+   is (This.Core (Address));
+
+   function In_From_Space
+     (This   : Instance'Class;
+      Item   : Object)
+      return Boolean;
+
+   function In_To_Space
+     (This   : Instance'Class;
+      Item   : Object)
+      return Boolean;
+
+   overriding procedure Mark
+     (This : in out Instance;
+      Item : in out Object);
+
+   function Move
+     (This : in out Instance'Class;
+      Item : Object)
+      return Object;
+
+   overriding function New_Bytevector
+     (This   : in out Instance;
+      Length : Natural)
+      return Object;
+
+   overriding function New_Vector
+     (This   : in out Instance;
+      Length : Natural)
+      return Object;
+
+   function Quick_Allocate
+     (This   : in out Instance'Class;
+      Car    : Object;
+      Cdr    : Object)
+      return Object;
+
+   overriding procedure Report (This : Instance);
+
+   overriding procedure Set
+     (This    : in out Instance;
+      Address : Address_Type;
+      Cell    : Raven.Memory.Cell_Type);
+
+   overriding procedure Set_Vector_Element
+     (This  : in out Instance;
+      V     : Object;
+      Index : Natural;
+      Value : Object);
+
+   overriding function To_Foreign_Value
+     (This : Instance;
+      Value : Object)
+      return Foreign_Value_Instance'Class
+   is (Foreign_Value_Lists.Element
+       (This.Value_Ids (Objects.To_Foreign_Value_Id (Value))));
+
    procedure Trace_GC
      (This    : in out Instance'Class;
       Enabled : Boolean)
      with Unreferenced;
+
+   overriding function Vector_Element
+     (This  : Instance;
+      V     : Object;
+      Index : Natural)
+      return Object;
+
+   overriding function Vector_Length
+     (This : Instance;
+      V    : Object)
+      return Natural;
 
    -------------------
    -- Add_Container --
@@ -208,6 +208,38 @@ package body Raven.Engine.Memory is
    begin
       This.Containers.Append (Container_Reference (Container));
    end Add_Container;
+
+   --------------------
+   -- Allocate_Block --
+   --------------------
+
+   function Allocate_Block
+     (This  : in out Instance'Class;
+      Count : Address_Type)
+      return Address_Type
+   is
+      Base : Address_Type;
+   begin
+      --  Written as what is left rather than as Free + Count, because
+      --  an address wraps and the sum of two of them says nothing.
+
+      if Stress_GC or else Count > This.Top - This.Free then
+         GC (This);
+      end if;
+
+      if Count > This.Top - This.Free then
+         raise Constraint_Error with
+           "out of memory: a vector wants" & Count'Image
+           & " cells and there are"
+           & Address_Type'Image (This.Top - This.Free);
+      end if;
+
+      Base := This.Free;
+      This.Free := This.Free + Count;
+      This.Alloc_Count := This.Alloc_Count + Natural (Count);
+      This.Total_Alloc_Count := @ + Natural (Count);
+      return Base;
+   end Allocate_Block;
 
    -----------
    -- Close --
@@ -242,61 +274,6 @@ package body Raven.Engine.Memory is
    is (if not Stress_GC and then This.Free < This.Top
        then This.Quick_Allocate (Car, Cdr)
        else This.Free_And_Allocate (Car, Cdr));
-
-   -----------------------
-   -- Free_And_Allocate --
-   -----------------------
-
-   function Free_And_Allocate
-     (This   : in out Instance'Class;
-      Car    : Object;
-      Cdr    : Object)
-      return Object
-   is
-   begin
-      This.Alloc_Car := Car;
-      This.Alloc_Cdr := Cdr;
-
-      GC (This);
-
-      if This.Free = This.Top then
-         raise Constraint_Error with "out of memory";
-      end if;
-
-      return Quick_Allocate (This, This.Alloc_Car, This.Alloc_Cdr);
-   end Free_And_Allocate;
-
-   --------------------
-   -- Allocate_Block --
-   --------------------
-
-   function Allocate_Block
-     (This  : in out Instance'Class;
-      Count : Address_Type)
-      return Address_Type
-   is
-      Base : Address_Type;
-   begin
-      --  Written as what is left rather than as Free + Count, because
-      --  an address wraps and the sum of two of them says nothing.
-
-      if Stress_GC or else Count > This.Top - This.Free then
-         GC (This);
-      end if;
-
-      if Count > This.Top - This.Free then
-         raise Constraint_Error with
-           "out of memory: a vector wants" & Count'Image
-           & " cells and there are"
-           & Address_Type'Image (This.Top - This.Free);
-      end if;
-
-      Base := This.Free;
-      This.Free := This.Free + Count;
-      This.Alloc_Count := This.Alloc_Count + Natural (Count);
-      This.Total_Alloc_Count := @ + Natural (Count);
-      return Base;
-   end Allocate_Block;
 
    ----------
    -- Copy --
@@ -454,6 +431,29 @@ package body Raven.Engine.Memory is
       This.Free := This.To_Space;
       This.Scan := This.To_Space;
    end Flip;
+
+   -----------------------
+   -- Free_And_Allocate --
+   -----------------------
+
+   function Free_And_Allocate
+     (This   : in out Instance'Class;
+      Car    : Object;
+      Cdr    : Object)
+      return Object
+   is
+   begin
+      This.Alloc_Car := Car;
+      This.Alloc_Cdr := Cdr;
+
+      GC (This);
+
+      if This.Free = This.Top then
+         raise Constraint_Error with "out of memory";
+      end if;
+
+      return Quick_Allocate (This, This.Alloc_Car, This.Alloc_Cdr);
+   end Free_And_Allocate;
 
    --------
    -- GC --
@@ -696,24 +696,32 @@ package body Raven.Engine.Memory is
    end Move;
 
    --------------------
-   -- Quick_Allocate --
+   -- New_Bytevector --
    --------------------
 
-   function Quick_Allocate
-     (This   : in out Instance'Class;
-      Car    : Object;
-      Cdr    : Object)
+   overriding function New_Bytevector
+     (This   : in out Instance;
+      Length : Natural)
       return Object
    is
-      Result : constant Object :=
-                 Raven.Objects.To_Pair (This.Free);
+      V : constant Object := This.New_Vector (Length);
    begin
-      This.Core (This.Free) := (Car, Cdr);
-      This.Free := This.Free + 1;
-      This.Alloc_Count := This.Alloc_Count + 1;
-      This.Total_Alloc_Count := @ + 1;
-      return Result;
-   end Quick_Allocate;
+      --  The same block, said to be a bytevector.  What tells them
+      --  apart is the tag and nothing else, because what a bytevector
+      --  may hold is checked where it is put in rather than by the
+      --  shape of the thing holding it.
+      --
+      --  Which is why the elements are set: a vector's are nil, and
+      --  nil is not a byte, so a bytevector straight out of here was
+      --  not a bytevector until somebody filled it.  Every caller did
+      --  that at once and none of them noticed.
+
+      for Index in 0 .. Length - 1 loop
+         This.Set_Vector_Element (V, Index, Raven.Objects.To_Object (Integer'(0)));
+      end loop;
+
+      return Raven.Objects.To_Bytevector (Raven.Objects.Get_Address (V));
+   end New_Bytevector;
 
    ----------------
    -- New_Vector --
@@ -743,82 +751,24 @@ package body Raven.Engine.Memory is
    end New_Vector;
 
    --------------------
-   -- New_Bytevector --
+   -- Quick_Allocate --
    --------------------
 
-   overriding function New_Bytevector
-     (This   : in out Instance;
-      Length : Natural)
+   function Quick_Allocate
+     (This   : in out Instance'Class;
+      Car    : Object;
+      Cdr    : Object)
       return Object
    is
-      V : constant Object := This.New_Vector (Length);
+      Result : constant Object :=
+                 Raven.Objects.To_Pair (This.Free);
    begin
-      --  The same block, said to be a bytevector.  What tells them
-      --  apart is the tag and nothing else, because what a bytevector
-      --  may hold is checked where it is put in rather than by the
-      --  shape of the thing holding it.
-      --
-      --  Which is why the elements are set: a vector's are nil, and
-      --  nil is not a byte, so a bytevector straight out of here was
-      --  not a bytevector until somebody filled it.  Every caller did
-      --  that at once and none of them noticed.
-
-      for Index in 0 .. Length - 1 loop
-         This.Set_Vector_Element (V, Index, Raven.Objects.To_Object (Integer'(0)));
-      end loop;
-
-      return Raven.Objects.To_Bytevector (Raven.Objects.Get_Address (V));
-   end New_Bytevector;
-
-   -------------------
-   -- Vector_Length --
-   -------------------
-
-   overriding function Vector_Length
-     (This : Instance;
-      V    : Object)
-      return Natural
-   is
-   begin
-      return Raven.Objects.To_Integer
-        (This.Core (Raven.Objects.Get_Address (V)).Car);
-   end Vector_Length;
-
-   --------------------
-   -- Vector_Element --
-   --------------------
-
-   overriding function Vector_Element
-     (This  : Instance;
-      V     : Object;
-      Index : Natural)
-      return Object
-   is
-      Cell : constant Address_Type := Element_Cell (V, Index);
-   begin
-      return (if Index mod 2 = 0
-              then This.Core (Cell).Car
-              else This.Core (Cell).Cdr);
-   end Vector_Element;
-
-   ------------------------
-   -- Set_Vector_Element --
-   ------------------------
-
-   overriding procedure Set_Vector_Element
-     (This  : in out Instance;
-      V     : Object;
-      Index : Natural;
-      Value : Object)
-   is
-      Cell : constant Address_Type := Element_Cell (V, Index);
-   begin
-      if Index mod 2 = 0 then
-         This.Core (Cell).Car := Value;
-      else
-         This.Core (Cell).Cdr := Value;
-      end if;
-   end Set_Vector_Element;
+      This.Core (This.Free) := (Car, Cdr);
+      This.Free := This.Free + 1;
+      This.Alloc_Count := This.Alloc_Count + 1;
+      This.Total_Alloc_Count := @ + 1;
+      return Result;
+   end Quick_Allocate;
 
    ------------
    -- Report --
@@ -877,6 +827,25 @@ package body Raven.Engine.Memory is
       This.Core (Address) := Cell;
    end Set;
 
+   ------------------------
+   -- Set_Vector_Element --
+   ------------------------
+
+   overriding procedure Set_Vector_Element
+     (This  : in out Instance;
+      V     : Object;
+      Index : Natural;
+      Value : Object)
+   is
+      Cell : constant Address_Type := Element_Cell (V, Index);
+   begin
+      if Index mod 2 = 0 then
+         This.Core (Cell).Car := Value;
+      else
+         This.Core (Cell).Cdr := Value;
+      end if;
+   end Set_Vector_Element;
+
    --------------
    -- Trace_GC --
    --------------
@@ -888,5 +857,36 @@ package body Raven.Engine.Memory is
    begin
       This.Trace_GC := Enabled;
    end Trace_GC;
+
+   --------------------
+   -- Vector_Element --
+   --------------------
+
+   overriding function Vector_Element
+     (This  : Instance;
+      V     : Object;
+      Index : Natural)
+      return Object
+   is
+      Cell : constant Address_Type := Element_Cell (V, Index);
+   begin
+      return (if Index mod 2 = 0
+              then This.Core (Cell).Car
+              else This.Core (Cell).Cdr);
+   end Vector_Element;
+
+   -------------------
+   -- Vector_Length --
+   -------------------
+
+   overriding function Vector_Length
+     (This : Instance;
+      V    : Object)
+      return Natural
+   is
+   begin
+      return Raven.Objects.To_Integer
+        (This.Core (Raven.Objects.Get_Address (V)).Car);
+   end Vector_Length;
 
 end Raven.Engine.Memory;

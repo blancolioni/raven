@@ -17,6 +17,23 @@ package body Raven.Tests.Host_IO is
          Next    : Positive := 1;
       end record;
 
+   --  Evaluates something the machine will object to, and says the
+   --  objection reached the host rather than the terminal.
+
+   procedure Complains
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
+
+   procedure Forget;
+
+   overriding procedure Get
+     (This      : in out Capture;
+      Ch        : out Wide_Wide_Character;
+      Available : out Boolean);
+
+   procedure Give (Text : Wide_Wide_String);
+
    overriding procedure Put
      (This : in out Capture;
       Ch   : Wide_Wide_Character);
@@ -25,27 +42,12 @@ package body Raven.Tests.Host_IO is
      (This : in out Capture;
       Ch   : Wide_Wide_Character);
 
-   overriding procedure Get
-     (This      : in out Capture;
-      Ch        : out Wide_Wide_Character;
-      Available : out Boolean);
+   procedure Test_Failed
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
 
-   Host : aliased Capture;
-
-   function Written return String
-   is (Encode (To_Wide_Wide_String (Host.Written)));
-
-   function Failed return String
-   is (Encode (To_Wide_Wide_String (Host.Failed)));
-
-   procedure Give (Text : Wide_Wide_String);
-
-   procedure Forget;
-
-   --  Evaluates something the machine will object to, and says the
-   --  objection reached the host rather than the terminal.
-
-   procedure Complains
+   procedure Test_String
      (VM         : Raven_VM;
       Expression : String;
       Expected   : String);
@@ -55,20 +57,18 @@ package body Raven.Tests.Host_IO is
       Expression : String;
       Expected   : Boolean);
 
-   procedure Test_String
-     (VM         : Raven_VM;
-      Expression : String;
-      Expected   : String);
-
    procedure Test_Written
      (VM         : Raven_VM;
       Expression : String;
       Expected   : String);
 
-   procedure Test_Failed
-     (VM         : Raven_VM;
-      Expression : String;
-      Expected   : String);
+   Host : aliased Capture;
+
+   function Failed return String
+   is (Encode (To_Wide_Wide_String (Host.Failed)));
+
+   function Written return String
+   is (Encode (To_Wide_Wide_String (Host.Written)));
 
    ---------------
    -- Complains --

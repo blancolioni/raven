@@ -25,14 +25,8 @@ package body Raven.Engine.Environment is
       return Raven.Environment.Reference
    is (This.Parent);
 
-   overriding procedure Mark
-     (This : in out Instance;
-      Process : not null access procedure (Value : in out Object));
-
-   overriding function Lookup
-     (This : Instance;
-      Name : String)
-      return Object;
+   procedure Close
+     (This  : not null access Instance);
 
    overriding procedure Define
      (This  : in out Instance;
@@ -43,6 +37,15 @@ package body Raven.Engine.Environment is
      (This  : in out Instance;
       Name  : String;
       Value : Object);
+
+   overriding function Lookup
+     (This : Instance;
+      Name : String)
+      return Object;
+
+   overriding procedure Mark
+     (This : in out Instance;
+      Process : not null access procedure (Value : in out Object));
 
    overriding procedure Replace
      (This  : in out Instance;

@@ -20,15 +20,15 @@ package body Raven.IO is
 
    type Standard_IO_Instance is new IO_Interface with null record;
 
+   overriding procedure Get (This      : in out Standard_IO_Instance;
+                             Ch        : out Wide_Wide_Character;
+                             Available : out Boolean);
+
    overriding procedure Put (This : in out Standard_IO_Instance;
                              Ch   : Wide_Wide_Character);
 
    overriding procedure Put_Error (This : in out Standard_IO_Instance;
                                    Ch   : Wide_Wide_Character);
-
-   overriding procedure Get (This      : in out Standard_IO_Instance;
-                             Ch        : out Wide_Wide_Character;
-                             Available : out Boolean);
 
    Local_Standard_IO : aliased Standard_IO_Instance;
 

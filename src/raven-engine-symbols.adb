@@ -32,15 +32,15 @@ package body Raven.Engine.Symbols is
       Prefix : String)
       return Raven.Objects.Symbol_Id;
 
-   overriding function To_Symbol_Id
-     (This  : in out Instance;
-      Name  : String)
-      return Raven.Objects.Symbol_Id;
-
    overriding function To_String
      (This  : Instance;
       Id    : Raven.Objects.Symbol_Id)
       return String;
+
+   overriding function To_Symbol_Id
+     (This  : in out Instance;
+      Name  : String)
+      return Raven.Objects.Symbol_Id;
 
    ------------
    -- Create --

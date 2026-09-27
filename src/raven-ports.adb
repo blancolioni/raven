@@ -55,40 +55,6 @@ package body Raven.Ports is
          Id : Port_Id;
       end record;
 
-   overriding function Show (This : Instance) return String;
-
-   overriding procedure Free (This : in out Instance);
-
-   overriding function Equal
-     (This : Instance;
-      To   : Instance)
-      return Boolean
-   is (This.Id = To.Id);
-
-   procedure Close_Port (VM : Raven_VM);
-   procedure Eof_Object (VM : Raven_VM);
-   procedure Get_Output_Bytevector (VM : Raven_VM);
-   procedure Get_Output_String (VM : Raven_VM);
-   procedure Is_Binary_Port (VM : Raven_VM);
-   procedure Is_Input_Port (VM : Raven_VM);
-   procedure Is_Open (VM : Raven_VM);
-   procedure Is_Output_Port (VM : Raven_VM);
-   procedure Is_Port (VM : Raven_VM);
-   procedure Is_Textual_Port (VM : Raven_VM);
-   procedure Open_Input_Bytevector (VM : Raven_VM);
-   procedure Open_Input_String (VM : Raven_VM);
-   procedure Open_Output_Bytevector (VM : Raven_VM);
-   procedure Open_Output_String (VM : Raven_VM);
-   procedure Port_Peek_Char (VM : Raven_VM);
-   procedure Port_Peek_U8 (VM : Raven_VM);
-   procedure Port_Read_Char (VM : Raven_VM);
-   procedure Port_Read_U8 (VM : Raven_VM);
-   procedure Port_Ready (VM : Raven_VM);
-   procedure Port_U8_Ready (VM : Raven_VM);
-   procedure Port_Write_Char (VM : Raven_VM);
-   procedure Port_Write_U8 (VM : Raven_VM);
-   procedure Standard_Port (VM : Raven_VM);
-
    --  The port in this slot, which has to be of this kind and going
    --  this way for the operation asking to mean anything, and open
    --  whichever way it goes.
@@ -101,10 +67,35 @@ package body Raven.Ports is
       Direction : Port_Direction)
       return Port_Id;
 
+   procedure Close_Port (VM : Raven_VM);
+   procedure Eof_Object (VM : Raven_VM);
+
+   overriding function Equal
+     (This : Instance;
+      To   : Instance)
+      return Boolean
+   is (This.Id = To.Id);
+
+   overriding procedure Free (This : in out Instance);
+   procedure Get_Output_Bytevector (VM : Raven_VM);
+   procedure Get_Output_String (VM : Raven_VM);
+   procedure Is_Binary_Port (VM : Raven_VM);
+   procedure Is_Input_Port (VM : Raven_VM);
+   procedure Is_Open (VM : Raven_VM);
+   procedure Is_Output_Port (VM : Raven_VM);
+   procedure Is_Port (VM : Raven_VM);
+   procedure Is_Textual_Port (VM : Raven_VM);
+
    function Make_Port
      (VM : Raven_VM;
       Id : Port_Id)
       return Object;
+
+   function New_Id return Port_Id;
+   procedure Open_Input_Bytevector (VM : Raven_VM);
+   procedure Open_Input_String (VM : Raven_VM);
+   procedure Open_Output_Bytevector (VM : Raven_VM);
+   procedure Open_Output_String (VM : Raven_VM);
 
    function Port_Of
      (VM   : Raven_VM;
@@ -112,7 +103,16 @@ package body Raven.Ports is
       Slot : Slot_Index)
       return Port_Id;
 
-   function New_Id return Port_Id;
+   procedure Port_Peek_Char (VM : Raven_VM);
+   procedure Port_Peek_U8 (VM : Raven_VM);
+   procedure Port_Read_Char (VM : Raven_VM);
+   procedure Port_Read_U8 (VM : Raven_VM);
+   procedure Port_Ready (VM : Raven_VM);
+   procedure Port_U8_Ready (VM : Raven_VM);
+   procedure Port_Write_Char (VM : Raven_VM);
+   procedure Port_Write_U8 (VM : Raven_VM);
+   overriding function Show (This : Instance) return String;
+   procedure Standard_Port (VM : Raven_VM);
 
    ------------------
    -- Checked_Port --
@@ -161,6 +161,30 @@ package body Raven.Ports is
          Table (Id).Open := False;
       end if;
    end Close_Port;
+
+   ----------------
+   -- Eof_Object --
+   ----------------
+
+   procedure Eof_Object (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, Raven.Objects.Eof);
+   end Eof_Object;
+
+   ----------
+   -- Free --
+   ----------
+
+   overriding procedure Free (This : in out Instance) is
+   begin
+      --  What the collector has stopped naming, given back.  The
+      --  host's own three are not, because they are not named by
+      --  anything either and must go on answering.
+
+      if not Table (This.Id).Of_Host then
+         Table (This.Id) := (others => <>);
+      end if;
+   end Free;
 
    ---------------------------
    -- Get_Output_Bytevector --
@@ -215,30 +239,6 @@ package body Raven.Ports is
       Raven.Strings.Write_String
         (VM, 1, Encode (To_Wide_Wide_String (Table (Id).Text)));
    end Get_Output_String;
-
-   ----------------
-   -- Eof_Object --
-   ----------------
-
-   procedure Eof_Object (VM : Raven_VM) is
-   begin
-      VM.Set_Slot (1, Raven.Objects.Eof);
-   end Eof_Object;
-
-   ----------
-   -- Free --
-   ----------
-
-   overriding procedure Free (This : in out Instance) is
-   begin
-      --  What the collector has stopped naming, given back.  The
-      --  host's own three are not, because they are not named by
-      --  anything either and must go on answering.
-
-      if not Table (This.Id).Of_Host then
-         Table (This.Id) := (others => <>);
-      end if;
-   end Free;
 
    ---------------------
    -- Is_Binary_Port --
@@ -307,6 +307,21 @@ package body Raven.Ports is
    begin
       VM.Set_Slot (1, B);
    end Is_Port;
+
+   ---------------------
+   -- Is_Textual_Port --
+   ---------------------
+
+   procedure Is_Textual_Port (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+      B : constant Boolean :=
+            Raven.Objects.Is_Foreign_Value (X)
+              and then VM.To_Foreign_Value (X) in Instance'Class
+              and then Table (Instance'Class (VM.To_Foreign_Value (X)).Id)
+                .Kind = Textual;
+   begin
+      VM.Set_Slot (1, B);
+   end Is_Textual_Port;
 
    -----------------------
    -- Load_Port_Library --
@@ -403,21 +418,6 @@ package body Raven.Ports is
         "no room for another port:" & Port_Id'Last'Image & " are open";
    end New_Id;
 
-   ---------------------
-   -- Is_Textual_Port --
-   ---------------------
-
-   procedure Is_Textual_Port (VM : Raven_VM) is
-      X : constant Object := VM.Get_Slot (1);
-      B : constant Boolean :=
-            Raven.Objects.Is_Foreign_Value (X)
-              and then VM.To_Foreign_Value (X) in Instance'Class
-              and then Table (Instance'Class (VM.To_Foreign_Value (X)).Id)
-                .Kind = Textual;
-   begin
-      VM.Set_Slot (1, B);
-   end Is_Textual_Port;
-
    ---------------------------
    -- Open_Input_Bytevector --
    ---------------------------
@@ -510,6 +510,28 @@ package body Raven.Ports is
       Table (Id) := (Used => True, Direction => Output, others => <>);
       VM.Set_Slot (1, Make_Port (VM, Id));
    end Open_Output_String;
+
+   -------------
+   -- Port_Of --
+   -------------
+
+   function Port_Of
+     (VM   : Raven_VM;
+      Name : String;
+      Slot : Slot_Index)
+      return Port_Id
+   is
+      X : constant Object := VM.Get_Slot (Slot);
+   begin
+      if not Raven.Objects.Is_Foreign_Value (X)
+        or else not (VM.To_Foreign_Value (X) in Instance'Class)
+      then
+         raise Constraint_Error with
+           Name & ": not a port: " & Encode (VM.Display (X));
+      end if;
+
+      return Instance'Class (VM.To_Foreign_Value (X)).Id;
+   end Port_Of;
 
    ---------------------
    -- Port_Peek_Char --
@@ -659,28 +681,6 @@ package body Raven.Ports is
 
       VM.Set_Slot (1, True);
    end Port_Ready;
-
-   -------------
-   -- Port_Of --
-   -------------
-
-   function Port_Of
-     (VM   : Raven_VM;
-      Name : String;
-      Slot : Slot_Index)
-      return Port_Id
-   is
-      X : constant Object := VM.Get_Slot (Slot);
-   begin
-      if not Raven.Objects.Is_Foreign_Value (X)
-        or else not (VM.To_Foreign_Value (X) in Instance'Class)
-      then
-         raise Constraint_Error with
-           Name & ": not a port: " & Encode (VM.Display (X));
-      end if;
-
-      return Instance'Class (VM.To_Foreign_Value (X)).Id;
-   end Port_Of;
 
    -------------------
    -- Port_U8_Ready --

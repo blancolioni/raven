@@ -36,104 +36,13 @@ package body Raven.Engine is
 
    type Engine_Reference is access all Instance'Class;
 
-   overriding function To_Symbol_Id
-     (This  : in out Instance;
-      Name  : String)
-      return Raven.Objects.Symbol_Id
-   is (This.Syms.To_Symbol_Id (Name));
-
-   overriding function New_Symbol_Id
-     (This   : in out Instance;
-      Prefix : String)
-      return Raven.Objects.Symbol_Id
-   is (This.Syms.New_Symbol_Id (Prefix));
-
-   overriding function To_String
-     (This  : Instance;
-      Id    : Raven.Objects.Symbol_Id)
-      return String
-   is (This.Syms.To_String (Id));
-
-   overriding function Is_Empty
-     (This : Instance)
-      return Boolean;
-
-   overriding function Target
-     (This : Instance)
-      return Raven.Target.Reference;
-
-   overriding procedure Before_Collection
-     (This : in out Instance)
-   is null;
-
    overriding procedure After_Collection
      (This : in out Instance)
    is null;
 
-   overriding procedure Mark
-     (This    : in out Instance;
-      Process : not null access procedure (Value : in out Object));
-
-   overriding procedure Close (This : in out Instance);
-
-   overriding function Cons
-     (This     : Instance;
-      Car, Cdr : Object)
-      return Object
-   is (This.Memory.Cons (Car, Cdr));
-
-   overriding function Car
-     (This : Instance;
-      Cons : Object)
-      return Object
-   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Car);
-
-   overriding function Cdr
-     (This : Instance;
-      Cons : Object)
-      return Object
-   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Cdr);
-
-   overriding procedure Push
-     (This  : in out Instance;
-      Value : Object);
-
-   overriding procedure Pop
-     (This  : in out Instance;
-      Value :    out Object);
-
-   overriding function Top
-     (This : Instance)
-      return Object;
-
-   overriding procedure Cons (This : in out Instance);
-
-   overriding procedure Swap (This : in out Instance);
-
-   overriding function Get_Slot
-     (This  : Instance;
-      Index : Slot_Index)
-      return Raven.Object
-   is (This.Slots (Index));
-
-   overriding procedure Set_Slot
-     (This  : in out Instance;
-      Index : Slot_Index;
-      Value : Raven.Object);
-
-   overriding function Bind_Handle_To_Name
-     (This : in out Instance;
-      Name : String)
-      return Object_Lists.Cursor;
-
-   overriding function Hold
-     (This  : in out Instance;
-      Value : Object)
-      return Object_Lists.Cursor;
-
-   overriding procedure Release
-     (This     : in out Instance;
-      Position : in out Object_Lists.Cursor);
+   overriding procedure Before_Collection
+     (This : in out Instance)
+   is null;
 
    overriding procedure Bind
      (This           : in out Instance;
@@ -147,7 +56,98 @@ package body Raven.Engine is
       Handler        : Foreign_Function_Handler;
       Argument_Count : Natural);
 
+   overriding function Bind_Handle_To_Name
+     (This : in out Instance;
+      Name : String)
+      return Object_Lists.Cursor;
+
+   overriding function Car
+     (This : Instance;
+      Cons : Object)
+      return Object
+   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Car);
+
+   overriding function Cdr
+     (This : Instance;
+      Cons : Object)
+      return Object
+   is (This.Memory.Get (Raven.Objects.Get_Address (Cons)).Cdr);
+
+   overriding procedure Close (This : in out Instance);
+
+   overriding function Cons
+     (This     : Instance;
+      Car, Cdr : Object)
+      return Object
+   is (This.Memory.Cons (Car, Cdr));
+
+   overriding procedure Cons (This : in out Instance);
+
+   overriding function Get_Slot
+     (This  : Instance;
+      Index : Slot_Index)
+      return Raven.Object
+   is (This.Slots (Index));
+
+   overriding function Hold
+     (This  : in out Instance;
+      Value : Object)
+      return Object_Lists.Cursor;
+
+   overriding function Is_Empty
+     (This : Instance)
+      return Boolean;
+
+   overriding procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object));
+
+   overriding function New_Symbol_Id
+     (This   : in out Instance;
+      Prefix : String)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.New_Symbol_Id (Prefix));
+
+   overriding procedure Pop
+     (This  : in out Instance;
+      Value :    out Object);
+
+   overriding procedure Push
+     (This  : in out Instance;
+      Value : Object);
+
+   overriding procedure Release
+     (This     : in out Instance;
+      Position : in out Object_Lists.Cursor);
+
    overriding procedure Report (This : Instance);
+
+   overriding procedure Set_Slot
+     (This  : in out Instance;
+      Index : Slot_Index;
+      Value : Raven.Object);
+
+   overriding procedure Swap (This : in out Instance);
+
+   overriding function Target
+     (This : Instance)
+      return Raven.Target.Reference;
+
+   overriding function To_String
+     (This  : Instance;
+      Id    : Raven.Objects.Symbol_Id)
+      return String
+   is (This.Syms.To_String (Id));
+
+   overriding function To_Symbol_Id
+     (This  : in out Instance;
+      Name  : String)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.To_Symbol_Id (Name));
+
+   overriding function Top
+     (This : Instance)
+      return Object;
 
    ----------
    -- Bind --
@@ -164,53 +164,6 @@ package body Raven.Engine is
       This.Env.Define (Name, Value);
    end Bind;
 
-   -------------------------
-   -- Bind_Handle_To_Name --
-   -------------------------
-
-   overriding function Bind_Handle_To_Name
-     (This : in out Instance;
-      Name : String)
-      return Object_Lists.Cursor
-   is
-   begin
-      return This.Hold (Raven.Objects.To_Object (This.To_Symbol_Id (Name)));
-   end Bind_Handle_To_Name;
-
-   ----------
-   -- Hold --
-   ----------
-
-   overriding function Hold
-     (This  : in out Instance;
-      Value : Object)
-      return Object_Lists.Cursor
-   is
-   begin
-      This.Handles.Append (Value);
-      return This.Handles.Last;
-   end Hold;
-
-   -------------
-   -- Release --
-   -------------
-
-   overriding procedure Release
-     (This     : in out Instance;
-      Position : in out Object_Lists.Cursor)
-   is
-   begin
-      --  Out of the list, so that Mark stops walking it and whatever
-      --  it named can be collected.  The list only ever grew before
-      --  this, so every handle kept what it named for the rest of the
-      --  session -- and Mark walked all of them every collection.
-      --
-      --  Deleting one leaves every other cursor where it was, which
-      --  is what a doubly linked list is for.
-
-      This.Handles.Delete (Position);
-   end Release;
-
    ---------------------------
    -- Bind_Foreign_Function --
    ---------------------------
@@ -224,6 +177,46 @@ package body Raven.Engine is
    begin
       This.Target.Bind_Foreign_Function (Name, Handler, Argument_Count);
    end Bind_Foreign_Function;
+
+   -------------------------
+   -- Bind_Handle_To_Name --
+   -------------------------
+
+   overriding function Bind_Handle_To_Name
+     (This : in out Instance;
+      Name : String)
+      return Object_Lists.Cursor
+   is
+   begin
+      return This.Hold (Raven.Objects.To_Object (This.To_Symbol_Id (Name)));
+   end Bind_Handle_To_Name;
+
+   -----------
+   -- Close --
+   -----------
+
+   overriding procedure Close (This : in out Instance) is
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Environment.Abstraction'Class, Raven.Environment.Reference);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Symbols.Abstraction'Class, Raven.Symbols.Reference);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Target.Abstraction'Class, Raven.Target.Reference);
+   begin
+      --  What this engine made, and not the memory it was handed.
+      --  Whatever these hold of Ada's own -- a map, a vector -- goes
+      --  with them.
+
+      Free (This.Target);
+      Free (This.Env);
+      Free (This.Syms);
+      This.Handles.Clear;
+   end Close;
 
    ----------
    -- Cons --
@@ -301,6 +294,20 @@ package body Raven.Engine is
       return Raven.Engine.Memory.Create (Size);
    end Create_Memory;
 
+   ----------
+   -- Hold --
+   ----------
+
+   overriding function Hold
+     (This  : in out Instance;
+      Value : Object)
+      return Object_Lists.Cursor
+   is
+   begin
+      This.Handles.Append (Value);
+      return This.Handles.Last;
+   end Hold;
+
    --------------
    -- Is_Empty --
    --------------
@@ -312,33 +319,6 @@ package body Raven.Engine is
    begin
       return This.Stack = Raven.Objects.Nil;
    end Is_Empty;
-
-   -----------
-   -- Close --
-   -----------
-
-   overriding procedure Close (This : in out Instance) is
-      procedure Free is
-        new Ada.Unchecked_Deallocation
-          (Raven.Environment.Abstraction'Class, Raven.Environment.Reference);
-
-      procedure Free is
-        new Ada.Unchecked_Deallocation
-          (Raven.Symbols.Abstraction'Class, Raven.Symbols.Reference);
-
-      procedure Free is
-        new Ada.Unchecked_Deallocation
-          (Raven.Target.Abstraction'Class, Raven.Target.Reference);
-   begin
-      --  What this engine made, and not the memory it was handed.
-      --  Whatever these hold of Ada's own -- a map, a vector -- goes
-      --  with them.
-
-      Free (This.Target);
-      Free (This.Env);
-      Free (This.Syms);
-      This.Handles.Clear;
-   end Close;
 
    ----------
    -- Mark --
@@ -389,6 +369,26 @@ package body Raven.Engine is
       This.Stack := This.Memory.Cons (Value, This.Stack);
    end Push;
 
+   -------------
+   -- Release --
+   -------------
+
+   overriding procedure Release
+     (This     : in out Instance;
+      Position : in out Object_Lists.Cursor)
+   is
+   begin
+      --  Out of the list, so that Mark stops walking it and whatever
+      --  it named can be collected.  The list only ever grew before
+      --  this, so every handle kept what it named for the rest of the
+      --  session -- and Mark walked all of them every collection.
+      --
+      --  Deleting one leaves every other cursor where it was, which
+      --  is what a doubly linked list is for.
+
+      This.Handles.Delete (Position);
+   end Release;
+
    ------------
    -- Report --
    ------------
@@ -397,18 +397,6 @@ package body Raven.Engine is
    begin
       This.Memory.Report;
    end Report;
-
-   ----------
-   -- Swap --
-   ----------
-
-   overriding procedure Swap (This : in out Instance) is
-   begin
-      This.Pop (This.R (1));
-      This.Pop (This.R (2));
-      This.Push (This.R (1));
-      This.Push (This.R (2));
-   end Swap;
 
    --------------
    -- Set_Slot --
@@ -422,6 +410,18 @@ package body Raven.Engine is
    begin
       This.Slots (Index) := Value;
    end Set_Slot;
+
+   ----------
+   -- Swap --
+   ----------
+
+   overriding procedure Swap (This : in out Instance) is
+   begin
+      This.Pop (This.R (1));
+      This.Pop (This.R (2));
+      This.Push (This.R (1));
+      This.Push (This.R (2));
+   end Swap;
 
    ------------
    -- Target --

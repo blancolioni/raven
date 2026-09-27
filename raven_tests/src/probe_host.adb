@@ -10,21 +10,22 @@ package body Probe_Host is
          Right : Object;
       end record;
 
-   overriding function Show (This : Couple) return String;
-
    overriding function Equal
      (This : Couple;
       To   : Couple)
       return Boolean
    is (This.Left = To.Left and then This.Right = To.Right);
 
+   procedure Left_Of (VM : Raven_VM);
+   procedure Make (VM : Raven_VM);
+
    overriding procedure Mark
      (This    : in out Couple;
       Process : not null access procedure (Value : in out Object));
 
-   procedure Make (VM : Raven_VM);
-   procedure Left_Of (VM : Raven_VM);
    procedure Right_Of (VM : Raven_VM);
+
+   overriding function Show (This : Couple) return String;
 
    ----------
    -- Bind --

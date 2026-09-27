@@ -3,34 +3,24 @@ with Raven.Objects;
 package body Raven.Strings is
 
    procedure Display_Text (VM : Raven_VM);
-   procedure Write_Text (VM : Raven_VM);
-   procedure Is_String (VM : Raven_VM);
-   procedure String_Length (VM : Raven_VM);
-   procedure List_To_String (VM : Raven_VM);
-   procedure String_To_List (VM : Raven_VM);
    procedure Enable_Trace (VM : Raven_VM);
+   procedure Is_String (VM : Raven_VM);
+   procedure List_To_String (VM : Raven_VM);
+   procedure String_Length (VM : Raven_VM);
+   procedure String_To_List (VM : Raven_VM);
+   procedure Write_Text (VM : Raven_VM);
 
-   ---------------
-   -- Is_String --
-   ---------------
+   -------------
+   -- Display --
+   -------------
 
-   function Is_String (From : Foreign_Value_Instance'Class) return Boolean
-   is (From in Instance'Class);
+   overriding function Display (This : Instance) return String is
+   begin
+      --  The characters and nothing else: the quotation marks and the
+      --  escapes above are there for the reader and not for a person.
 
-   ----------
-   -- Text --
-   ----------
-
-   function Text (From : Foreign_Value_Instance'Class) return String
-   is (Encode (Instance'Class (From).Value));
-
-   --------------
-   -- To_Value --
-   --------------
-
-   function To_Value (Text : Wide_Wide_String) return Instance
-   is (Foreign_Value_Instance with
-       Length => Text'Length, Value => Text);
+      return Encode (This.Value);
+   end Display;
 
    -------------
    -- Display --
@@ -52,19 +42,6 @@ package body Raven.Strings is
    begin
       VM.Set_Slot (1, VM.Create_Foreign_Value (V));
    end Display_Text;
-
-   ----------------
-   -- Write_Text --
-   ----------------
-
-   procedure Write_Text (VM : Raven_VM) is
-      S : constant Wide_Wide_String :=
-            VM.Display (VM.Get_Slot (1), Readable => True);
-      V : constant Instance := (Foreign_Value_Instance with
-                                Length => S'Length, Value => S);
-   begin
-      VM.Set_Slot (1, VM.Create_Foreign_Value (V));
-   end Write_Text;
 
    ------------------
    -- Enable_Trace --
@@ -94,6 +71,13 @@ package body Raven.Strings is
    begin
       return Encode (S);
    end Get_String;
+
+   ---------------
+   -- Is_String --
+   ---------------
+
+   function Is_String (From : Foreign_Value_Instance'Class) return Boolean
+   is (From in Instance'Class);
 
    ---------------
    -- Is_String --
@@ -239,18 +223,6 @@ package body Raven.Strings is
       return Encode (Result (1 .. Last));
    end Show;
 
-   -------------
-   -- Display --
-   -------------
-
-   overriding function Display (This : Instance) return String is
-   begin
-      --  The characters and nothing else: the quotation marks and the
-      --  escapes above are there for the reader and not for a person.
-
-      return Encode (This.Value);
-   end Display;
-
    -------------------
    -- String_Length --
    -------------------
@@ -313,6 +285,21 @@ package body Raven.Strings is
       end;
    end String_To_List;
 
+   ----------
+   -- Text --
+   ----------
+
+   function Text (From : Foreign_Value_Instance'Class) return String
+   is (Encode (Instance'Class (From).Value));
+
+   --------------
+   -- To_Value --
+   --------------
+
+   function To_Value (Text : Wide_Wide_String) return Instance
+   is (Foreign_Value_Instance with
+       Length => Text'Length, Value => Text);
+
    ------------------
    -- Write_String --
    ------------------
@@ -328,5 +315,18 @@ package body Raven.Strings is
    begin
       VM.Set_Slot (Slot, VM.Create_Foreign_Value (V));
    end Write_String;
+
+   ----------------
+   -- Write_Text --
+   ----------------
+
+   procedure Write_Text (VM : Raven_VM) is
+      S : constant Wide_Wide_String :=
+            VM.Display (VM.Get_Slot (1), Readable => True);
+      V : constant Instance := (Foreign_Value_Instance with
+                                Length => S'Length, Value => S);
+   begin
+      VM.Set_Slot (1, VM.Create_Foreign_Value (V));
+   end Write_Text;
 
 end Raven.Strings;

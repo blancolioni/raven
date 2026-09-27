@@ -12,6 +12,21 @@ package body Raven.Engine.Libraries is
       return Boolean;
 
    ----------------
+   -- Add_Export --
+   ----------------
+
+   procedure Add_Export
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+      Entry_Of : constant Library_Vectors.Reference_Type :=
+                   This.Table.Reference (Library);
+   begin
+      Entry_Of.Exports.Include (Name);
+   end Add_Export;
+
+   ----------------
    -- Add_Import --
    ----------------
 
@@ -47,21 +62,6 @@ package body Raven.Engine.Libraries is
       This.Paths.Append (Path);
    end Add_Path;
 
-   ----------------
-   -- Add_Export --
-   ----------------
-
-   procedure Add_Export
-     (This    : in out Instance;
-      Library : Raven.Target.Real_Library_Id;
-      Name    : String)
-   is
-      Entry_Of : constant Library_Vectors.Reference_Type :=
-                   This.Table.Reference (Library);
-   begin
-      Entry_Of.Exports.Include (Name);
-   end Add_Export;
-
    -----------
    -- Binds --
    -----------
@@ -89,40 +89,6 @@ package body Raven.Engine.Libraries is
       return False;
    end Binds;
 
-   --------------
-   -- Provides --
-   --------------
-
-   function Provides
-     (This    : Instance;
-      Library : Raven.Target.Real_Library_Id;
-      Name    : String)
-      return Boolean
-   is
-      Entry_Of : Library_Record renames This.Table (Library);
-   begin
-      if Entry_Of.Exports_All then
-         return Entry_Of.Defined.Contains (Name)
-           or else Entry_Of.Macros.Contains (Name);
-      else
-         return Entry_Of.Exports.Contains (Name);
-      end if;
-   end Provides;
-
-   ---------------------
-   -- Set_Export_List --
-   ---------------------
-
-   procedure Set_Export_List
-     (This    : in out Instance;
-      Library : Raven.Target.Real_Library_Id)
-   is
-      Entry_Of : constant Library_Vectors.Reference_Type :=
-                   This.Table.Reference (Library);
-   begin
-      Entry_Of.Exports_All := False;
-   end Set_Export_List;
-
    ------------
    -- Create --
    ------------
@@ -146,21 +112,6 @@ package body Raven.Engine.Libraries is
       return This.Table.Last_Index;
    end Create;
 
-   -----------------
-   -- Define_Name --
-   -----------------
-
-   procedure Define_Name
-     (This    : in out Instance;
-      Library : Raven.Target.Real_Library_Id;
-      Name    : String)
-   is
-      Entry_Of : constant Library_Vectors.Reference_Type :=
-                   This.Table.Reference (Library);
-   begin
-      Entry_Of.Defined.Include (Name);
-   end Define_Name;
-
    ------------------
    -- Define_Macro --
    ------------------
@@ -176,6 +127,21 @@ package body Raven.Engine.Libraries is
    begin
       Entry_Of.Macros.Include (Name, Id);
    end Define_Macro;
+
+   -----------------
+   -- Define_Name --
+   -----------------
+
+   procedure Define_Name
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+   is
+      Entry_Of : constant Library_Vectors.Reference_Type :=
+                   This.Table.Reference (Library);
+   begin
+      Entry_Of.Defined.Include (Name);
+   end Define_Name;
 
    ----------
    -- Find --
@@ -196,20 +162,6 @@ package body Raven.Engine.Libraries is
       end loop;
       return Raven.Target.No_Library;
    end Find;
-
-   ----------
-   -- Mark --
-   ----------
-
-   procedure Mark
-     (This    : in out Instance;
-      Process : not null access procedure (Value : in out Object))
-   is
-   begin
-      for Library of This.Table loop
-         Library.Environment.Mark (Process);
-      end loop;
-   end Mark;
 
    -----------
    -- Macro --
@@ -246,6 +198,20 @@ package body Raven.Engine.Libraries is
       return Raven.Target.No_Macro;
    end Macro;
 
+   ----------
+   -- Mark --
+   ----------
+
+   procedure Mark
+     (This    : in out Instance;
+      Process : not null access procedure (Value : in out Object))
+   is
+   begin
+      for Library of This.Table loop
+         Library.Environment.Mark (Process);
+      end loop;
+   end Mark;
+
    ---------------
    -- Own_Macro --
    ---------------
@@ -265,6 +231,26 @@ package body Raven.Engine.Libraries is
          return Raven.Target.No_Macro;
       end if;
    end Own_Macro;
+
+   --------------
+   -- Provides --
+   --------------
+
+   function Provides
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return Boolean
+   is
+      Entry_Of : Library_Record renames This.Table (Library);
+   begin
+      if Entry_Of.Exports_All then
+         return Entry_Of.Defined.Contains (Name)
+           or else Entry_Of.Macros.Contains (Name);
+      else
+         return Entry_Of.Exports.Contains (Name);
+      end if;
+   end Provides;
 
    -------------
    -- Resolve --
@@ -290,6 +276,20 @@ package body Raven.Engine.Libraries is
 
       return Library;
    end Resolve;
+
+   ---------------------
+   -- Set_Export_List --
+   ---------------------
+
+   procedure Set_Export_List
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
+   is
+      Entry_Of : constant Library_Vectors.Reference_Type :=
+                   This.Table.Reference (Library);
+   begin
+      Entry_Of.Exports_All := False;
+   end Set_Export_List;
 
    --------------------
    -- Undefine_Macro --

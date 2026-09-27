@@ -80,22 +80,6 @@ package body Raven.Parser is
       Parse_S_Expression (This.Data.Lex, Target);
    end Parse_Next;
 
-   -----------
-   -- Where --
-   -----------
-
-   function Where (This : Instance) return String is
-      use Ada.Strings, Ada.Strings.Fixed;
-   begin
-      if This.Data = null then
-         return "";
-      end if;
-
-      return This.Data.Lex.Current_File_Name
-        & ":"
-        & Trim (Natural'Image (This.Data.Lex.Current_Line), Left);
-   end Where;
-
    ------------------------
    -- Parse_S_Expression --
    ------------------------
@@ -360,5 +344,21 @@ package body Raven.Parser is
 
       Parse_Expression;
    end Parse_S_Expression;
+
+   -----------
+   -- Where --
+   -----------
+
+   function Where (This : Instance) return String is
+      use Ada.Strings, Ada.Strings.Fixed;
+   begin
+      if This.Data = null then
+         return "";
+      end if;
+
+      return This.Data.Lex.Current_File_Name
+        & ":"
+        & Trim (Natural'Image (This.Data.Lex.Current_Line), Left);
+   end Where;
 
 end Raven.Parser;

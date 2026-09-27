@@ -233,6 +233,27 @@ package body Raven.Tests.Slots is
             Value_Kind'Image (VM.Kind (1)));
    end Test_Kind;
 
+   -----------------------
+   -- Test_Not_A_String --
+   -----------------------
+
+   procedure Test_Not_A_String
+     (VM         : Raven_VM;
+      Expression : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+
+      declare
+         Answer : constant String := VM.Get_Slot (1);
+      begin
+         Test (Expression & " is not a string", "refused", Answer);
+      end;
+   exception
+      when Constraint_Error =>
+         Test (Expression & " is not a string", "refused", "refused");
+   end Test_Not_A_String;
+
    ------------------
    -- Test_Refuses --
    ------------------
@@ -262,26 +283,5 @@ package body Raven.Tests.Slots is
       Test (Expression & " is neither a pair nor a vector",
             "2", Trim (Natural'Image (Refused), Left));
    end Test_Refuses;
-
-   -----------------------
-   -- Test_Not_A_String --
-   -----------------------
-
-   procedure Test_Not_A_String
-     (VM         : Raven_VM;
-      Expression : String)
-   is
-   begin
-      VM.Evaluate (Expression);
-
-      declare
-         Answer : constant String := VM.Get_Slot (1);
-      begin
-         Test (Expression & " is not a string", "refused", Answer);
-      end;
-   exception
-      when Constraint_Error =>
-         Test (Expression & " is not a string", "refused", "refused");
-   end Test_Not_A_String;
 
 end Raven.Tests.Slots;
