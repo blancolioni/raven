@@ -23,6 +23,13 @@ private package Raven.Strings is
    function Text (From : Foreign_Value_Instance'Class) return String
      with Pre => Is_String (From);
 
+   --  Whether a string is held a byte to a character, which it is when
+   --  every character in it fits in one.  It is for the tests: nothing
+   --  else needs to know, because nothing else can tell.
+
+   function Is_Narrow (From : Foreign_Value_Instance'Class) return Boolean
+     with Pre => Is_String (From);
+
    procedure Write_String
      (VM   : Raven_VM;
       Slot : Slot_Index;
@@ -40,10 +47,27 @@ private package Raven.Strings is
 
 private
 
-   type Instance (Length : Natural) is
+   --  A string is held a byte to a character when every character in
+   --  it is Latin-1, which in the ordinary case is all of them, and four
+   --  bytes to a character only when one is not.  Strings do not change
+   --  once made, so which it is is decided once, by To_Value, and every
+   --  string is made by To_Value.  That makes the choice depend only on
+   --  the characters, so two strings with the same characters are held
+   --  the same way and Equal can compare them as they are.
+   --
+   --  The line is Latin-1 rather than UTF-8 because a byte holds it
+   --  exactly: a character is still found by an index, which string-ref
+   --  depends on, where UTF-8 would have to walk to it.
+
+   type Instance (Wide : Boolean; Length : Natural) is
      new Foreign_Value_Instance with
       record
-         Value : Wide_Wide_String (1 .. Length);
+         case Wide is
+            when False =>
+               Narrow : String (1 .. Length);
+            when True =>
+               Value  : Wide_Wide_String (1 .. Length);
+         end case;
       end record;
 
    overriding function Show (This : Instance) return String;
@@ -53,6 +77,10 @@ private
      (This : Instance;
       To   : Instance)
       return Boolean
-   is (This.Value = To.Value);
+   is (This.Wide = To.Wide
+       and then This.Length = To.Length
+       and then (if This.Wide
+                 then This.Value = To.Value
+                 else This.Narrow = To.Narrow));
 
 end Raven.Strings;
