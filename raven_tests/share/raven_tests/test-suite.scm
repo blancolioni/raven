@@ -2069,6 +2069,34 @@
 
 (test "five hundred live strings" 500 (length (probe-strings 500)))
 
+;;  And past 9,999, which was the ceiling after that: a number with
+;;  nothing to do with the encoding, which has room for sixteen
+;;  million.  A vector holds them, because it holds two to a cell
+;;  where a list takes a cell each, and ten thousand pairs is a good
+;;  part of the heap the suite runs in.
+
+(define (probe-fill-strings v n)
+  (if (= n 0)
+      v
+      (begin
+        (vector-set! v (- n 1) (raven-display-text n))
+        (probe-fill-strings v (- n 1)))))
+
+(define probe-ten-thousand (probe-fill-strings (make-vector 10001 #f) 10001))
+
+(test "ten thousand and one live strings" "10001"
+      (vector-ref probe-ten-thousand 10000))
+(test "and the first of them is still itself" "1"
+      (vector-ref probe-ten-thousand 0))
+
+;;  Once they are gone their ids come back, and as many again can be
+;;  made in the same places.
+
+(set! probe-ten-thousand #f)
+
+(test "and as many again after them" "10001"
+      (vector-ref (probe-fill-strings (make-vector 10001 #f) 10001) 10000))
+
 ;;  Ports.  Everything raven wrote went to the one place the host
 ;;  gave it, through one foreign function, and nothing could be read
 ;;  at all.  Every PASS line above goes through the default output

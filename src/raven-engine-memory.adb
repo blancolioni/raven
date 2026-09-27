@@ -412,6 +412,8 @@ package body Raven.Engine.Memory is
       end if;
 
       This.Value_List.Append (Value);
+      This.Value_List.Reference (This.Value_List.Last).Element.Table_Id :=
+        Natural (Id);
       This.Value_Ids (Id) := This.Value_List.Last;
 
       return To_Object (Id);
@@ -519,26 +521,40 @@ package body Raven.Engine.Memory is
          Container.After_Collection;
       end loop;
 
-      for Id in 1 .. This.Value_Ids.Last_Index loop
-         declare
-            Val : Foreign_Value_Lists.Cursor := This.Value_Ids (Id);
-         begin
-            if Foreign_Value_Lists.Has_Element (Val)
-              and then not Foreign_Value_Lists.Element (Val).Marked
-            then
-               --  Free is what a foreign value holding something of
-               --  the host's is told by, and it was never called: the
-               --  value was deleted and whatever it stood for was
-               --  left.  A string has nothing to give back and did
-               --  not notice; a port has a file.
+      --  The sweep walks the values there are, not the ids there have
+      --  ever been: Value_Ids never shrinks, and a program that once
+      --  held nine thousand strings would pay for all nine thousand on
+      --  every collection after, with three left to look at.
 
-               This.Value_List (Val).Free;
-               This.Value_List.Delete (Val);
-               This.Value_Ids (Id) := Foreign_Value_Lists.No_Element;
-               This.Free_Ids.Append (Id);
-            end if;
-         end;
-      end loop;
+      declare
+         Val : Foreign_Value_Lists.Cursor := This.Value_List.First;
+      begin
+         while Foreign_Value_Lists.Has_Element (Val) loop
+            declare
+               Next  : constant Foreign_Value_Lists.Cursor :=
+                         Foreign_Value_Lists.Next (Val);
+               Value : constant Foreign_Value_Instance'Class :=
+                         Foreign_Value_Lists.Element (Val);
+               Id    : constant Raven.Objects.Foreign_Value_Id :=
+                         Raven.Objects.Foreign_Value_Id (Value.Table_Id);
+            begin
+               if not Value.Marked then
+                  --  Free is what a foreign value holding something of
+                  --  the host's is told by, and it was never called:
+                  --  the value was deleted and whatever it stood for
+                  --  was left.  A string has nothing to give back and
+                  --  did not notice; a port has a file.
+
+                  This.Value_List (Val).Free;
+                  This.Value_List.Delete (Val);
+                  This.Value_Ids (Id) := Foreign_Value_Lists.No_Element;
+                  This.Free_Ids.Append (Id);
+               end if;
+
+               Val := Next;
+            end;
+         end loop;
+      end;
 
       if This.Trace_GC then
          Ada.Text_IO.Put
