@@ -706,6 +706,26 @@
 (test "string<? past ASCII" #t (string<? "z" "λ"))
 (test "string-ref past ASCII" 955 (char->integer (string-ref "aλb" 1)))
 
+;;  A string of Latin-1 is held a byte to a character and any other is
+;;  held four, which a program cannot see and these say it cannot: the
+;;  same characters are the same string however they were come by, and
+;;  one of each kind compares by its characters.
+
+(test "a Latin-1 string past ASCII" 233 (char->integer (string-ref "café" 3)))
+(test "and as long as its characters" 4 (string-length "café"))
+(test "a narrow part of a wide string is that string" #t
+      (string=? (substring "λab" 1 3) "ab"))
+(test "and equal? says so too" #t (equal? (substring "λab" 1 3) "ab"))
+(test "one of each compares by characters" #t (string<? "ab" "aλ"))
+(test "and the other way" #f (string<? "aλ" "ab"))
+(test "one of each is never the same" #f (string=? "a" "λ"))
+(test "a string made of one Latin-1 character" #t
+      (string=? (make-string 2 (integer->char 233)) "éé"))
+(test "and of one past it" 955
+      (char->integer (string-ref (make-string 2 (integer->char 955)) 1)))
+(test "list->string of both kinds" "aλ"
+      (list->string (list #\a (integer->char 955))))
+
 ;;  string-ref, substring and the comparisons are arithmetic.  They
 ;;  were written on string->list, which made a pair for every character
 ;;  of the string to reach one of them, so this loop -- the obvious

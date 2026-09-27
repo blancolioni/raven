@@ -2,6 +2,8 @@ with Ada.Exceptions;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
 
+with Raven.Strings;
+
 package body Raven.Tests.Strings is
 
    procedure Evaluate
@@ -11,6 +13,11 @@ package body Raven.Tests.Strings is
    procedure Test_Error
      (VM         : Raven_VM;
       Expression : String);
+
+   procedure Test_Held
+     (VM         : Raven_VM;
+      Expression : String;
+      Narrow     : Boolean);
 
    procedure Test_Message
      (VM         : Raven_VM;
@@ -57,6 +64,24 @@ package body Raven.Tests.Strings is
       Test_Error (VM, "(string->list ""abc"" 2 1)");
       Test_Error (VM, "(substring ""abc"" 0 9)");
       Test_Error (VM, "(string-ref ""abc"" 9)");
+
+      --  How a string is held.  A byte a character when every one of
+      --  them fits, which is Latin-1 and so includes an accented
+      --  letter, and four only when one does not.
+
+      Test_Held (VM, """abc""", Narrow => True);
+      Test_Held (VM, """""", Narrow => True);
+      Test_Held (VM, Encode ("""café"""), Narrow => True);
+      Test_Held (VM, Encode ("""aλb"""), Narrow => False);
+      Test_Held (VM, Encode ("(substring ""aλb"" 2 3)"), Narrow => True);
+      Test_Held (VM, "(make-string 3 #\z)", Narrow => True);
+      Test_Held
+        (VM, Encode ("(string-append ""ab"" ""λ"")"), Narrow => False);
+
+      --  And what a narrow string comes to outside is still UTF-8: a
+      --  Latin-1 character past ASCII is two bytes there, not one.
+
+      Test_String (VM, Encode ("""café"""), Encode ("café"));
 
       --  And what is said names the procedure that was asked.  These
       --  are done in the machine now, not by walking a list, and a
@@ -171,6 +196,30 @@ package body Raven.Tests.Strings is
       when Constraint_Error =>
          Test (Expression & " is an error", True);
    end Test_Error;
+
+   ---------------
+   -- Test_Held --
+   ---------------
+
+   procedure Test_Held
+     (VM         : Raven_VM;
+      Expression : String;
+      Narrow     : Boolean)
+   is
+      Name : constant String :=
+               Expression & (if Narrow then " is narrow" else " is wide");
+   begin
+      VM.Evaluate (Expression);
+
+      declare
+         Value : constant Foreign_Value_Instance'Class :=
+                   VM.To_Foreign_Value (VM.Get_Slot (1));
+      begin
+         Test (Name,
+               Raven.Strings.Is_String (Value)
+                 and then Raven.Strings.Is_Narrow (Value) = Narrow);
+      end;
+   end Test_Held;
 
    ------------------
    -- Test_Message --

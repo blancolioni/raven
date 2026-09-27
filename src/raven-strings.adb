@@ -1,4 +1,5 @@
 with Ada.Strings.Fixed;
+with Ada.Strings.UTF_Encoding.Strings;
 with Raven.Objects;
 
 package body Raven.Strings is
@@ -31,6 +32,29 @@ package body Raven.Strings is
       Name : String;
       Slot : Slot_Index)
       return Natural;
+
+   --  A string's characters whichever way it is held.  Slice widens
+   --  only the part asked for, so a substring of a narrow string does
+   --  not widen the whole of it on the way.
+
+   function Element
+     (S     : Instance'Class;
+      Index : Positive)
+      return Wide_Wide_Character;
+
+   function Slice
+     (S     : Instance'Class;
+      First : Positive;
+      Last  : Natural)
+      return Wide_Wide_String;
+
+   function Characters (S : Instance'Class) return Wide_Wide_String
+   is (Slice (S, 1, S.Length));
+
+   --  Less than nothing, nothing or more than nothing, as A comes
+   --  before B, is the same, or comes after.
+
+   function Compare (A, B : Instance'Class) return Integer;
 
    --------------------
    -- Checked_Length --
@@ -72,6 +96,45 @@ package body Raven.Strings is
    end Checked_Length;
 
    -------------
+   -- Compare --
+   -------------
+
+   --  A string that matches another as far as it goes comes first,
+   --  which is what "<" on two arrays says.  Two strings held the same
+   --  way are compared as they are; one of each is compared a
+   --  character at a time, and cannot be the same.
+
+   function Compare (A, B : Instance'Class) return Integer is
+   begin
+      if not A.Wide and then not B.Wide then
+         return (if A.Narrow < B.Narrow then -1
+                 elsif A.Narrow = B.Narrow then 0
+                 else 1);
+      elsif A.Wide and then B.Wide then
+         return (if A.Value < B.Value then -1
+                 elsif A.Value = B.Value then 0
+                 else 1);
+      end if;
+
+      for I in 1 .. Natural'Min (A.Length, B.Length) loop
+         declare
+            X : constant Wide_Wide_Character := Element (A, I);
+            Y : constant Wide_Wide_Character := Element (B, I);
+         begin
+            if X < Y then
+               return -1;
+            elsif Y < X then
+               return 1;
+            end if;
+         end;
+      end loop;
+
+      return (if A.Length < B.Length then -1
+              elsif A.Length = B.Length then 0
+              else 1);
+   end Compare;
+
+   -------------
    -- Display --
    -------------
 
@@ -80,7 +143,7 @@ package body Raven.Strings is
       --  The characters and nothing else: the quotation marks and the
       --  escapes above are there for the reader and not for a person.
 
-      return Encode (This.Value);
+      return Text (This);
    end Display;
 
    -------------
@@ -98,11 +161,22 @@ package body Raven.Strings is
    procedure Display_Text (VM : Raven_VM) is
       S : constant Wide_Wide_String :=
             VM.Display (VM.Get_Slot (1), Readable => False);
-      V : constant Instance := (Foreign_Value_Instance with
-                                Length => S'Length, Value => S);
+      V : constant Instance := To_Value (S);
    begin
       VM.Set_Slot (1, VM.Create_Foreign_Value (V));
    end Display_Text;
+
+   -------------
+   -- Element --
+   -------------
+
+   function Element
+     (S     : Instance'Class;
+      Index : Positive)
+      return Wide_Wide_Character
+   is (if S.Wide
+       then S.Value (Index)
+       else Wide_Wide_Character'Val (Character'Pos (S.Narrow (Index))));
 
    ------------------
    -- Enable_Trace --
@@ -127,11 +201,16 @@ package body Raven.Strings is
       return String
    is
       X : constant Object := VM.Get_Slot (Slot);
-      S : constant Wide_Wide_String :=
-            Instance'Class (VM.To_Foreign_Value (X)).Value;
    begin
-      return Encode (S);
+      return Text (VM.To_Foreign_Value (X));
    end Get_String;
+
+   ---------------
+   -- Is_Narrow --
+   ---------------
+
+   function Is_Narrow (From : Foreign_Value_Instance'Class) return Boolean
+   is (not Instance'Class (From).Wide);
 
    ---------------
    -- Is_String --
@@ -223,8 +302,7 @@ package body Raven.Strings is
       end To_String;
 
       S : constant Wide_Wide_String := To_String (VM.Get_Slot (1));
-      V : constant Instance := (Foreign_Value_Instance with
-                                Length => S'Length, Value => S);
+      V : constant Instance := To_Value (S);
    begin
       VM.Set_Slot (1, VM.Create_Foreign_Value (V));
    end List_To_String;
@@ -281,11 +359,23 @@ package body Raven.Strings is
            "make-string: not a character: " & Encode (VM.Display (Fill));
       end if;
 
+      --  Made the way it will be held, rather than wide and then
+      --  looked at, since the one character says which it is.
+
       declare
-         V : constant Instance :=
-               (Foreign_Value_Instance with
-                Length => Length,
-                Value  => [1 .. Length => To_Character (Fill)]);
+         Ch : constant Wide_Wide_Character := To_Character (Fill);
+         V  : constant Instance :=
+                (if Wide_Wide_Character'Pos (Ch) < 256
+                 then (Foreign_Value_Instance with
+                       Wide   => False,
+                       Length => Length,
+                       Narrow =>
+                         [1 .. Length =>
+                            Character'Val (Wide_Wide_Character'Pos (Ch))])
+                 else (Foreign_Value_Instance with
+                       Wide   => True,
+                       Length => Length,
+                       Value  => [1 .. Length => Ch]));
       begin
          VM.Set_Slot (1, VM.Create_Foreign_Value (V));
       end;
@@ -303,7 +393,7 @@ package body Raven.Strings is
       --  to be the quotation marks alone, so a string holding one of
       --  them wrote as something that would not read.
 
-      Result : Wide_Wide_String (1 .. 2 * This.Value'Length + 2);
+      Result : Wide_Wide_String (1 .. 2 * This.Length + 2);
       Last   : Natural := 0;
 
       procedure Put (Ch : Wide_Wide_Character);
@@ -321,7 +411,7 @@ package body Raven.Strings is
    begin
       Put ('"');
 
-      for Ch of This.Value loop
+      for Ch of Characters (This) loop
          case Wide_Wide_Character'Pos (Ch) is
             when 7  => Put ('\'); Put ('a');
             when 8  => Put ('\'); Put ('b');
@@ -338,14 +428,36 @@ package body Raven.Strings is
       return Encode (Result (1 .. Last));
    end Show;
 
+   -----------
+   -- Slice --
+   -----------
+
+   function Slice
+     (S     : Instance'Class;
+      First : Positive;
+      Last  : Natural)
+      return Wide_Wide_String
+   is
+   begin
+      if S.Wide then
+         return S.Value (First .. Last);
+      end if;
+
+      return Result : Wide_Wide_String (1 .. Last - First + 1) do
+         for I in Result'Range loop
+            Result (I) :=
+              Wide_Wide_Character'Val
+                (Character'Pos (S.Narrow (First + I - 1)));
+         end loop;
+      end return;
+   end Slice;
+
    --------------------
    -- String_Compare --
    --------------------
 
    --  Less than nothing, nothing, or more than nothing, as the first
-   --  string comes before the second, is the same, or comes after.  A
-   --  string that matches another as far as it goes comes first, which
-   --  is what "<" on two arrays says.
+   --  string comes before the second, is the same, or comes after.
 
    procedure String_Compare (VM : Raven_VM) is
       Left   : constant Object := VM.Get_Slot (1);
@@ -367,10 +479,8 @@ package body Raven.Strings is
          ----------------
 
          procedure With_Right (R : Foreign_Value_Instance'Class) is
-            A : Wide_Wide_String renames Instance'Class (L).Value;
-            B : Wide_Wide_String renames Instance'Class (R).Value;
          begin
-            Answer := (if A < B then -1 elsif A = B then 0 else 1);
+            Answer := Compare (Instance'Class (L), Instance'Class (R));
          end With_Right;
 
       begin
@@ -416,9 +526,8 @@ package body Raven.Strings is
       ----------
 
       procedure Look (Item : Foreign_Value_Instance'Class) is
-         S : Wide_Wide_String renames Instance'Class (Item).Value;
       begin
-         Answer := S (S'First + Index);
+         Answer := Element (Instance'Class (Item), Index + 1);
       end Look;
 
    begin
@@ -450,7 +559,7 @@ package body Raven.Strings is
       --  there, and why the list is built in a slot of its own.
 
       S : constant Wide_Wide_String :=
-            Instance'Class (VM.To_Foreign_Value (X)).Value;
+            Characters (Instance'Class (VM.To_Foreign_Value (X)));
 
       --  Where to start and where to stop, which string->list has
       --  always taken and this has always ignored: it was bound as
@@ -500,8 +609,10 @@ package body Raven.Strings is
            & " is not within a string of" & Length'Image;
       end if;
 
+      --  A wide string's part may be narrow, and To_Value says so.
+
       declare
-         Slice : Wide_Wide_String (1 .. Last - First);
+         Part : Wide_Wide_String (1 .. Last - First);
 
          procedure Take (Item : Foreign_Value_Instance'Class);
 
@@ -510,18 +621,15 @@ package body Raven.Strings is
          ----------
 
          procedure Take (Item : Foreign_Value_Instance'Class) is
-            S : Wide_Wide_String renames Instance'Class (Item).Value;
          begin
-            Slice := S (S'First + First .. S'First + Last - 1);
+            Part := Slice (Instance'Class (Item), First + 1, Last);
          end Take;
 
       begin
          VM.Query_Foreign_Value (VM.Get_Slot (1), Take'Access);
 
          declare
-            V : constant Instance := (Foreign_Value_Instance with
-                                      Length => Slice'Length,
-                                      Value  => Slice);
+            V : constant Instance := To_Value (Part);
          begin
             VM.Set_Slot (1, VM.Create_Foreign_Value (V));
          end;
@@ -532,16 +640,40 @@ package body Raven.Strings is
    -- Text --
    ----------
 
-   function Text (From : Foreign_Value_Instance'Class) return String
-   is (Encode (Instance'Class (From).Value));
+   --  A narrow string is Latin-1, which UTF_Encoding.Strings takes a
+   --  String to be, so it goes to UTF-8 without being widened first.
+
+   function Text (From : Foreign_Value_Instance'Class) return String is
+      S : Instance'Class renames Instance'Class (From);
+   begin
+      if S.Wide then
+         return Encode (S.Value);
+      else
+         return Ada.Strings.UTF_Encoding.Strings.Encode (S.Narrow);
+      end if;
+   end Text;
 
    --------------
    -- To_Value --
    --------------
 
-   function To_Value (Text : Wide_Wide_String) return Instance
-   is (Foreign_Value_Instance with
-       Length => Text'Length, Value => Text);
+   function To_Value (Text : Wide_Wide_String) return Instance is
+   begin
+      for Ch of Text loop
+         if Wide_Wide_Character'Pos (Ch) > 255 then
+            return (Foreign_Value_Instance with
+                    Wide => True, Length => Text'Length, Value => Text);
+         end if;
+      end loop;
+
+      return Result : Instance (Wide => False, Length => Text'Length) do
+         for I in 1 .. Text'Length loop
+            Result.Narrow (I) :=
+              Character'Val
+                (Wide_Wide_Character'Pos (Text (Text'First + I - 1)));
+         end loop;
+      end return;
+   end To_Value;
 
    ------------------
    -- Write_String --
@@ -552,9 +684,7 @@ package body Raven.Strings is
       Slot : Slot_Index;
       S    : String)
    is
-      W : constant Wide_Wide_String := Decode (S);
-      V : constant Instance := (Foreign_Value_Instance with
-                                Length => W'Length, Value => W);
+      V : constant Instance := To_Value (Decode (S));
    begin
       VM.Set_Slot (Slot, VM.Create_Foreign_Value (V));
    end Write_String;
@@ -566,8 +696,7 @@ package body Raven.Strings is
    procedure Write_Text (VM : Raven_VM) is
       S : constant Wide_Wide_String :=
             VM.Display (VM.Get_Slot (1), Readable => True);
-      V : constant Instance := (Foreign_Value_Instance with
-                                Length => S'Length, Value => S);
+      V : constant Instance := To_Value (S);
    begin
       VM.Set_Slot (1, VM.Create_Foreign_Value (V));
    end Write_Text;
