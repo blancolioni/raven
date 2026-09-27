@@ -1200,3 +1200,28 @@
   (read-bytevector-into v (optional port (current-input-port))
 			(optional start 0)
 			(optional end (bytevector-length v))))
+
+;;  What this raven is: the feature identifiers R7RS's appendix names,
+;;  as far as they are true here, and raven's own.  The list is the
+;;  machine's, because what a raven has is decided where it is built.
+
+(define (features) (raven-features))
+
+;;  cond-expand as an expression, which chooses where it is expanded
+;;  rather than where it is run: the clauses not chosen are never read
+;;  as code at all, so one may use a name that does not exist here.
+;;  Which clause holds is asked of the machine, which is where the
+;;  define-library declaration of the same name asks it too.  None
+;;  holding is left unspecified by R7RS, and here is nothing.
+
+(define (cond-expand-choose clauses)
+  (if (null? clauses)
+      '(if #f #f)
+      (if (if (eq? (car (car clauses)) 'else)
+	      #t
+	      (raven-feature-requirement? (car (car clauses))))
+	  (cons 'begin (cdr (car clauses)))
+	  (cond-expand-choose (cdr clauses)))))
+
+(define-macro (cond-expand . clauses)
+  (cond-expand-choose clauses))

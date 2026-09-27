@@ -2129,18 +2129,19 @@
 (test "and the same integer as any other 255" #t
       (eq? (bytevector-u8-ref probe-packed 0) 255))
 
-;;  Thirty thousand bytes were fifteen thousand cells, which with the
-;;  suite's own and a collection's worth of churn is more than the
-;;  space it runs in.  Packed they are five thousand.
+;;  Twenty-four thousand bytes were twelve thousand cells, which with
+;;  the suite's own and a collection's worth of churn is more than the
+;;  space it runs in.  Packed they are four thousand.  The margin is
+;;  not wide: the suite's own heap grows as the library does.
 
-(define probe-big-bytes (make-bytevector 30000 7))
-(bytevector-u8-set! probe-big-bytes 29999 200)
+(define probe-big-bytes (make-bytevector 24000 7))
+(bytevector-u8-set! probe-big-bytes 23999 200)
 
 (vector-churn 3000)
 
-(test "thirty thousand bytes fit" 30000 (bytevector-length probe-big-bytes))
-(test "and survive a collection" 200 (bytevector-u8-ref probe-big-bytes 29999))
-(test "with the rest as they were" 7 (bytevector-u8-ref probe-big-bytes 15000))
+(test "twenty-four thousand bytes fit" 24000 (bytevector-length probe-big-bytes))
+(test "and survive a collection" 200 (bytevector-u8-ref probe-big-bytes 23999))
+(test "with the rest as they were" 7 (bytevector-u8-ref probe-big-bytes 12000))
 
 (set! probe-big-bytes #f)
 
@@ -2596,6 +2597,48 @@
 (test "a binary port survives one too" '#u8(1)
       (get-output-bytevector kept-binary-port))
 (test "and is still binary" #t (binary-port? kept-binary-port))
+
+;;  What this raven is.  features answers with the identifiers R7RS's
+;;  appendix names, as far as they are true here, and raven's own; the
+;;  numeric ones are absent until the numeric tower makes them true,
+;;  which is what a program is meant to be able to find out.
+
+(define (probe-has? f) (if (memq f (features)) #t #f))
+
+(test "features is a list of symbols" #t
+      (and (list? (features)) (symbol? (car (features)))))
+(test "raven is one" #t (probe-has? 'raven))
+(test "and full-unicode" #t (probe-has? 'full-unicode))
+(test "and not ratios, yet" #f (probe-has? 'ratios))
+(test "nor exact-closed" #f (probe-has? 'exact-closed))
+
+;;  cond-expand as an expression, which chooses where it is expanded:
+;;  a clause not chosen is never read as code, so it may use what is
+;;  not here at all.
+
+(test "cond-expand takes a feature it has" 'yes
+      (cond-expand (raven 'yes) (else 'no)))
+(test "and passes one it has not" 'no
+      (cond-expand (ratios 'yes) (else 'no)))
+(test "and the first that holds" 1
+      (cond-expand (raven 1) (full-unicode 2)))
+(test "and a clause of several" 3 (cond-expand (raven 1 2 3)))
+(test "and" 1 (cond-expand ((and raven full-unicode) 1) (else 2)))
+(test "and one that does not" 2 (cond-expand ((and raven ratios) 1) (else 2)))
+(test "or" 1 (cond-expand ((or ratios raven) 1) (else 2)))
+(test "not" 1 (cond-expand ((not ratios) 1) (else 2)))
+(test "a library that is here" 1
+      (cond-expand ((library (scheme base)) 1) (else 2)))
+(test "and one that is not" 2
+      (cond-expand ((library (no such library)) 1) (else 2)))
+(test "a clause not chosen is not read" 'fine
+      (cond-expand (ratios (no-such-procedure 1)) (else 'fine)))
+
+;;  And as a definition, where it stands among definitions.
+
+(cond-expand (raven (define probe-expanded 'defined)))
+
+(test "cond-expand around a definition" 'defined probe-expanded)
 
 (write-string "Tests: ")
 (display num-tests)

@@ -28,4 +28,17 @@ private package Raven.Loader is
      (Target : Raven.Target.Reference)
       return Boolean;
 
+   --  Whether a cond-expand feature requirement holds: a feature
+   --  identifier, (library name), or and, or and not of requirements.
+   --  The one test both kinds of cond-expand make -- the declaration in
+   --  define-library here, and the expression through a foreign
+   --  function -- so the two cannot come to disagree.  It makes nothing
+   --  and runs nothing.  A requirement that is none of these does not
+   --  hold, and says why.
+
+   function Requirement_Holds
+     (Target      : Raven.Target.Reference;
+      Requirement : Object)
+      return Boolean;
+
 end Raven.Loader;
