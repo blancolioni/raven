@@ -124,6 +124,8 @@ package body Raven.Engine.Memory is
      (This : in out Instance;
       Item : in out Object);
 
+   overriding procedure Close (This : in out Instance);
+
    overriding procedure Report (This : Instance);
 
    function Quick_Allocate
@@ -206,6 +208,27 @@ package body Raven.Engine.Memory is
    begin
       This.Containers.Append (Container_Reference (Container));
    end Add_Container;
+
+   -----------
+   -- Close --
+   -----------
+
+   overriding procedure Close (This : in out Instance) is
+   begin
+      --  Every value still live, told that it is going.  A collection
+      --  is what usually says so, and there is no collection here, so
+      --  without this an open port stays open and whatever a host was
+      --  holding is never given back.
+
+      for Value of This.Value_List loop
+         Value.Free;
+      end loop;
+
+      This.Value_List.Clear;
+      This.Value_Ids.Clear;
+      This.Free_Ids.Clear;
+      This.Containers.Clear;
+   end Close;
 
    ----------
    -- Cons --

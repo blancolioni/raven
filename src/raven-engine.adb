@@ -1,3 +1,5 @@
+with Ada.Unchecked_Deallocation;
+
 with Raven.Containers;
 with Raven.Engine.Environment;
 with Raven.Engine.Memory;
@@ -71,6 +73,8 @@ package body Raven.Engine is
    overriding procedure Mark
      (This    : in out Instance;
       Process : not null access procedure (Value : in out Object));
+
+   overriding procedure Close (This : in out Instance);
 
    overriding function Cons
      (This     : Instance;
@@ -308,6 +312,33 @@ package body Raven.Engine is
    begin
       return This.Stack = Raven.Objects.Nil;
    end Is_Empty;
+
+   -----------
+   -- Close --
+   -----------
+
+   overriding procedure Close (This : in out Instance) is
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Environment.Abstraction'Class, Raven.Environment.Reference);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Symbols.Abstraction'Class, Raven.Symbols.Reference);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Target.Abstraction'Class, Raven.Target.Reference);
+   begin
+      --  What this engine made, and not the memory it was handed.
+      --  Whatever these hold of Ada's own -- a map, a vector -- goes
+      --  with them.
+
+      Free (This.Target);
+      Free (This.Env);
+      Free (This.Syms);
+      This.Handles.Clear;
+   end Close;
 
    ----------
    -- Mark --
