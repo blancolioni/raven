@@ -1,3 +1,6 @@
+with Ada.Exceptions;
+with Ada.Strings.Fixed;
+
 with Probe_Host;
 
 package body Raven.Tests.Foreign is
@@ -184,6 +187,52 @@ package body Raven.Tests.Foreign is
 
       Test_Value (VM, "(car (probe-left probe-pair))", "8");
       Test_Value (VM, "(cdr (probe-right probe-pair))", "7");
+
+      --  The couple is written on Raven.Foreign_Values, so what is
+      --  tested here is the generic as a host uses it: the membership
+      --  test it does once, the four it forwards to, and Free reaching
+      --  the host's own memory.
+
+      Test_Value (VM, "(probe-couple? (probe-couple 1 2))", "#t");
+      Test_Value (VM, "(probe-couple? (probe-box 1))", "#f");
+      Test_Value (VM, "(probe-couple? 5)", "#f");
+      Test_Value (VM, "(probe-couple 1 (list 2 3))", "#<couple 1 (2 3)>");
+      Test_Value
+        (VM, "(equal? (probe-couple 1 (list 2)) (probe-couple 1 (list 2)))",
+         "#t");
+      Test_Value
+        (VM, "(equal? (probe-couple 1 (list 2)) (probe-couple 1 (list 3)))",
+         "#f");
+
+      declare
+         Refused : Boolean := False;
+      begin
+         begin
+            VM.Evaluate ("(probe-left (probe-box 1))");
+         exception
+            when E : Constraint_Error =>
+               Refused :=
+                 Ada.Strings.Fixed.Index
+                   (Ada.Exceptions.Exception_Message (E),
+                    "which is not a value of this kind") > 0;
+         end;
+
+         Test ("a couple's accessor refuses a box, and says so", Refused);
+      end;
+
+      declare
+         Before : constant Natural := Probe_Host.Couples_Freed;
+      begin
+         VM.Evaluate ("(set! probe-pair #f)");
+
+         for Index in Slot_Index loop
+            VM.Set_Slot_Nil (Index);
+         end loop;
+
+         VM.Evaluate ("(vector-churn 3000)");
+         Test ("a couple nothing names is given back to the host",
+               Probe_Host.Couples_Freed > Before);
+      end;
 
       --  Closing a VM tells its foreign values.  No collection
       --  happens at shutdown, and Free is how one gives back what it
