@@ -471,6 +471,16 @@ package Raven is
       Value : Object)
       return Foreign_Value_Instance'Class;
 
+   --  The same value without the copy, for a look at part of a large
+   --  one.  Process must not make anything while it runs: nothing that
+   --  allocates, collects, or makes another foreign value.
+
+   procedure Query_Foreign_Value
+     (This    : Raven_VM'Class;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : Foreign_Value_Instance'Class));
+
    type Foreign_Function_Handler is access
      procedure (VM : Raven_VM);
 

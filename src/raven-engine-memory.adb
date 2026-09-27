@@ -126,6 +126,12 @@ package body Raven.Engine.Memory is
 
    overriding procedure Close (This : in out Instance);
 
+   overriding procedure Query_Foreign_Value
+     (This    : Instance;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : Foreign_Value_Instance'Class));
+
    overriding procedure Report (This : Instance);
 
    function Quick_Allocate
@@ -766,6 +772,21 @@ package body Raven.Engine.Memory is
 
       return Raven.Objects.To_Vector (Base);
    end New_Vector;
+
+   -------------------------
+   -- Query_Foreign_Value --
+   -------------------------
+
+   overriding procedure Query_Foreign_Value
+     (This    : Instance;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : Foreign_Value_Instance'Class))
+   is
+   begin
+      Foreign_Value_Lists.Query_Element
+        (This.Value_Ids (Objects.To_Foreign_Value_Id (Value)), Process);
+   end Query_Foreign_Value;
 
    --------------------
    -- Quick_Allocate --

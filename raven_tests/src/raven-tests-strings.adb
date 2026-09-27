@@ -1,4 +1,5 @@
 with Ada.Exceptions;
+with Ada.Strings.Fixed;
 with Ada.Text_IO;
 
 package body Raven.Tests.Strings is
@@ -10,6 +11,11 @@ package body Raven.Tests.Strings is
    procedure Test_Error
      (VM         : Raven_VM;
       Expression : String);
+
+   procedure Test_Message
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
 
    procedure Test_String
      (VM         : Raven_VM;
@@ -51,6 +57,20 @@ package body Raven.Tests.Strings is
       Test_Error (VM, "(string->list ""abc"" 2 1)");
       Test_Error (VM, "(substring ""abc"" 0 9)");
       Test_Error (VM, "(string-ref ""abc"" 9)");
+
+      --  And what is said names the procedure that was asked.  These
+      --  are done in the machine now, not by walking a list, and a
+      --  list that ran out said so in terms of list-ref.
+
+      Test_Message (VM, "(string-ref ""abc"" 3)",
+                    "string-ref: 3 is not an index of a string of 3");
+      Test_Message (VM, "(string-ref 'abc 0)", "string-ref: not a string");
+      Test_Message (VM, "(substring ""abc"" 2 5)",
+                    "substring: 2 5 is not within a string of 3");
+      Test_Message (VM, "(string<? ""abc"" 'abc)",
+                    "string comparison: not a string");
+      Test_Message (VM, "(make-string -1 #\a)",
+                    "make-string: a string cannot be -1 long");
 
       --  The escapes R7RS asks for in a string.  \a and \b were not
       --  among them, and anything the reader did not know reported
@@ -151,6 +171,25 @@ package body Raven.Tests.Strings is
       when Constraint_Error =>
          Test (Expression & " is an error", True);
    end Test_Error;
+
+   ------------------
+   -- Test_Message --
+   ------------------
+
+   procedure Test_Message
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+      Test (Expression & " says " & Expected, False);
+   exception
+      when E : Constraint_Error =>
+         Test (Expression & " says " & Expected,
+               Ada.Strings.Fixed.Index
+                 (Ada.Exceptions.Exception_Message (E), Expected) > 0);
+   end Test_Message;
 
    -----------------
    -- Test_String --

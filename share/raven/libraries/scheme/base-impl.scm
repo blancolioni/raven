@@ -232,54 +232,36 @@
 (define (string-append . strings)
    (list->string (concatenate (map string->list strings))))
 
-;;  The rest of what R7RS asks of a string, written on string->list
-;;  and list->string, which is what string-append is written on.  Each
-;;  of them walks the string to do what a real string would do by
-;;  arithmetic; that is the price of a string being a foreign value,
-;;  and it is the same price string-append has always paid.
+;;  The rest of what R7RS asks of a string.  What can be done by
+;;  arithmetic is done by arithmetic, in the machine: an index, a slice,
+;;  a comparison, a string of one character over and over.  These were
+;;  written on string->list, which conses a pair for every character,
+;;  so a loop over a string with string-ref made the square of its
+;;  length in garbage.  string-append still walks, because it has to
+;;  touch every character anyway.
 
 (define (string . chars) (list->string chars))
 
-(define (make-string n fill)
-  (list->string (make-list n (optional fill #\space))))
+(define (make-string n fill) (raven-make-string n (optional fill #\space)))
 
-(define (string-ref string k) (list-ref (string->list string) k))
+(define string-ref raven-string-ref)
 
 ;;  substring and string-copy are one procedure under two names, which
-;;  is what R7RS says they are.  string->list already takes where to
-;;  start and where to stop and fills in the whole string when it is
-;;  not told.
+;;  is what R7RS says they are, and string-copy fills in the whole
+;;  string when it is not told where to start and stop.
 
-(define (substring string start end) (string->copy string start end))
-(define (string-copy string start end) (string->copy string start end))
+(define (substring string start end) (raven-substring string start end))
 
-(define (string->copy string start end)
-  (list->string (string->list string start end)))
+(define (string-copy string start end)
+  (raven-substring string
+		   (optional start 0)
+		   (optional end (string-length string))))
 
 ;;  Comparison.  A string is compared by its characters and a shorter
-;;  string that matches as far as it goes comes first, which is what
-;;  chars<? says and what string-length alone could not.
+;;  string that matches as far as it goes comes first.
 
-(define (chars=? xs ys)
-  (if (null? xs)
-      (null? ys)
-      (if (null? ys)
-	  #f
-	  (if (eq? (car xs) (car ys)) (chars=? (cdr xs) (cdr ys)) #f))))
-
-(define (chars<? xs ys)
-  (if (null? ys)
-      #f
-      (if (null? xs)
-	  #t
-	  (if (< (char->integer (car xs)) (char->integer (car ys)))
-	      #t
-	      (if (< (char->integer (car ys)) (char->integer (car xs)))
-		  #f
-		  (chars<? (cdr xs) (cdr ys)))))))
-
-(define (str=? a b) (chars=? (string->list a) (string->list b)))
-(define (str<? a b) (chars<? (string->list a) (string->list b)))
+(define (str=? a b) (= (raven-string-compare a b) 0))
+(define (str<? a b) (< (raven-string-compare a b) 0))
 
 (define (string=? . ss) (all-left-assoc str=? #t ss))
 (define (string<? . ss) (all-left-assoc str<? #t ss))
