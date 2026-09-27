@@ -55,13 +55,20 @@ package body Raven.Ports is
          Id : Port_Id;
       end record;
 
-   overriding function Show (This : Instance) return String;
+   --  A port holds nothing of the machine's, so neither is asked of the
+   --  callbacks the machine hands over.
+
+   overriding function Show
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
 
    overriding procedure Free (This : in out Instance);
 
    overriding function Equal
-     (This : Instance;
-      To   : Instance)
+     (This         : Instance;
+      To           : Instance;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
       return Boolean
    is (This.Id = To.Id);
 
@@ -739,7 +746,12 @@ package body Raven.Ports is
    -- Show --
    ----------
 
-   overriding function Show (This : Instance) return String is
+   overriding function Show
+     (This        : Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is
+      pragma Unreferenced (Show_Object);
    begin
       return "#"
         & (if Table (This.Id).Kind = Binary then "binary-" else "")

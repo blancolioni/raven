@@ -420,9 +420,23 @@ package Raven is
    --  same thing unless the kind of value has quotation marks or
    --  escapes that are only there for the reader, which is why Display
    --  has an answer of its own to give and Show does not.
+   --
+   --  Show_Object is how an object the value holds is shown: written by
+   --  Show and displayed by Display, as the machine would show it in the
+   --  same place.  It is the one thing either needs of the machine, and
+   --  all it is given -- as Mark is given Process -- so neither can make
+   --  anything or run anything while a message is being put together.
 
-   function Show (This : Foreign_Value_Instance) return String is abstract;
-   function Display (This : Foreign_Value_Instance) return String;
+   function Show
+     (This        : Foreign_Value_Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+      is abstract;
+
+   function Display
+     (This        : Foreign_Value_Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
 
    --  What this value holds that the collector must know about.
    --  Process is called with each object in it, and may replace it:
@@ -450,10 +464,18 @@ package Raven is
 
    procedure Free (This : in out Foreign_Value_Instance) is null;
 
-   function Equal (This : Foreign_Value_Instance;
-                   To   : Foreign_Value_Instance)
-                   return Boolean
-                   is abstract;
+   --  Whether two values of the same kind are equal?.  Equal_Object is
+   --  equal? on the objects they hold, so a value holding a pair is equal
+   --  to one holding an equal pair rather than only to one holding the
+   --  same pair; equal? walks a structure with a foreign value in it all
+   --  the way down, where it used to stop there.
+
+   function Equal
+     (This         : Foreign_Value_Instance;
+      To           : Foreign_Value_Instance;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
+      return Boolean
+      is abstract;
 
    --  Making one of these values and getting it back.  Without them a
    --  host could derive from Foreign_Value_Instance and override

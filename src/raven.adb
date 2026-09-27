@@ -199,8 +199,11 @@ package body Raven is
    -- Display --
    -------------
 
-   function Display (This : Foreign_Value_Instance) return String
-   is (Foreign_Value_Instance'Class (This).Show);
+   function Display
+     (This        : Foreign_Value_Instance;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is (Foreign_Value_Instance'Class (This).Show (Show_Object));
 
    -----------
    -- Equal --
@@ -213,6 +216,16 @@ package body Raven is
    is
       use Raven.Objects;
       B : Boolean := False;
+
+      function Equal_Object (P, Q : Object) return Boolean;
+
+      ------------------
+      -- Equal_Object --
+      ------------------
+
+      function Equal_Object (P, Q : Object) return Boolean
+      is (This.Equal (P, Q));
+
    begin
       if X = Y then
          B := True;
@@ -220,7 +233,7 @@ package body Raven is
          B := False;
       elsif Is_Foreign_Value (X) then
          B := This.To_Foreign_Value (X).Equal
-           (This.To_Foreign_Value (Y));
+           (This.To_Foreign_Value (Y), Equal_Object'Access);
       elsif Is_Foreign_Function (X) then
          B := False;
       elsif Is_Pair (X) then

@@ -10,13 +10,18 @@ package body Probe_Host is
          Right : Object;
       end record;
 
-   overriding function Show (This : Couple) return String;
+   overriding function Show
+     (This        : Couple;
+      Show_Object : not null access function (X : Object) return String)
+      return String;
 
    overriding function Equal
-     (This : Couple;
-      To   : Couple)
+     (This         : Couple;
+      To           : Couple;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
       return Boolean
-   is (This.Left = To.Left and then This.Right = To.Right);
+   is (Equal_Object (This.Left, To.Left)
+       and then Equal_Object (This.Right, To.Right));
 
    overriding procedure Mark
      (This    : in out Couple;
@@ -95,13 +100,14 @@ package body Probe_Host is
    -- Show --
    ----------
 
-   overriding function Show (This : Couple) return String is
-      pragma Unreferenced (This);
+   overriding function Show
+     (This        : Couple;
+      Show_Object : not null access function (X : Object) return String)
+      return String
+   is
    begin
-      --  Show is given no VM, so this cannot say what it holds.  That
-      --  is the other half of the same omission and is its own issue.
-
-      return "#couple";
+      return "#<couple " & Show_Object (This.Left)
+        & " " & Show_Object (This.Right) & ">";
    end Show;
 
 end Probe_Host;

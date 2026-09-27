@@ -48,7 +48,18 @@ package body Raven.Target is
    is
       use Raven.Objects;
 
+      function Show_Held (Held : Object) return String;
       function Show_List (List : Object) return String;
+
+      ---------------
+      -- Show_Held --
+      ---------------
+
+      --  An object a foreign value holds, shown as this one is being:
+      --  written if it is written, displayed if it is displayed.
+
+      function Show_Held (Held : Object) return String
+      is (This.Show (Held, Readable));
 
       ---------------
       -- Show_List --
@@ -154,8 +165,8 @@ package body Raven.Target is
          end;
       elsif Is_Foreign_Value (X) then
          return (if Readable
-                 then This.To_Foreign_Value (X).Show
-                 else This.To_Foreign_Value (X).Display);
+                 then This.To_Foreign_Value (X).Show (Show_Held'Access)
+                 else This.To_Foreign_Value (X).Display (Show_Held'Access));
       else
          return To_String (X);
       end if;
