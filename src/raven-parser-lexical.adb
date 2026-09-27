@@ -787,13 +787,18 @@ package body Raven.Parser.Lexical is
 
    function Tok_Integer_Value
      (This : in out Instance'Class)
-      return Integer
+      return Long_Long_Integer
    is
       Text : constant Wide_Wide_String :=
                To_Wide_Wide_String (This.Current_Stream.Tok_Text);
       Base     : Natural := 10;
       Negative : Boolean := False;
-      Result   : Integer := 0;
+      Result   : Long_Long_Integer := 0;
+
+      --  Far past anything an object holds, and far enough inside what
+      --  Long_Long_Integer does that one more digit cannot overflow it.
+
+      Too_Large : constant Long_Long_Integer := 2 ** 40;
       I        : Natural := Text'First;
    begin
       --  The token is whatever the identifier scanner classified as an
@@ -833,7 +838,11 @@ package body Raven.Parser.Lexical is
       end if;
 
       while I <= Text'Last loop
-         Result := Result * Base + Hex_Digit (Text (I));
+         if Result < Too_Large then
+            Result :=
+              Result * Long_Long_Integer (Base)
+              + Long_Long_Integer (Hex_Digit (Text (I)));
+         end if;
          I := I + 1;
       end loop;
 
