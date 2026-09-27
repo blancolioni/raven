@@ -19,6 +19,12 @@ private package Raven.Evaluator is
       return Raven.Target.Reference
       is abstract;
 
+   --  Giving back what this evaluator made: the environment, the
+   --  symbols and the machine.  What it was given -- the memory -- is
+   --  not its to give back.
+
+   procedure Close (This : in out Abstraction) is abstract;
+
    function Bind_Handle_To_Name
      (This : in out Abstraction;
       Name : String)

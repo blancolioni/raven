@@ -91,6 +91,16 @@ private package Raven.Memory is
    is abstract
      with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
 
+   --  Giving up everything held.  Every foreign value still live is
+   --  told, because Free is how one gives back whatever it stood for
+   --  -- an open file, a host's memory -- and no collection happens
+   --  at shutdown to tell it.
+   --
+   --  What is left afterwards is a memory that owns nothing, so that
+   --  whoever holds the reference can give it back.
+
+   procedure Close (This : in out Abstraction) is abstract;
+
    procedure Mark
      (This : in out Abstraction;
       Root : in out Object)

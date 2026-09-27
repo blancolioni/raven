@@ -1,4 +1,5 @@
 with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
+with Ada.Unchecked_Deallocation;
 with Raven.Engine;
 with Raven.Evaluator;
 with Raven.IO;
@@ -100,8 +101,45 @@ package body Raven is
    ------------------
 
    procedure Close_VM (This : in out Raven_VM) is
+      procedure Free is
+        new Ada.Unchecked_Deallocation (Raven_VM_Record, Raven_VM_Access);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Evaluator.Abstraction'Class, Raven.Evaluator.Reference);
+
+      procedure Free is
+        new Ada.Unchecked_Deallocation
+          (Raven.Memory.Abstraction'Class, Raven.Memory.Reference);
    begin
-      null;
+      --  Closing one that is closed already is not an error: a host
+      --  with a cleanup path will reach here twice and should not
+      --  have to remember which time it is.
+
+      if This.Data = null then
+         return;
+      end if;
+
+      --  The values go first, while everything they might reach is
+      --  still standing.  Free is how a foreign value gives back what
+      --  it stood for, and a collection is what usually calls it --
+      --  there being none at shutdown is why an open port used to
+      --  stay open for the life of the process.
+
+      This.Data.Memory.Close;
+
+      --  Then what the engine made, then the engine, then the heap.
+      --  The heap is the large one: Heap_Size cells, half a megabyte
+      --  at the default, and it was never given back.
+
+      This.Data.Evaluator.Close;
+      Free (This.Data.Evaluator);
+      Free (This.Data.Memory);
+
+      --  The user data and the host are the host's, and are not
+      --  raven's to give back.
+
+      Free (This.Data);
    end Close_VM;
 
    --------------------------

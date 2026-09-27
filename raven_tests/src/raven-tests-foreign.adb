@@ -182,6 +182,47 @@ package body Raven.Tests.Foreign is
       Test_Value (VM, "(car (probe-left probe-pair))", "8");
       Test_Value (VM, "(cdr (probe-right probe-pair))", "7");
 
+      --  Closing a VM tells its foreign values.  No collection
+      --  happens at shutdown, and Free is how one gives back what it
+      --  stood for -- an open file, a host's memory -- so without
+      --  this a port stayed open for the life of the process.
+
+      declare
+         Before : constant Natural := Freed;
+         Other  : Raven_VM := New_VM (Library_Path => Library_Path);
+         Used   : Boolean := False;
+      begin
+         Other.Bind_Foreign_Function ("probe-box", Make_Box'Access, 1);
+         Other.Evaluate ("(import (scheme base))");
+         Other.Evaluate ("(define probe-shut (probe-box 1))");
+
+         Test ("a box of another VM's is not freed while it lives",
+               Before = Freed);
+
+         Other.Close_VM;
+         Test ("and is freed when that VM closes", Before + 1 = Freed);
+
+         --  A host with a cleanup path reaches here twice and should
+         --  not have to remember which time it is.
+
+         Other.Close_VM;
+         Test ("closing a closed VM does nothing", Before + 1 = Freed);
+
+         --  And using one afterwards is caught rather than reading
+         --  memory that has been given back.
+
+         Used := True;
+
+         begin
+            Other.Evaluate ("1");
+         exception
+            when others =>
+               Used := False;
+         end;
+
+         Test ("using a closed VM is refused", not Used);
+      end;
+
       --  A handle on what is in a slot.  A slot holds what a foreign
       --  function was given only until the machine runs again, so a
       --  handle is how a host keeps one -- and it used to answer with
