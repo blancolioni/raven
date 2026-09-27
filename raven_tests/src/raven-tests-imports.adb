@@ -271,6 +271,40 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "conditional-which", "raven");
       Test_Name (VM, "conditional-library", "found");
       Test_Name (VM, "conditional-nested", "nested");
+
+      --  A library that offers names under other names.  What an
+      --  importer writes is the external name; the internal one stays
+      --  the library's own, unless it is offered under that name too.
+
+      Test_Undefined (VM, "renaming-outside");
+      Evaluate (VM, "(import (probe renaming))");
+      Test_Name (VM, "renaming-outside", "inside");
+      Test_Undefined (VM, "renaming-inside");
+      Test_Name (VM, "renaming-plain", "plain");
+      Test_Name (VM, "(renaming-shown)", "inside");
+      Test_Name (VM, "(renaming-doubled 3)", "(3 3)");
+      Test_Undefined (VM, "(renaming-twice 3)");
+      Test_Name (VM, "renaming-plain-again", "again");
+      Test_Name (VM, "renaming-alias", "again");
+
+      --  include-ci is include here, because every file is read with
+      --  its identifiers folded already.
+
+      Evaluate (VM, "(import (probe folded))");
+      Test_Name (VM, "folded-name", "folded");
+
+      --  A declaration nothing knows counts against the library, as a
+      --  form it cannot run does, and nothing imports it.
+
+      declare
+         Before : constant Natural := VM.Forms_Abandoned;
+      begin
+         Evaluate (VM, "(import (probe undeclared))");
+         Test ("a declaration nothing knows is counted",
+               VM.Forms_Abandoned = Before + 1);
+      end;
+
+      Test_Undefined (VM, "undeclared-name");
    end Run_Tests;
 
    ---------------
