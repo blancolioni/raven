@@ -1,4 +1,5 @@
 with Ada.Exceptions;
+with Ada.Strings.Fixed;
 with Ada.Text_IO;
 
 package body Raven.Tests.Numbers is
@@ -6,6 +7,11 @@ package body Raven.Tests.Numbers is
    procedure Test_Error
      (VM         : Raven_VM;
       Expression : String);
+
+   procedure Test_Message
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
 
    procedure Test_Number
      (VM         : Raven_VM;
@@ -67,6 +73,41 @@ package body Raven.Tests.Numbers is
 
       Test_Number (VM, "(length '(1 2 3 4 5))", 5);
       Test_Number (VM, "(length (append '(1 2 3) '(4 5 6)))", 6);
+
+      --  An integer is 29 bits and a sign.  Up to the edge is fine,
+      --  and past it is refused and says so, where it used to be an
+      --  assertion out of the machine with contracts on and a number
+      --  with its top bits lost with them off.
+
+      Test_Number (VM, "(+ 536870910 1)", 536_870_911);
+      Test_Number (VM, "(- -536870911 1)", -536_870_912);
+      Test_Number (VM, "(* 23170 23170)", 536_848_900);
+      Test_Number (VM, "(- 0 536870911)", -536_870_911);
+
+      Test_Error (VM, "(+ 536870911 1)");
+      Test_Error (VM, "(- -536870912 1)");
+      Test_Error (VM, "(* 23171 23171)");
+      Test_Error (VM, "(- -536870912)");
+
+      --  A product too large for Ada's own Integer as well, which is
+      --  the case where computing it narrow was not even a wrong
+      --  answer but an overflow in the arithmetic.
+
+      Test_Error (VM, "(* 65536 65536)");
+
+      --  And the one division that overflows.
+
+      Test_Error (VM, "(/ -536870912 -1)");
+      Test_Number (VM, "(/ -536870912 1)", -536_870_912);
+
+      Test_Message
+        (VM, "(+ 536870911 1)",
+         "integer overflow: 536870911 + 1 is past the largest integer"
+         & " raven holds, 536870911");
+      Test_Message
+        (VM, "(* -536870912 2)",
+         "integer overflow: -536870912 * 2 is past the smallest integer"
+         & " raven holds, -536870912");
    end Run_Tests;
 
    ----------------
@@ -84,6 +125,25 @@ package body Raven.Tests.Numbers is
       when Constraint_Error =>
          Test ("evaluate: " & Expression & " is an error", True);
    end Test_Error;
+
+   ------------------
+   -- Test_Message --
+   ------------------
+
+   procedure Test_Message
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+      Test ("evaluate: " & Expression & " says " & Expected, False);
+   exception
+      when E : Constraint_Error =>
+         Test ("evaluate: " & Expression & " says so",
+               Ada.Strings.Fixed.Index
+                 (Ada.Exceptions.Exception_Message (E), Expected) > 0);
+   end Test_Message;
 
    -----------------
    -- Test_Number --

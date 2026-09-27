@@ -23,8 +23,13 @@ private package Raven.Parser.Lexical is
    function Tok_Character_Value
      (This : in out Instance'Class)
       return Wide_Wide_Character;
+   --  Wide, so that a literal too large for an object is read as the
+   --  number it is and can be refused as that, rather than overflowing
+   --  on the way in.  Past what Long_Long_Integer holds it stops
+   --  growing, which is still too large.
+
    function Tok_Integer_Value (This : in out Instance'Class)
-                               return Integer;
+                               return Long_Long_Integer;
    function Tok_Float_Value (This : in out Instance'Class)
                              return Float;
 

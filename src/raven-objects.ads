@@ -34,12 +34,21 @@ private package Raven.Objects is
 
    function Is_Number (X : Object) return Boolean;
 
+   --  The integers an object holds: the payload and a sign, which is
+   --  29 bits of magnitude.  What is past them is not an integer raven
+   --  has, and arithmetic and the reader both say so rather than
+   --  answering with a different number.
+
+   Max_Integer : constant := 2 ** (Object_Payload_Bits - 1) - 1;
+   Min_Integer : constant := -2 ** (Object_Payload_Bits - 1);
+
    function Is_Integer (X : Object) return Boolean;
    function To_Integer (X : Object) return Integer
      with Pre => Is_Integer (X);
    function To_Object (I : Integer) return Object
-     with Post => Is_Integer (To_Object'Result)
-     and then To_Integer (To_Object'Result) = I;
+     with Pre  => I in Min_Integer .. Max_Integer,
+          Post => Is_Integer (To_Object'Result)
+                  and then To_Integer (To_Object'Result) = I;
 
    --  The floats raven holds are one sign bit, six of exponent and
    --  twenty three of significand.  That is IEEE single's precision
@@ -263,9 +272,6 @@ private
 
    Object_Tag_Mask : constant := 2 ** Object_Tag_Bits - 1;
    Full_Tag_Mask   : constant := 2 ** Full_Tag_Bits - 1;
-
-   Max_Integer : constant := 2 ** (Object_Payload_Bits - 1) - 1;
-   Min_Integer : constant := -2 ** (Object_Payload_Bits - 1);
 
    function Tag (X : Object) return Object
    is (X and Object_Tag_Mask);
