@@ -262,6 +262,15 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(import (scheme cxr))");
       Test_Number (VM, "(caddr '(1 2 3))", 3);
       Test_Number (VM, "(cadddr '(1 2 3 4))", 4);
+
+      --  A library that chooses its declarations by feature.  Every
+      --  name it exports is chosen by a cond-expand, so if the choosing
+      --  went wrong the import would find names undefined.
+
+      Evaluate (VM, "(import (probe conditional))");
+      Test_Name (VM, "conditional-which", "raven");
+      Test_Name (VM, "conditional-library", "found");
+      Test_Name (VM, "conditional-nested", "nested");
    end Run_Tests;
 
    ---------------

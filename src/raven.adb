@@ -2,6 +2,7 @@ with Ada.Strings.UTF_Encoding.Wide_Wide_Strings;
 with Ada.Unchecked_Deallocation;
 with Raven.Engine;
 with Raven.Evaluator;
+with Raven.Features;
 with Raven.IO;
 with Raven.Loader;
 with Raven.Memory;
@@ -31,6 +32,14 @@ package body Raven is
          Target      : Raven.Target.Reference;
          IO          : IO_Reference;
       end record;
+
+   --  What the base library's features and cond-expand are written
+   --  on.  They are bound here, before (scheme base) is read, because
+   --  the requirement test is the loader's and wants the target, which
+   --  only the VM reaches.
+
+   procedure Features_Of (VM : Raven_VM);
+   procedure Holds_Requirement (VM : Raven_VM);
 
    procedure Check_Kind
      (This     : Raven_VM;
@@ -313,6 +322,20 @@ package body Raven is
       This.Set_Slot (1, This.Data.Target.Pop);
    end Evaluate;
 
+   -----------------
+   -- Features_Of --
+   -----------------
+
+   procedure Features_Of (VM : Raven_VM) is
+   begin
+      VM.Set_Slot_Nil (1);
+
+      for Index in reverse 1 .. Raven.Features.Count loop
+         VM.Set_Slot_Symbol (2, Raven.Features.Feature (Index));
+         VM.Slot_Cons (1, 2);
+      end loop;
+   end Features_Of;
+
    ---------------------
    -- Forms_Abandoned --
    ---------------------
@@ -441,6 +464,17 @@ package body Raven is
         (Position => This.Data.Evaluator.Hold (This.Get_Slot (Index)));
    end Get_Slot;
 
+   -----------------------
+   -- Holds_Requirement --
+   -----------------------
+
+   procedure Holds_Requirement (VM : Raven_VM) is
+      Requirement : constant Object := VM.Get_Slot (1);
+   begin
+      VM.Set_Slot
+        (1, Raven.Loader.Requirement_Holds (VM.Data.Target, Requirement));
+   end Holds_Requirement;
+
    --------------------
    -- Import_Library --
    --------------------
@@ -568,6 +602,11 @@ package body Raven is
       This.Data.Target    := This.Data.Evaluator.Target;
 
       This.Add_Library_Path (Libraries);
+
+      This.Bind_Foreign_Function
+        ("raven-features", Features_Of'Access, 0);
+      This.Bind_Foreign_Function
+        ("raven-feature-requirement?", Holds_Requirement'Access, 1);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",

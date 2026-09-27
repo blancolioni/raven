@@ -10,7 +10,7 @@
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
 ;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
-;;  rests, str=?, str<?, do-next,
+;;  rests, str=?, str<?, do-next, cond-expand-choose,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
 ;;  bytevector->list, bytevector-onto, bytevector-tail, write-char-list,
@@ -88,10 +88,8 @@
    bytevector-copy bytevector-copy! bytevector-append
    utf8->string string->utf8
 
-   ;;  strings.  Every one of these walks the string, because a string
-   ;;  is a foreign value and not something with an index; what is not
-   ;;  here is string-set!, string-fill! and string-copy!, which want
-   ;;  one that can be written to.
+   ;;  strings.  What is not here is string-set!, string-fill! and
+   ;;  string-copy!, which want a string that can be written to.
    string? string-length string-append list->string string->list
    string make-string string-ref substring string-copy
    string=? string<? string>? string<=? string>=?
@@ -124,6 +122,9 @@
    ;;  syntax
    define-syntax let let* letrec letrec* let-syntax letrec-syntax
    when unless and or cond case do
+
+   ;;  what this raven is, and choosing by it
+   features cond-expand
 
    ;;  and what a promise is made of, which is a closure and a set!
    delay delay-force force make-promise)

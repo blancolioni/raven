@@ -5,6 +5,7 @@ with Ada.Strings.Fixed;
 with Ada.Strings.Unbounded;
 with Ada.Text_IO;
 
+with Raven.Features;
 with Raven.Objects;
 with Raven.Strings;
 with Raven.Parser;
@@ -69,6 +70,16 @@ package body Raven.Loader is
       Abandoned : in out Natural);
 
    procedure Read_Declaration
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String;
+      Source    : String;
+      Abandoned : in out Natural);
+
+   --  The declarations of the first clause whose requirement holds, read
+   --  as though they had been written where the cond-expand is.
+
+   procedure Read_Cond_Expand
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
       Directory : String;
@@ -467,6 +478,57 @@ package body Raven.Loader is
    end Read_Begin;
 
    ----------------------
+   -- Read_Cond_Expand --
+   ----------------------
+
+   procedure Read_Cond_Expand
+     (Target    : Raven.Target.Reference;
+      Library   : Raven.Target.Real_Library_Id;
+      Directory : String;
+      Source    : String;
+      Abandoned : in out Natural)
+   is
+      Chosen : Object := Raven.Objects.Nil;
+      Clause : Object := Target.Cdr (Target.Top);
+   begin
+      --  Choosing makes nothing, so the clauses can be walked from an
+      --  Ada variable.  What is chosen goes on the stack before anything
+      --  is read, because reading a declaration runs the machine.
+
+      while Raven.Objects.Is_Pair (Clause) loop
+         declare
+            This_Clause : constant Object := Target.Car (Clause);
+         begin
+            if Raven.Objects.Is_Pair (This_Clause)
+              and then
+                (Target.Car (This_Clause) = Target.To_Symbol ("else")
+                 or else Requirement_Holds
+                           (Target, Target.Car (This_Clause)))
+            then
+               Chosen := Target.Cdr (This_Clause);
+               exit;
+            end if;
+         end;
+         Clause := Target.Cdr (Clause);
+      end loop;
+
+      --  None holding and no else is left unspecified by R7RS, and here
+      --  is nothing: the library is read without whatever the
+      --  cond-expand would have given it.
+
+      Target.Drop;
+      Target.Push (Chosen);
+
+      while Raven.Objects.Is_Pair (Target.Top) loop
+         Target.Push (Target.Car (Target.Top));
+         Read_Declaration (Target, Library, Directory, Source, Abandoned);
+         Target.Push (Target.Cdr (Target.Pop));
+      end loop;
+
+      Target.Drop;
+   end Read_Cond_Expand;
+
+   ----------------------
    -- Read_Declaration --
    ----------------------
 
@@ -486,6 +548,8 @@ package body Raven.Loader is
          Read_Begin (Target, Library, Source, Abandoned);
       elsif Is_Head (Target, "include") then
          Read_Include (Target, Library, Directory, Abandoned);
+      elsif Is_Head (Target, "cond-expand") then
+         Read_Cond_Expand (Target, Library, Directory, Source, Abandoned);
       else
          Report
            (Target,
@@ -805,6 +869,92 @@ package body Raven.Loader is
 
       Target.Report_Error (Message);
    end Report;
+
+   -----------------------
+   -- Requirement_Holds --
+   -----------------------
+
+   function Requirement_Holds
+     (Target      : Raven.Target.Reference;
+      Requirement : Object)
+      return Boolean
+   is
+      use Raven.Objects;
+
+      function Head_Is (Name : String) return Boolean
+      is (Target.Car (Requirement) = Target.To_Symbol (Name));
+
+      function All_Hold (List : Object) return Boolean;
+      function Any_Holds (List : Object) return Boolean;
+
+      --------------
+      -- All_Hold --
+      --------------
+
+      function All_Hold (List : Object) return Boolean is
+         It : Object := List;
+      begin
+         while Is_Pair (It) loop
+            if not Requirement_Holds (Target, Target.Car (It)) then
+               return False;
+            end if;
+            It := Target.Cdr (It);
+         end loop;
+         return True;
+      end All_Hold;
+
+      ---------------
+      -- Any_Holds --
+      ---------------
+
+      function Any_Holds (List : Object) return Boolean is
+         It : Object := List;
+      begin
+         while Is_Pair (It) loop
+            if Requirement_Holds (Target, Target.Car (It)) then
+               return True;
+            end if;
+            It := Target.Cdr (It);
+         end loop;
+         return False;
+      end Any_Holds;
+
+   begin
+      if Is_Symbol (Requirement) then
+         return Raven.Features.Is_Feature
+           (Target.To_String (To_Symbol (Requirement)));
+      elsif not Is_Pair (Requirement) then
+         null;
+      elsif Head_Is ("and") then
+         return All_Hold (Target.Cdr (Requirement));
+      elsif Head_Is ("or") then
+         return Any_Holds (Target.Cdr (Requirement));
+      elsif Head_Is ("not")
+        and then Is_Pair (Target.Cdr (Requirement))
+      then
+         return not Requirement_Holds (Target, Target.Cadr (Requirement));
+      elsif Head_Is ("library")
+        and then Is_Pair (Target.Cdr (Requirement))
+      then
+
+         --  A library that is here, or one that could be read: which
+         --  asks where it would be found and does not read it.
+
+         declare
+            Name : constant String :=
+                     Library_Name (Target, Target.Cadr (Requirement));
+         begin
+            return Target.Library (Name) /= Raven.Target.No_Library
+              or else Find_File (Target, Name) /= "";
+         end;
+      end if;
+
+      Report
+        (Target,
+         "cond-expand: not a feature requirement: "
+         & Target.Show (Requirement));
+      return False;
+   end Requirement_Holds;
 
    ----------------------
    -- Take_Declaration --
