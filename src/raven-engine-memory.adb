@@ -147,6 +147,16 @@ package body Raven.Engine.Memory is
    function Cells_For (Length : Natural) return Address_Type
    is (Address_Type (1 + (Length + 1) / 2));
 
+   --  And a bytevector of this many bytes, which keeps them packed a
+   --  payload's worth to an object: the same shape as a vector of that
+   --  many objects.  It was a byte to an object, eight bytes of heap for
+   --  every two of data.
+
+   function Byte_Cells_For (Length : Natural) return Address_Type
+   is (Cells_For
+         ((Length + Objects.Bytes_Per_Object - 1)
+          / Objects.Bytes_Per_Object));
+
    function Allocate_Block
      (This  : in out Instance'Class;
       Count : Address_Type)
@@ -157,6 +167,23 @@ package body Raven.Engine.Memory is
       Address : Address_Type;
       Count   : Address_Type)
       return Address_Type;
+
+   --  A byte of a bytevector, found as the element of a vector of
+   --  packed objects would be and then as a position within that one.
+   --  These are the only places a packed object is read or written, and
+   --  what they take and give is a byte, never the object.
+
+   function Get_Byte
+     (This  : Instance'Class;
+      V     : Object;
+      Index : Natural)
+      return Raven.Objects.Byte;
+
+   procedure Set_Byte
+     (This  : in out Instance'Class;
+      V     : Object;
+      Index : Natural;
+      Value : Object);
 
    --  Where an element sits: the cell after the header it falls in,
    --  and which half of that cell.
@@ -571,6 +598,27 @@ package body Raven.Engine.Memory is
       end if;
    end GC;
 
+   --------------
+   -- Get_Byte --
+   --------------
+
+   function Get_Byte
+     (This  : Instance'Class;
+      V     : Object;
+      Index : Natural)
+      return Raven.Objects.Byte
+   is
+      Slot : constant Natural := Index / Objects.Bytes_Per_Object;
+      Cell : constant Address_Type := Element_Cell (V, Slot);
+      Held : constant Object :=
+               (if Slot mod 2 = 0
+                then This.Core (Cell).Car
+                else This.Core (Cell).Cdr);
+   begin
+      return Raven.Objects.Packed_Byte
+        (Held, Index mod Objects.Bytes_Per_Object);
+   end Get_Byte;
+
    -------------------
    -- In_From_Space --
    -------------------
@@ -686,7 +734,11 @@ package body Raven.Engine.Memory is
                  Raven.Objects.To_Pair
                    (Copy_Block
                       (This, Address,
-                       Cells_For (Raven.Objects.To_Integer (Cell.Car))));
+                       (if Raven.Objects.Is_Bytevector (Item)
+                        then Byte_Cells_For
+                          (Raven.Objects.To_Integer (Cell.Car))
+                        else Cells_For
+                          (Raven.Objects.To_Integer (Cell.Car)))));
             else
                Cell.Car :=
                  Raven.Objects.To_Pair
@@ -726,24 +778,23 @@ package body Raven.Engine.Memory is
       Length : Natural)
       return Object
    is
-      V : constant Object := This.New_Vector (Length);
+      Count : constant Address_Type := Byte_Cells_For (Length);
+      Base  : constant Address_Type := Allocate_Block (This, Count);
    begin
-      --  The same block, said to be a bytevector.  What tells them
-      --  apart is the tag and nothing else, because what a bytevector
-      --  may hold is checked where it is put in rather than by the
-      --  shape of the thing holding it.
-      --
-      --  Which is why the elements are set: a vector's are nil, and
-      --  nil is not a byte, so a bytevector straight out of here was
-      --  not a bytevector until somebody filled it.  Every caller did
-      --  that at once and none of them noticed.
+      --  A header with the length, as a vector has, and then the bytes
+      --  packed.  Every byte is nought to begin with, including the ones
+      --  past the end of the last object, so that Show and equal? never
+      --  see whatever was in the cell before.
 
-      for Index in 0 .. Length - 1 loop
-         This.Set_Vector_Element
-           (V, Index, Raven.Objects.To_Object (Integer'(0)));
+      This.Core (Base) :=
+        (Raven.Objects.To_Object (Length), Raven.Objects.Nil);
+
+      for Offset in 1 .. Count - 1 loop
+         This.Core (Base + Offset) :=
+           (Raven.Objects.No_Bytes, Raven.Objects.No_Bytes);
       end loop;
 
-      return Raven.Objects.To_Bytevector (Raven.Objects.Get_Address (V));
+      return Raven.Objects.To_Bytevector (Base);
    end New_Bytevector;
 
    ----------------
@@ -865,6 +916,46 @@ package body Raven.Engine.Memory is
       This.Core (Address) := Cell;
    end Set;
 
+   --------------
+   -- Set_Byte --
+   --------------
+
+   procedure Set_Byte
+     (This  : in out Instance'Class;
+      V     : Object;
+      Index : Natural;
+      Value : Object)
+   is
+      use Raven.Objects;
+      Slot : constant Natural := Index / Bytes_Per_Object;
+      Cell : constant Address_Type := Element_Cell (V, Slot);
+   begin
+      --  What may go in is checked here as well as by whoever asked,
+      --  because a bytevector written as #u8(...) is filled by the
+      --  reader and nothing else looks at what is in it.
+
+      if not Is_Integer (Value)
+        or else To_Integer (Value) not in 0 .. 255
+      then
+         raise Constraint_Error with
+           "a bytevector holds bytes, and " & Image (Value) & " is not one";
+      end if;
+
+      declare
+         B : constant Byte := Byte (Integer'(To_Integer (Value)));
+      begin
+         if Slot mod 2 = 0 then
+            This.Core (Cell).Car :=
+              With_Packed_Byte
+                (This.Core (Cell).Car, Index mod Bytes_Per_Object, B);
+         else
+            This.Core (Cell).Cdr :=
+              With_Packed_Byte
+                (This.Core (Cell).Cdr, Index mod Bytes_Per_Object, B);
+         end if;
+      end;
+   end Set_Byte;
+
    ------------------------
    -- Set_Vector_Element --
    ------------------------
@@ -875,13 +966,21 @@ package body Raven.Engine.Memory is
       Index : Natural;
       Value : Object)
    is
-      Cell : constant Address_Type := Element_Cell (V, Index);
    begin
-      if Index mod 2 = 0 then
-         This.Core (Cell).Car := Value;
-      else
-         This.Core (Cell).Cdr := Value;
+      if Raven.Objects.Is_Bytevector (V) then
+         Set_Byte (This, V, Index, Value);
+         return;
       end if;
+
+      declare
+         Cell : constant Address_Type := Element_Cell (V, Index);
+      begin
+         if Index mod 2 = 0 then
+            This.Core (Cell).Car := Value;
+         else
+            This.Core (Cell).Cdr := Value;
+         end if;
+      end;
    end Set_Vector_Element;
 
    --------------
@@ -906,11 +1005,18 @@ package body Raven.Engine.Memory is
       Index : Natural)
       return Object
    is
-      Cell : constant Address_Type := Element_Cell (V, Index);
    begin
-      return (if Index mod 2 = 0
-              then This.Core (Cell).Car
-              else This.Core (Cell).Cdr);
+      if Raven.Objects.Is_Bytevector (V) then
+         return Raven.Objects.To_Object (Integer (Get_Byte (This, V, Index)));
+      end if;
+
+      declare
+         Cell : constant Address_Type := Element_Cell (V, Index);
+      begin
+         return (if Index mod 2 = 0
+                 then This.Core (Cell).Car
+                 else This.Core (Cell).Cdr);
+      end;
    end Vector_Element;
 
    -------------------

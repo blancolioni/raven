@@ -202,6 +202,50 @@ private package Raven.Objects is
      with Post => Is_Foreign_Function (To_Object'Result)
      and then To_Foreign_Function_Id (To_Object'Result) = Id;
 
+   --  Packed bytes: an object whose payload is bytes rather than a
+   --  value, as many as the payload of an extended object holds.  It is
+   --  storage and never a value.  A bytevector's elements are kept in
+   --  these, and nothing but the memory's accessors may hold one: they
+   --  unpack a byte into an integer on the way out and pack one on the
+   --  way in, so no program and no slot ever sees one.
+   --
+   --  It has no address, so the collector passes it by as it passes an
+   --  integer, and every word of the heap is still a whole object.  The
+   --  count is derived rather than written, because an object of
+   --  another width holds another number of bytes.
+
+   Bytes_Per_Object : constant := Extended_Payload_Bits / 8;
+
+   type Byte is mod 2 ** 8;
+
+   subtype Byte_Position is Natural range 0 .. Bytes_Per_Object - 1;
+
+   function Is_Packed_Bytes (X : Object) return Boolean;
+
+   --  Every byte nought, which is what a new bytevector holds and what
+   --  the positions past the end of one are.
+
+   function No_Bytes return Object
+     with Post => Is_Packed_Bytes (No_Bytes'Result);
+
+   --  Position nought is the low byte of the payload.
+
+   function Packed_Byte
+     (X        : Object;
+      Position : Byte_Position)
+      return Byte
+     with Pre => Is_Packed_Bytes (X);
+
+   function With_Packed_Byte
+     (X        : Object;
+      Position : Byte_Position;
+      Value    : Byte)
+      return Object
+     with Pre  => Is_Packed_Bytes (X),
+          Post => Is_Packed_Bytes (With_Packed_Byte'Result)
+                  and then Packed_Byte (With_Packed_Byte'Result, Position)
+                             = Value;
+
    function Image
      (X : Object)
       return String;
@@ -249,6 +293,7 @@ private
    Closure_Tag     : constant := Escape_Tag + 6 * Extended_Step;
    Vector_Tag      : constant := Escape_Tag + 7 * Extended_Step;
    Bytevector_Tag  : constant := Escape_Tag + 8 * Extended_Step;
+   Bytes_Tag       : constant := Escape_Tag + 9 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -403,6 +448,29 @@ private
 
    function Is_Bytevector (X : Object) return Boolean
    is (Full_Tag (X) = Bytevector_Tag);
+
+   function Is_Packed_Bytes (X : Object) return Boolean
+   is (Full_Tag (X) = Bytes_Tag);
+
+   function No_Bytes return Object
+   is (Extend (0, Bytes_Tag));
+
+   function Packed_Byte
+     (X        : Object;
+      Position : Byte_Position)
+      return Byte
+   is (Byte ((Extended_Payload (X) / 2 ** (8 * Position)) mod 2 ** 8));
+
+   function With_Packed_Byte
+     (X        : Object;
+      Position : Byte_Position;
+      Value    : Byte)
+      return Object
+   is (Extend
+         (Extended_Payload (X)
+          - Object (Packed_Byte (X, Position)) * 2 ** (8 * Position)
+          + Object (Value) * 2 ** (8 * Position),
+          Bytes_Tag));
 
    function To_Bytevector (Address : Address_Type) return Object
    is (Extend (Object (Address), Bytevector_Tag));
