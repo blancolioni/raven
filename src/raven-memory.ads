@@ -91,6 +91,19 @@ private package Raven.Memory is
    is abstract
      with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
 
+   --  The value where it is, for reading without the copy that
+   --  To_Foreign_Value makes: a string of a thousand characters is a
+   --  thousand characters copied to reach one of them.  Process must
+   --  not make anything while it runs, because the table is held.
+
+   procedure Query_Foreign_Value
+     (This    : Abstraction;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : Foreign_Value_Instance'Class))
+   is abstract
+     with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
+
    --  Giving up everything held.  Every foreign value still live is
    --  told, because Free is how one gives back whatever it stood for
    --  -- an open file, a host's memory -- and no collection happens

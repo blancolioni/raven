@@ -699,6 +699,33 @@
 (test "string<? over three that do not rise" #f (string<? "a" "c" "b"))
 (test "string=? over three" #t (string=? "a" "a" "a"))
 
+;;  A string is compared by the codes of its characters, which puts
+;;  every capital before every small letter and ASCII before the rest.
+
+(test "string<? by the code of a character" #t (string<? "Z" "a"))
+(test "string<? past ASCII" #t (string<? "z" "λ"))
+(test "string-ref past ASCII" 955 (char->integer (string-ref "aλb" 1)))
+
+;;  string-ref, substring and the comparisons are arithmetic.  They
+;;  were written on string->list, which made a pair for every character
+;;  of the string to reach one of them, so this loop -- the obvious
+;;  way to look at every character -- made a hundred million pairs.
+
+(define probe-long-string (make-string 10000 #\a))
+
+(define (probe-count-a s i n)
+  (if (= i (string-length s))
+      n
+      (probe-count-a s (+ i 1) (if (eq? (string-ref s i) #\a) (+ n 1) n))))
+
+(test "string-ref over every one of ten thousand" 10000
+      (probe-count-a probe-long-string 0 0))
+(test "the end of a long string" "aaa" (substring probe-long-string 9997 10000))
+(test "string=? over two long strings" #t
+      (string=? probe-long-string (make-string 10000 #\a)))
+(test "string<? over two long strings" #t
+      (string<? (make-string 9999 #\a) probe-long-string))
+
 ;;  string-map and string-for-each take as many strings as they are
 ;;  given and stop at the shortest, because map and for-each do.
 

@@ -562,6 +562,20 @@ package body Raven is
       return This;
    end New_VM;
 
+   -------------------------
+   -- Query_Foreign_Value --
+   -------------------------
+
+   procedure Query_Foreign_Value
+     (This    : Raven_VM'Class;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : Foreign_Value_Instance'Class))
+   is
+   begin
+      This.Data.Memory.Query_Foreign_Value (Value, Process);
+   end Query_Foreign_Value;
+
    --------------------
    -- Read_Character --
    --------------------

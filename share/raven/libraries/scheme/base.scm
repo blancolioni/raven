@@ -10,7 +10,7 @@
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
 ;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
-;;  rests, string->copy, chars=?, chars<?, str=?, str<?, do-next,
+;;  rests, str=?, str<?, do-next,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
 ;;  bytevector->list, bytevector-onto, bytevector-tail, write-char-list,

@@ -1,3 +1,4 @@
+with Ada.Strings.Fixed;
 with Raven.Objects;
 
 package body Raven.Strings is
@@ -9,6 +10,66 @@ package body Raven.Strings is
    procedure List_To_String (VM : Raven_VM);
    procedure String_To_List (VM : Raven_VM);
    procedure Enable_Trace (VM : Raven_VM);
+
+   --  What can be done to a string by arithmetic, done by arithmetic.
+   --  Each of these was written on string->list, which conses a pair
+   --  for every character: string-ref of one character of a thousand
+   --  made a thousand pairs, and a loop over a string made the square
+   --  of its length.
+
+   procedure Make_String (VM : Raven_VM);
+   procedure String_Compare (VM : Raven_VM);
+   procedure String_Ref (VM : Raven_VM);
+   procedure Substring (VM : Raven_VM);
+
+   --  The length of the string in this slot, or an error naming the
+   --  procedure that was given something else.  It looks at the string
+   --  where it is rather than copying it out to ask.
+
+   function Checked_Length
+     (VM   : Raven_VM;
+      Name : String;
+      Slot : Slot_Index)
+      return Natural;
+
+   --------------------
+   -- Checked_Length --
+   --------------------
+
+   function Checked_Length
+     (VM   : Raven_VM;
+      Name : String;
+      Slot : Slot_Index)
+      return Natural
+   is
+      X      : constant Object := VM.Get_Slot (Slot);
+      Length : Integer := -1;
+
+      procedure Measure (Item : Foreign_Value_Instance'Class);
+
+      -------------
+      -- Measure --
+      -------------
+
+      procedure Measure (Item : Foreign_Value_Instance'Class) is
+      begin
+         if Item in Instance'Class then
+            Length := Instance'Class (Item).Length;
+         end if;
+      end Measure;
+
+   begin
+      if Raven.Objects.Is_Foreign_Value (X) then
+         VM.Query_Foreign_Value (X, Measure'Access);
+      end if;
+
+      if Length < 0 then
+         raise Constraint_Error with
+           Name & ": not a string: " & Encode (VM.Display (X));
+      end if;
+
+      return Length;
+   end Checked_Length;
 
    -------------
    -- Display --
@@ -102,10 +163,26 @@ package body Raven.Strings is
       Slot : Slot_Index)
       return Boolean
    is
-      X : constant Object := VM.Get_Slot (Slot);
+      X      : constant Object := VM.Get_Slot (Slot);
+      Result : Boolean := False;
+
+      procedure Ask (Item : Foreign_Value_Instance'Class);
+
+      ---------
+      -- Ask --
+      ---------
+
+      procedure Ask (Item : Foreign_Value_Instance'Class) is
+      begin
+         Result := Item in Instance'Class;
+      end Ask;
+
    begin
-      return Raven.Objects.Is_Foreign_Value (X)
-        and then VM.To_Foreign_Value (X) in Instance'Class;
+      if Raven.Objects.Is_Foreign_Value (X) then
+         VM.Query_Foreign_Value (X, Ask'Access);
+      end if;
+
+      return Result;
    end Is_String;
 
    --------------------
@@ -174,7 +251,45 @@ package body Raven.Strings is
         ("raven-string->list", String_To_List'Access, 3);
       Evaluator.Bind_Foreign_Function
         ("raven-enable-trace", Enable_Trace'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-make-string", Make_String'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-string-ref", String_Ref'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-substring", Substring'Access, 3);
+      Evaluator.Bind_Foreign_Function
+        ("raven-string-compare", String_Compare'Access, 2);
    end Load_String_Library;
+
+   -----------------
+   -- Make_String --
+   -----------------
+
+   procedure Make_String (VM : Raven_VM) is
+      use Raven.Objects;
+      Length : constant Integer := VM.Get_Slot (1);
+      Fill   : constant Object := VM.Get_Slot (2);
+   begin
+      if Length < 0 then
+         raise Constraint_Error with
+           "make-string: a string cannot be "
+           & Ada.Strings.Fixed.Trim (Length'Image, Ada.Strings.Left) & " long";
+      end if;
+
+      if not Is_Character (Fill) then
+         raise Constraint_Error with
+           "make-string: not a character: " & Encode (VM.Display (Fill));
+      end if;
+
+      declare
+         V : constant Instance :=
+               (Foreign_Value_Instance with
+                Length => Length,
+                Value  => [1 .. Length => To_Character (Fill)]);
+      begin
+         VM.Set_Slot (1, VM.Create_Foreign_Value (V));
+      end;
+   end Make_String;
 
    ----------
    -- Show --
@@ -223,6 +338,55 @@ package body Raven.Strings is
       return Encode (Result (1 .. Last));
    end Show;
 
+   --------------------
+   -- String_Compare --
+   --------------------
+
+   --  Less than nothing, nothing, or more than nothing, as the first
+   --  string comes before the second, is the same, or comes after.  A
+   --  string that matches another as far as it goes comes first, which
+   --  is what "<" on two arrays says.
+
+   procedure String_Compare (VM : Raven_VM) is
+      Left   : constant Object := VM.Get_Slot (1);
+      Right  : constant Object := VM.Get_Slot (2);
+      Answer : Integer := 0;
+
+      procedure With_Left (L : Foreign_Value_Instance'Class);
+
+      ---------------
+      -- With_Left --
+      ---------------
+
+      procedure With_Left (L : Foreign_Value_Instance'Class) is
+
+         procedure With_Right (R : Foreign_Value_Instance'Class);
+
+         ----------------
+         -- With_Right --
+         ----------------
+
+         procedure With_Right (R : Foreign_Value_Instance'Class) is
+            A : Wide_Wide_String renames Instance'Class (L).Value;
+            B : Wide_Wide_String renames Instance'Class (R).Value;
+         begin
+            Answer := (if A < B then -1 elsif A = B then 0 else 1);
+         end With_Right;
+
+      begin
+         VM.Query_Foreign_Value (Right, With_Right'Access);
+      end With_Left;
+
+      Left_Length  : constant Natural :=
+                       Checked_Length (VM, "string comparison", 1);
+      Right_Length : constant Natural :=
+                       Checked_Length (VM, "string comparison", 2);
+      pragma Unreferenced (Left_Length, Right_Length);
+   begin
+      VM.Query_Foreign_Value (Left, With_Left'Access);
+      VM.Set_Slot (1, Answer);
+   end String_Compare;
+
    -------------------
    -- String_Length --
    -------------------
@@ -236,6 +400,38 @@ package body Raven.Strings is
    begin
       VM.Set_Slot (1, Instance'Class (VM.To_Foreign_Value (X)).Length);
    end String_Length;
+
+   ----------------
+   -- String_Ref --
+   ----------------
+
+   procedure String_Ref (VM : Raven_VM) is
+      Length : constant Natural := Checked_Length (VM, "string-ref", 1);
+      Index  : constant Integer := VM.Get_Slot (2);
+      Answer : Wide_Wide_Character;
+
+      procedure Look (Item : Foreign_Value_Instance'Class);
+
+      ----------
+      -- Look --
+      ----------
+
+      procedure Look (Item : Foreign_Value_Instance'Class) is
+         S : Wide_Wide_String renames Instance'Class (Item).Value;
+      begin
+         Answer := S (S'First + Index);
+      end Look;
+
+   begin
+      if Index not in 0 .. Length - 1 then
+         raise Constraint_Error with
+           "string-ref:" & Index'Image & " is not an index of a string of"
+           & Length'Image;
+      end if;
+
+      VM.Query_Foreign_Value (VM.Get_Slot (1), Look'Access);
+      VM.Set_Slot (1, Raven.Objects.To_Object (Answer));
+   end String_Ref;
 
    --------------------
    -- String_To_List --
@@ -284,6 +480,54 @@ package body Raven.Strings is
          VM.Set_Slot (1, Answer);
       end;
    end String_To_List;
+
+   ---------------
+   -- Substring --
+   ---------------
+
+   --  The characters from Start up to End, which is what substring and
+   --  string-copy both are.  The slice is taken where the string is and
+   --  made into a string of its own only after, because making one may
+   --  collect and nothing may be made while the string is looked at.
+
+   procedure Substring (VM : Raven_VM) is
+      Length : constant Natural := Checked_Length (VM, "substring", 1);
+      First  : constant Integer := VM.Get_Slot (2);
+      Last   : constant Integer := VM.Get_Slot (3);
+   begin
+      if First < 0 or else Last > Length or else First > Last then
+         raise Constraint_Error with
+           "substring:" & First'Image & Last'Image
+           & " is not within a string of" & Length'Image;
+      end if;
+
+      declare
+         Slice : Wide_Wide_String (1 .. Last - First);
+
+         procedure Take (Item : Foreign_Value_Instance'Class);
+
+         ----------
+         -- Take --
+         ----------
+
+         procedure Take (Item : Foreign_Value_Instance'Class) is
+            S : Wide_Wide_String renames Instance'Class (Item).Value;
+         begin
+            Slice := S (S'First + First .. S'First + Last - 1);
+         end Take;
+
+      begin
+         VM.Query_Foreign_Value (VM.Get_Slot (1), Take'Access);
+
+         declare
+            V : constant Instance := (Foreign_Value_Instance with
+                                      Length => Slice'Length,
+                                      Value  => Slice);
+         begin
+            VM.Set_Slot (1, VM.Create_Foreign_Value (V));
+         end;
+      end;
+   end Substring;
 
    ----------
    -- Text --
