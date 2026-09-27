@@ -41,10 +41,37 @@ package body Probe_Host is
 
    Freed : Natural := 0;
 
+   --  Calling back into the program: a procedure and its arguments,
+   --  applied from inside a foreign function, which is where a host is
+   --  when a program has handed it something to call.  Try is the same
+   --  with the failure caught, to say the program can go on after it.
+
+   procedure Apply_One (VM : Raven_VM);
+   procedure Apply_Two (VM : Raven_VM);
+   procedure Try_Apply (VM : Raven_VM);
+
    procedure Is_Couple (VM : Raven_VM);
    procedure Left_Of (VM : Raven_VM);
    procedure Make (VM : Raven_VM);
    procedure Right_Of (VM : Raven_VM);
+
+   ---------------
+   -- Apply_One --
+   ---------------
+
+   procedure Apply_One (VM : Raven_VM) is
+   begin
+      VM.Slot_Apply (1, 1);
+   end Apply_One;
+
+   ---------------
+   -- Apply_Two --
+   ---------------
+
+   procedure Apply_Two (VM : Raven_VM) is
+   begin
+      VM.Slot_Apply (1, 2);
+   end Apply_Two;
 
    ----------
    -- Bind --
@@ -56,6 +83,9 @@ package body Probe_Host is
       VM.Bind_Foreign_Function ("probe-left", Left_Of'Access, 1);
       VM.Bind_Foreign_Function ("probe-right", Right_Of'Access, 1);
       VM.Bind_Foreign_Function ("probe-couple?", Is_Couple'Access, 1);
+      VM.Bind_Foreign_Function ("probe-apply", Apply_One'Access, 2);
+      VM.Bind_Foreign_Function ("probe-apply2", Apply_Two'Access, 3);
+      VM.Bind_Foreign_Function ("probe-try", Try_Apply'Access, 2);
    end Bind;
 
    -------------------
@@ -158,5 +188,17 @@ package body Probe_Host is
       return String
    is ("#<couple " & Show_Object (Item.Left)
        & " " & Show_Object (Item.Right) & ">");
+
+   ---------------
+   -- Try_Apply --
+   ---------------
+
+   procedure Try_Apply (VM : Raven_VM) is
+   begin
+      VM.Slot_Apply (1, 1);
+   exception
+      when Constraint_Error =>
+         VM.Set_Slot_Symbol (1, "failed");
+   end Try_Apply;
 
 end Probe_Host;

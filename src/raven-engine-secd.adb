@@ -75,6 +75,7 @@ package body Raven.Engine.SECD is
          VM          : Raven_VM;
          Abandoned   : Natural := 0;
          Held        : Object_Vectors.Vector;
+         Suspended   : Object_Vectors.Vector;
          Incomplete  : Library_Id_Vectors.Vector;
          St          : Stacks;
          Rs          : Registers;
@@ -158,6 +159,11 @@ package body Raven.Engine.SECD is
 
    overriding procedure Execute
      (This   : in out Instance);
+
+   overriding procedure Apply
+     (This  : in out Instance;
+      Index : Slot_Index;
+      Count : Natural);
 
    overriding function Append_Lists
      (This  : in out Instance;
@@ -473,6 +479,106 @@ package body Raven.Engine.SECD is
       return Acc;
    end Append_Lists;
 
+   -----------
+   -- Apply --
+   -----------
+
+   overriding procedure Apply
+     (This  : in out Instance;
+      Index : Slot_Index;
+      Count : Natural)
+   is
+      --  Everything the machine was holding, in the one place the
+      --  collector will find it and keep it up to date: the registers,
+      --  the scratch registers and the host's slots.  Execute takes its
+      --  code off the stack and replaces C with it, so a run started
+      --  from inside another -- from a foreign function, which is where
+      --  a host is -- would otherwise lose the place the outer run was
+      --  at.  Suspended is a stack of these, because a procedure applied
+      --  this way may call a foreign function that applies another.
+
+      Base : constant Natural := Natural (This.Suspended.Length);
+
+      procedure Restore;
+
+      -------------
+      -- Restore --
+      -------------
+
+      procedure Restore is
+         Next : Positive := Base + 1;
+      begin
+         for Name in Stack_Name loop
+            This.St (Name) := This.Suspended (Next);
+            Next := Next + 1;
+         end loop;
+
+         for R in Register_Index loop
+            This.Rs (R) := This.Suspended (Next);
+            Next := Next + 1;
+         end loop;
+
+         for Slot in Slot_Index loop
+            This.VM.Set_Slot (Slot, This.Suspended (Next));
+            Next := Next + 1;
+         end loop;
+
+         This.Suspended.Set_Length (Ada.Containers.Count_Type (Base));
+      end Restore;
+
+      Answer : Object;
+
+   begin
+      for Name in Stack_Name loop
+         This.Suspended.Append (This.St (Name));
+      end loop;
+
+      for R of This.Rs loop
+         This.Suspended.Append (R);
+      end loop;
+
+      for Slot in Slot_Index loop
+         This.Suspended.Append (Object'(This.VM.Get_Slot (Slot)));
+      end loop;
+
+      --  The call, built on the stack so that every part of it is
+      --  somewhere the collector looks while the rest is made: the
+      --  arguments as a list, the procedure on top of them, and code
+      --  that applies one to the other and stops -- which is what AP
+      --  expects to find, whether the procedure is a closure or a
+      --  foreign function.  Cons takes the cdr from the top.
+
+      This.Push (Objects.Nil);
+
+      for I in reverse 1 .. Count loop
+         This.Push (This.VM.Get_Slot (Index + Slot_Index (I)));
+         This.Swap;
+         This.Cons (S);
+      end loop;
+
+      This.Push (This.VM.Get_Slot (Index));
+
+      This.Push (Objects.To_Object (Raven.Instructions.STOP));
+      This.Push (Objects.Nil);
+      This.Cons (S);
+      This.Push (Objects.To_Object (Raven.Instructions.AP));
+      This.Swap;
+      This.Cons (S);
+
+      This.Execute;
+      Answer := This.Pop;
+
+      Restore;
+      This.VM.Set_Slot (Index, Answer);
+
+   exception
+      when others =>
+         if Natural (This.Suspended.Length) > Base then
+            Restore;
+         end if;
+         raise;
+   end Apply;
+
    ---------------------------
    -- Bind_Foreign_Function --
    ---------------------------
@@ -550,6 +656,7 @@ package body Raven.Engine.SECD is
         (VM          => VM,
          Abandoned   => 0,
          Held        => Object_Vectors.Empty_Vector,
+         Suspended   => Object_Vectors.Empty_Vector,
          Incomplete  => Library_Id_Vectors.Empty_Vector,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
@@ -1247,6 +1354,14 @@ package body Raven.Engine.SECD is
          begin
             Process (Stack);
             This.Held.Replace_Element (Position, Stack);
+         end;
+      end loop;
+      for Position in This.Suspended.Iterate loop
+         declare
+            Item : Object := Object_Vectors.Element (Position);
+         begin
+            Process (Item);
+            This.Suspended.Replace_Element (Position, Item);
          end;
       end loop;
       for Position in This.Macros.Iterate loop
