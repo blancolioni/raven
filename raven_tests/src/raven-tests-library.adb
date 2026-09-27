@@ -156,6 +156,13 @@ package body Raven.Tests.Library is
       Test_Error (VM, "(bytevector-u8-ref (make-bytevector 2 0) 2)");
       Test_Error (VM, "(bytevector-u8-ref (vector 1 2) 0)");
       Test_Error (VM, "(bytevector-length (vector 1 2))");
+
+      --  A bytevector written out is filled by the reader, which asks
+      --  nothing of what it is given, so it is the memory that refuses
+      --  what will not pack into a byte.
+
+      Test_Error (VM, "'#u8(1 2 300)");
+      Test_Error (VM, "'#u8(1 a 3)");
       Test_Error (VM, "(utf8->string (vector 1 2))");
       Test_Error (VM, "(string->utf8 (vector 1 2))");
 

@@ -2095,6 +2095,55 @@
 (test "a long one survives too" 300 (bytevector-length kept-long-bytes))
 (test "with what was put in it" 9 (bytevector-u8-ref kept-long-bytes 299))
 
+;;  A bytevector's bytes are packed, as many to an object as its
+;;  payload holds, where they were one to an object: eight bytes of heap
+;;  for every two of data.  Each byte has its own place in the object it
+;;  shares, and setting one leaves the others as they were.
+
+(define probe-packed (make-bytevector 8 0))
+
+(define (probe-fill-packed! bv i)
+  (if (= i (bytevector-length bv))
+      bv
+      (begin
+        (bytevector-u8-set! bv i (- 255 (* 30 i)))
+        (probe-fill-packed! bv (+ i 1)))))
+
+(probe-fill-packed! probe-packed 0)
+
+(test "every byte in its own place" '#u8(255 225 195 165 135 105 75 45)
+      probe-packed)
+
+(bytevector-u8-set! probe-packed 4 0)
+
+(test "setting one leaves the one before" 165
+      (bytevector-u8-ref probe-packed 3))
+(test "and the one after" 105 (bytevector-u8-ref probe-packed 5))
+(test "and is itself" 0 (bytevector-u8-ref probe-packed 4))
+
+;;  What comes out is an integer like any other, made on the way out:
+;;  the object the bytes are packed in is never what is handed back.
+
+(test "a byte read back is an integer" #t
+      (integer? (bytevector-u8-ref probe-packed 0)))
+(test "and the same integer as any other 255" #t
+      (eq? (bytevector-u8-ref probe-packed 0) 255))
+
+;;  Thirty thousand bytes were fifteen thousand cells, which with the
+;;  suite's own and a collection's worth of churn is more than the
+;;  space it runs in.  Packed they are five thousand.
+
+(define probe-big-bytes (make-bytevector 30000 7))
+(bytevector-u8-set! probe-big-bytes 29999 200)
+
+(vector-churn 3000)
+
+(test "thirty thousand bytes fit" 30000 (bytevector-length probe-big-bytes))
+(test "and survive a collection" 200 (bytevector-u8-ref probe-big-bytes 29999))
+(test "with the rest as they were" 7 (bytevector-u8-ref probe-big-bytes 15000))
+
+(set! probe-big-bytes #f)
+
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
 ;;  evaluation of a literal spent another of the foreign values there
