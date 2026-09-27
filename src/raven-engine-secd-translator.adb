@@ -417,6 +417,7 @@ package body Raven.Engine.SECD.Translator is
          Name  : constant String :=
                    Target.To_String (Objects.To_Symbol (Sym));
          Found : Raven.Target.Real_Library_Id;
+         Where : Raven.Target.Real_Library_Id;
       begin
          --  Which library holds the name is settled here, so that the
          --  machine has nothing left to decide and a closure has
@@ -443,15 +444,25 @@ package body Raven.Engine.SECD.Translator is
          --  it; that is #24.
 
          if Home = Library then
-            Found := Target.Resolve (Library, Name);
+            Where := Library;
          elsif Expanding and then Target.Binds (Library, Name) then
-            Found := Target.Resolve (Library, Name);
+            Where := Library;
          else
-            Found := Target.Resolve (Home, Name);
+            Where := Home;
          end if;
 
-         This.Append (Objects.To_Object (Integer (Found)));
-         This.Append (Sym);
+         Found := Target.Resolve (Where, Name);
+
+         --  And by the name that library holds it under, which is not
+         --  the name written when it was imported through a rename.
+
+         declare
+            Held : constant String := Target.Resolved_Name (Where, Name);
+         begin
+            This.Append (Objects.To_Object (Integer (Found)));
+            This.Append
+              (if Held = Name then Sym else Target.To_Symbol (Held));
+         end;
       end Append_Reference;
 
       ----------------

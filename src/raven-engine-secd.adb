@@ -128,6 +128,12 @@ package body Raven.Engine.SECD is
       Library : Raven.Target.Real_Library_Id;
       Name    : String);
 
+   overriding procedure Add_Export
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Internal : String;
+      External : String);
+
    overriding procedure Define_Name
      (This    : in out Instance;
       Library : Raven.Target.Real_Library_Id;
@@ -139,6 +145,13 @@ package body Raven.Engine.SECD is
       Name    : String)
       return Raven.Target.Real_Library_Id
    is (This.Libraries.Resolve (Library, Name));
+
+   overriding function Resolved_Name
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return String
+   is (This.Libraries.Resolved_Name (Library, Name));
 
    overriding function Binds
      (This    : Instance;
@@ -422,6 +435,20 @@ package body Raven.Engine.SECD is
    is
    begin
       This.Libraries.Add_Export (Library, Name);
+   end Add_Export;
+
+   ----------------
+   -- Add_Export --
+   ----------------
+
+   overriding procedure Add_Export
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Internal : String;
+      External : String)
+   is
+   begin
+      This.Libraries.Add_Export (Library, Internal, External);
    end Add_Export;
 
    ----------------

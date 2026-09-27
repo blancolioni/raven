@@ -11,6 +11,15 @@ package body Raven.Engine.Libraries is
       Name    : String)
       return Boolean;
 
+   --  What a library that provides Name calls it.
+
+   function Internal_Name
+     (This     : Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      External : String)
+      return String
+     with Pre => This.Provides (Library, External);
+
    ----------------
    -- Add_Export --
    ----------------
@@ -20,10 +29,27 @@ package body Raven.Engine.Libraries is
       Library : Raven.Target.Real_Library_Id;
       Name    : String)
    is
+   begin
+      This.Add_Export (Library, Name, Name);
+   end Add_Export;
+
+   ----------------
+   -- Add_Export --
+   ----------------
+
+   procedure Add_Export
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Internal : String;
+      External : String)
+   is
       Entry_Of : constant Library_Vectors.Reference_Type :=
                    This.Table.Reference (Library);
    begin
-      Entry_Of.Exports.Include (Name);
+      --  The last export of a name is the one it means, as the last
+      --  import of one is.
+
+      Entry_Of.Exports.Include (External, Internal);
    end Add_Export;
 
    ----------------
@@ -163,6 +189,25 @@ package body Raven.Engine.Libraries is
       return Raven.Target.No_Library;
    end Find;
 
+   -------------------
+   -- Internal_Name --
+   -------------------
+
+   function Internal_Name
+     (This     : Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      External : String)
+      return String
+   is
+      Entry_Of : Library_Record renames This.Table (Library);
+   begin
+      if Entry_Of.Exports_All then
+         return External;
+      else
+         return Entry_Of.Exports.Element (External);
+      end if;
+   end Internal_Name;
+
    -----------
    -- Macro --
    -----------
@@ -183,16 +228,17 @@ package body Raven.Engine.Libraries is
       end if;
 
       for Imported of reverse Entry_Of.Imports loop
-         declare
-            Found : constant Macro_Maps.Cursor :=
-                      This.Table (Imported).Macros.Find (Name);
-         begin
-            if Macro_Maps.Has_Element (Found)
-              and then This.Provides (Imported, Name)
-            then
-               return Macro_Maps.Element (Found);
-            end if;
-         end;
+         if This.Provides (Imported, Name) then
+            declare
+               Found : constant Macro_Maps.Cursor :=
+                         This.Table (Imported).Macros.Find
+                           (This.Internal_Name (Imported, Name));
+            begin
+               if Macro_Maps.Has_Element (Found) then
+                  return Macro_Maps.Element (Found);
+               end if;
+            end;
+         end if;
       end loop;
 
       return Raven.Target.No_Macro;
@@ -276,6 +322,33 @@ package body Raven.Engine.Libraries is
 
       return Library;
    end Resolve;
+
+   -------------------
+   -- Resolved_Name --
+   -------------------
+
+   function Resolved_Name
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return String
+   is
+      Entry_Of : Library_Record renames This.Table (Library);
+   begin
+      --  The same walk as Resolve, answering with the other half.
+
+      if Entry_Of.Defined.Contains (Name) then
+         return Name;
+      end if;
+
+      for Imported of reverse Entry_Of.Imports loop
+         if This.Provides (Imported, Name) then
+            return This.Internal_Name (Imported, Name);
+         end if;
+      end loop;
+
+      return Name;
+   end Resolved_Name;
 
    ---------------------
    -- Set_Export_List --

@@ -1,4 +1,5 @@
 private with Ada.Containers.Indefinite_Hashed_Maps;
+private with Ada.Containers.Indefinite_Ordered_Maps;
 private with Ada.Containers.Indefinite_Ordered_Sets;
 private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Vectors;
@@ -72,6 +73,15 @@ private package Raven.Engine.Libraries is
       Library : Raven.Target.Real_Library_Id;
       Name    : String);
 
+   --  A name offered under another: what an importer writes as External
+   --  is what the library itself calls Internal.
+
+   procedure Add_Export
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Internal : String;
+      External : String);
+
    --  Which library holds what a name written in Library means: the
    --  one that wrote it, or the last one it was imported from, or
    --  Library itself, whether or not it has the name yet.  A name
@@ -83,6 +93,17 @@ private package Raven.Engine.Libraries is
       Library : Raven.Target.Real_Library_Id;
       Name    : String)
       return Raven.Target.Real_Library_Id;
+
+   --  And what that library calls it, which is the name itself unless
+   --  the export it came through renamed it.  The two go together: a
+   --  reference is a library and a name in it, and a renamed import is
+   --  a different name in a different library.
+
+   function Resolved_Name
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Name    : String)
+      return String;
 
    --  Whether anything here accounts for the name at all, which is
    --  not the same question: Resolve gives back the library itself
@@ -154,6 +175,13 @@ private
    package Name_Sets is
      new Ada.Containers.Indefinite_Ordered_Sets (String);
 
+   --  An export list is a map rather than a set, from the name an
+   --  importer writes to the name the library holds, because an export
+   --  may rename.  Most map a name to itself.
+
+   package Name_Maps is
+     new Ada.Containers.Indefinite_Ordered_Maps (String, String);
+
    package Import_Vectors is
      new Ada.Containers.Vectors
        (Positive, Raven.Target.Real_Library_Id, Raven.Target."=");
@@ -173,7 +201,7 @@ private
          Defined     : Name_Sets.Set;
          Imports     : Import_Vectors.Vector;
          Macros      : Macro_Maps.Map;
-         Exports     : Name_Sets.Set;
+         Exports     : Name_Maps.Map;
          Exports_All : Boolean := True;
       end record;
 

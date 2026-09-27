@@ -90,6 +90,13 @@ package body Raven.Loader is
      (Target  : Raven.Target.Reference;
       Library : Raven.Target.Real_Library_Id);
 
+   --  (rename internal external), with both of them names.
+
+   function Is_Rename
+     (Target : Raven.Target.Reference;
+      Spec   : Object)
+      return Boolean;
+
    function Read_File (Path : String) return String;
 
    --  Name is what the reader calls the source it is reading, and is
@@ -118,10 +125,6 @@ package body Raven.Loader is
      (Target    : Raven.Target.Reference;
       Directory : String;
       Source    : String);
-
-   function Read_Names
-     (Target : Raven.Target.Reference)
-      return String_Vectors.Vector;
 
    function Read_Text
      (Target : Raven.Target.Reference;
@@ -299,6 +302,26 @@ package body Raven.Loader is
       return Raven.Objects.Is_Pair (Form)
         and then Target.Car (Form) = Target.To_Symbol (Name);
    end Is_Head;
+
+   ---------------
+   -- Is_Rename --
+   ---------------
+
+   function Is_Rename
+     (Target : Raven.Target.Reference;
+      Spec   : Object)
+      return Boolean
+   is
+      use Raven.Objects;
+   begin
+      return Is_Pair (Spec)
+        and then Target.Car (Spec) = Target.To_Symbol ("rename")
+        and then Is_Pair (Target.Cdr (Spec))
+        and then Is_Symbol (Target.Cadr (Spec))
+        and then Is_Pair (Target.Cddr (Spec))
+        and then Is_Symbol (Target.Car (Target.Cddr (Spec)))
+        and then Target.Cdr (Target.Cddr (Spec)) = Nil;
+   end Is_Rename;
 
    ------------------
    -- Library_Name --
@@ -546,15 +569,28 @@ package body Raven.Loader is
          Read_Import (Target, Library);
       elsif Is_Head (Target, "begin") then
          Read_Begin (Target, Library, Source, Abandoned);
-      elsif Is_Head (Target, "include") then
+      elsif Is_Head (Target, "include")
+        or else Is_Head (Target, "include-ci")
+      then
+
+         --  include-ci reads a file as though it began with #!fold-case,
+         --  and every file already is read that way: the reader folds
+         --  every identifier to lower case as it interns it.  So the two
+         --  are one declaration here, until the reader stops folding.
+
          Read_Include (Target, Library, Directory, Abandoned);
       elsif Is_Head (Target, "cond-expand") then
          Read_Cond_Expand (Target, Library, Directory, Source, Abandoned);
       else
-         Report
-           (Target,
-            "define-library: not a declaration: "
-            & Target.Show (Target.Top));
+
+         --  Counted as a form that could not be run is, and for the same
+         --  reason: the library would otherwise be read without whatever
+         --  the declaration was to give it -- an export, an import, the
+         --  right branch -- and be handed out as though it were whole.
+
+         Abandon
+           (Target, Source, Form_Head (Target),
+            "not a library declaration", Abandoned);
          Target.Drop;
       end if;
    end Read_Declaration;
@@ -567,12 +603,39 @@ package body Raven.Loader is
      (Target  : Raven.Target.Reference;
       Library : Raven.Target.Real_Library_Id)
    is
-      Names : constant String_Vectors.Vector := Read_Names (Target);
+      It : Object := Target.Cdr (Target.Top);
    begin
-      Target.Drop;
-      for Name of Names loop
-         Target.Add_Export (Library, Name);
+      --  A name, or (rename internal external).  Nothing here makes
+      --  anything, so the list can be walked from an Ada variable.
+
+      while Raven.Objects.Is_Pair (It) loop
+         declare
+            Spec : constant Object := Target.Car (It);
+         begin
+            if Raven.Objects.Is_Symbol (Spec) then
+               Target.Add_Export
+                 (Library, Target.To_String (Raven.Objects.To_Symbol (Spec)));
+            elsif Is_Rename (Target, Spec) then
+               Target.Add_Export
+                 (Library,
+                  Internal =>
+                    Target.To_String
+                      (Raven.Objects.To_Symbol (Target.Cadr (Spec))),
+                  External =>
+                    Target.To_String
+                      (Raven.Objects.To_Symbol
+                         (Target.Car (Target.Cddr (Spec)))));
+            else
+               Report
+                 (Target,
+                  "export: expected a name or (rename internal external),"
+                  & " not " & Target.Show (Spec));
+            end if;
+         end;
+         It := Target.Cdr (It);
       end loop;
+
+      Target.Drop;
    end Read_Export;
 
    ---------------
@@ -806,33 +869,6 @@ package body Raven.Loader is
             & " of its forms could not be run");
       end if;
    end Read_Library;
-
-   ----------------
-   -- Read_Names --
-   ----------------
-
-   function Read_Names
-     (Target : Raven.Target.Reference)
-      return String_Vectors.Vector
-   is
-      Names : String_Vectors.Vector;
-      It    : Object := Target.Cdr (Target.Top);
-   begin
-      while Raven.Objects.Is_Pair (It) loop
-         declare
-            Name : constant Object := Target.Car (It);
-         begin
-            if Raven.Objects.Is_Symbol (Name) then
-               Names.Append
-                 (Target.To_String (Raven.Objects.To_Symbol (Name)));
-            else
-               Report (Target, "expected a name, not " & Target.Show (Name));
-            end if;
-         end;
-         It := Target.Cdr (It);
-      end loop;
-      return Names;
-   end Read_Names;
 
    ---------------
    -- Read_Text --

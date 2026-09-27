@@ -132,6 +132,17 @@ private package Raven.Target is
       Name    : String)
    is abstract;
 
+   --  And one it offers under another name: (export (rename internal
+   --  external)).  An importer writes External and means what the
+   --  library calls Internal.
+
+   procedure Add_Export
+     (This     : in out Abstraction;
+      Library  : Real_Library_Id;
+      Internal : String;
+      External : String)
+   is abstract;
+
    --  A library has defined this name.  Said while the form that
    --  defines it is translated, because that is when what comes after
    --  it starts meaning it.
@@ -147,6 +158,16 @@ private package Raven.Target is
       Library : Real_Library_Id;
       Name    : String)
       return Real_Library_Id
+   is abstract;
+
+   --  What the library Resolve gives back calls the name: the name
+   --  itself, unless it came through an export that renamed it.
+
+   function Resolved_Name
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Name    : String)
+      return String
    is abstract;
 
    --  Whether anything Library knows of accounts for the name, which
