@@ -377,13 +377,15 @@ package body Raven.Engine.SECD.Translator is
       S_Cdr               : constant Object := Target.To_Symbol ("cdr");
       S_Cons              : constant Object := Target.To_Symbol ("cons");
       S_Define            : constant Object := Target.To_Symbol ("define");
-      S_Define_Macro      : constant Object := Target.To_Symbol ("define-macro");
+      S_Define_Macro      : constant Object :=
+                              Target.To_Symbol ("define-macro");
       S_Eq                : constant Object := Target.To_Symbol ("raven-eq?");
       S_Pair              : constant Object := Target.To_Symbol ("pair?");
       S_Quasiquote        : constant Object := Target.To_Symbol ("quasiquote");
       S_Set               : constant Object := Target.To_Symbol ("set!");
       S_Unquote           : constant Object := Target.To_Symbol ("unquote");
-      S_Unquote_Splicing  : constant Object := Target.To_Symbol ("unquote-splicing");
+      S_Unquote_Splicing  : constant Object :=
+                              Target.To_Symbol ("unquote-splicing");
       Indent   : Natural := 0;
 
       -----------------------
@@ -978,7 +980,8 @@ package body Raven.Engine.SECD.Translator is
                                   (Target.Caar (Get (A)))
                   then
                      raise Raven.Target.Translation_Error with
-                       "define-macro: first argument must be (name params ...)";
+                       "define-macro: first argument must be "
+                       & "(name params ...)";
                   end if;
                   declare
                      Name_Sym   : constant Object := Target.Caar (Get (A));

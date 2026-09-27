@@ -45,22 +45,6 @@ package body Raven.Tests.Foreign is
       Expected   : String);
 
    ----------
-   -- Mark --
-   ----------
-
-   overriding procedure Mark
-     (This    : in out Box;
-      Process : not null access procedure (Value : in out Object))
-   is
-   begin
-      --  In out, because being told is not enough: the collector
-      --  moves what it copies, so what this holds is somewhere else
-      --  afterwards and has to be written back.
-
-      Process (This.Held);
-   end Mark;
-
-   ----------
    -- Free --
    ----------
 
@@ -80,6 +64,22 @@ package body Raven.Tests.Foreign is
       VM.Set_Slot
         (1, VM.Create_Foreign_Value (Box'(Foreign_Value_Instance with Held)));
    end Make_Box;
+
+   ----------
+   -- Mark --
+   ----------
+
+   overriding procedure Mark
+     (This    : in out Box;
+      Process : not null access procedure (Value : in out Object))
+   is
+   begin
+      --  In out, because being told is not enough: the collector
+      --  moves what it copies, so what this holds is somewhere else
+      --  afterwards and has to be written back.
+
+      Process (This.Held);
+   end Mark;
 
    --------------
    -- Open_Box --

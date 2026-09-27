@@ -80,22 +80,6 @@ package body Raven.Parser is
       Parse_S_Expression (This.Data.Lex, Target);
    end Parse_Next;
 
-   -----------
-   -- Where --
-   -----------
-
-   function Where (This : Instance) return String is
-      use Ada.Strings, Ada.Strings.Fixed;
-   begin
-      if This.Data = null then
-         return "";
-      end if;
-
-      return This.Data.Lex.Current_File_Name
-        & ":"
-        & Trim (Natural'Image (This.Data.Lex.Current_Line), Left);
-   end Where;
-
    ------------------------
    -- Parse_S_Expression --
    ------------------------
@@ -110,23 +94,6 @@ package body Raven.Parser is
       procedure Parse_Rest_Of_List;
 
       procedure Skip_Datum_Comments;
-
-      --------------------------
-      -- Skip_Datum_Comments --
-      --------------------------
-
-      procedure Skip_Datum_Comments is
-      begin
-         --  #; takes out the datum after it, whatever that datum turns
-         --  out to be, so the only way to skip one is to read it and
-         --  throw it away.  Several in a row take out several.
-
-         while Lex.Tok = Tok_Datum_Comment loop
-            Lex.Scan;
-            Parse_Expression;
-            Target.Drop;
-         end loop;
-      end Skip_Datum_Comments;
 
       ----------------------
       -- Parse_Expression --
@@ -351,6 +318,23 @@ package body Raven.Parser is
          Target.Cons;
       end Parse_Rest_Of_List;
 
+      --------------------------
+      -- Skip_Datum_Comments --
+      --------------------------
+
+      procedure Skip_Datum_Comments is
+      begin
+         --  #; takes out the datum after it, whatever that datum turns
+         --  out to be, so the only way to skip one is to read it and
+         --  throw it away.  Several in a row take out several.
+
+         while Lex.Tok = Tok_Datum_Comment loop
+            Lex.Scan;
+            Parse_Expression;
+            Target.Drop;
+         end loop;
+      end Skip_Datum_Comments;
+
    begin
       --  What the lexer has to say goes where this target's host says
       --  errors go.  It had no way of reaching one and wrote to the
@@ -360,5 +344,21 @@ package body Raven.Parser is
 
       Parse_Expression;
    end Parse_S_Expression;
+
+   -----------
+   -- Where --
+   -----------
+
+   function Where (This : Instance) return String is
+      use Ada.Strings, Ada.Strings.Fixed;
+   begin
+      if This.Data = null then
+         return "";
+      end if;
+
+      return This.Data.Lex.Current_File_Name
+        & ":"
+        & Trim (Natural'Image (This.Data.Lex.Current_Line), Left);
+   end Where;
 
 end Raven.Parser;

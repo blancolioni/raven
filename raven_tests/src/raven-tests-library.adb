@@ -18,6 +18,24 @@ package body Raven.Tests.Library is
 
    procedure Probe_True (VM : Raven_VM);
 
+   -----------------
+   -- Probe_False --
+   -----------------
+
+   procedure Probe_False (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, False);
+   end Probe_False;
+
+   ----------------
+   -- Probe_True --
+   ----------------
+
+   procedure Probe_True (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, True);
+   end Probe_True;
+
    ---------------
    -- Run_Tests --
    ---------------
@@ -266,24 +284,6 @@ package body Raven.Tests.Library is
       VM.Bind_Foreign_Function ("probe-answer", Probe_True'Access, 0);
       Test_Library (VM, "(probe-answer)", True);
    end Run_Tests;
-
-   -----------------
-   -- Probe_False --
-   -----------------
-
-   procedure Probe_False (VM : Raven_VM) is
-   begin
-      VM.Set_Slot (1, False);
-   end Probe_False;
-
-   ----------------
-   -- Probe_True --
-   ----------------
-
-   procedure Probe_True (VM : Raven_VM) is
-   begin
-      VM.Set_Slot (1, True);
-   end Probe_True;
 
    ----------------
    -- Test_Error --

@@ -17,7 +17,9 @@ executables = ["raven_tests"]
 [build-switches]
 "*".ada_version = "ada2022"
 Development.Runtime_Checks = "Everything"
-"*".Style_Checks = "yes"
+# The defaults Alire gives for "yes", and two more: subprogram bodies
+# in alphabetical order (o), and a separate spec for every body (s).
+"*".Style_Checks = ["-gnaty3", "-gnatya", "-gnatyA", "-gnatyB", "-gnatyb", "-gnatyc", "-gnaty-d", "-gnatye", "-gnatyf", "-gnatyh", "-gnatyi", "-gnatyI", "-gnatyk", "-gnatyl", "-gnatym", "-gnatyn", "-gnatyO", "-gnatyo", "-gnatyp", "-gnatyr", "-gnatyS", "-gnatys", "-gnatyt", "-gnatyu", "-gnatyx"]
 development.contracts = "yes"
 "*".compile_checks = "errors"
 

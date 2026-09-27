@@ -25,6 +25,9 @@ package body Raven.Engine.Environment is
       return Raven.Environment.Reference
    is (This.Parent);
 
+   overriding procedure Close
+     (This  : not null access Instance);
+
    overriding procedure Mark
      (This : in out Instance;
       Process : not null access procedure (Value : in out Object));
@@ -53,7 +56,7 @@ package body Raven.Engine.Environment is
    -- Close --
    -----------
 
-   procedure Close
+   overriding procedure Close
      (This  : not null access Instance)
    is
       procedure Free is
