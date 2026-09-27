@@ -119,18 +119,6 @@ package body Raven.Parser.Lexical is
       end if;
    end Error;
 
-   ----------------
-   -- Report_To --
-   ----------------
-
-   procedure Report_To
-     (This   : in out Instance;
-      Target : Raven.Target.Reference)
-   is
-   begin
-      This.Target := Target;
-   end Report_To;
-
    ---------------
    -- Hex_Digit --
    ---------------
@@ -229,22 +217,6 @@ package body Raven.Parser.Lexical is
       end if;
    end Next_Character;
 
-   -----------------
-   -- Open_Stream --
-   -----------------
-
-   procedure Open_Stream (This : in out Instance; Identity : String) is
-   begin
-      if This.Current_Stream_Index = Max_Source_Files then
-         raise Program_Error with "maximum source file nesting exceeded";
-      end if;
-      This.Current_Stream_Index := @ + 1;
-      This.Current_Stream := new Source_Stream_Record'(Empty_Stream);
-      This.Current_Stream.Identity :=
-        To_Unbounded_Wide_Wide_String (Decode (Identity));
-      This.Current_Stream.EOF := False;
-   end Open_Stream;
-
    ----------
    -- Open --
    ----------
@@ -281,6 +253,22 @@ package body Raven.Parser.Lexical is
       end;
       This.Scan;
    end Open;
+
+   -----------------
+   -- Open_Stream --
+   -----------------
+
+   procedure Open_Stream (This : in out Instance; Identity : String) is
+   begin
+      if This.Current_Stream_Index = Max_Source_Files then
+         raise Program_Error with "maximum source file nesting exceeded";
+      end if;
+      This.Current_Stream_Index := @ + 1;
+      This.Current_Stream := new Source_Stream_Record'(Empty_Stream);
+      This.Current_Stream.Identity :=
+        To_Unbounded_Wide_Wide_String (Decode (Identity));
+      This.Current_Stream.EOF := False;
+   end Open_Stream;
 
    ----------
    -- Peek --
@@ -407,6 +395,18 @@ package body Raven.Parser.Lexical is
          end;
       end if;
    end Read_Character;
+
+   ----------------
+   -- Report_To --
+   ----------------
+
+   procedure Report_To
+     (This   : in out Instance;
+      Target : Raven.Target.Reference)
+   is
+   begin
+      This.Target := Target;
+   end Report_To;
 
    ----------
    -- Scan --
@@ -648,7 +648,9 @@ package body Raven.Parser.Lexical is
 
                   This.Stop_Token;
 
-                  if This.Tok_Text = "#u8" and then Current_Stream.Ch = '(' then
+                  if This.Tok_Text = "#u8"
+                    and then Current_Stream.Ch = '('
+                  then
                      This.Next_Character;
                      Tok := Tok_Start_Bytevector;
                   else

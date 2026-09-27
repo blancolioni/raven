@@ -155,31 +155,26 @@ package body Raven.Loader is
       Form   : Object)
       return String;
 
-   ----------------------
-   -- Take_Declaration --
-   ----------------------
+   -------------
+   -- Abandon --
+   -------------
 
-   function Take_Declaration
-     (Target : Raven.Target.Reference)
-      return Boolean
+   procedure Abandon
+     (Target    : Raven.Target.Reference;
+      Start     : String;
+      Head      : String;
+      What      : String;
+      Abandoned : in out Natural)
    is
+      Where : constant String := (if Start = "" then "" else Start & ": ");
+      Which : constant String :=
+                (if Head = "" then "a form" else Head);
+      Why   : constant String := (if What = "" then "" else ": " & What);
    begin
-      if Is_Head (Target, "import") then
-         Read_Import (Target, Target.Interaction_Library);
-         return True;
-      elsif Is_Head (Target, "define-library") then
-
-         --  A library typed at the host has no file, so an include in
-         --  it is looked for beside where the host is running, and a
-         --  form of it that cannot be run has nowhere to say it came
-         --  from but the host itself.
-
-         Read_Library (Target, ".", "user input");
-         return True;
-      else
-         return False;
-      end if;
-   end Take_Declaration;
+      Target.Abandon_Form;
+      Abandoned := Abandoned + 1;
+      Report (Target, Where & Which & " abandoned" & Why);
+   end Abandon;
 
    ---------------
    -- File_Name --
@@ -235,6 +230,32 @@ package body Raven.Loader is
       end loop;
       return "";
    end Find_File;
+
+   ---------------
+   -- Form_Head --
+   ---------------
+
+   function Form_Head
+     (Target : Raven.Target.Reference)
+      return String
+   is (Form_Head_Of (Target, Target.Top));
+
+   ------------------
+   -- Form_Head_Of --
+   ------------------
+
+   function Form_Head_Of
+     (Target : Raven.Target.Reference;
+      Form   : Object)
+      return String
+   is
+   begin
+      if Raven.Objects.Is_Pair (Form) then
+         return "(" & Target.Show (Target.Car (Form)) & " ...)";
+      else
+         return Target.Show (Form);
+      end if;
+   end Form_Head_Of;
 
    ------------
    -- Import --
@@ -785,26 +806,31 @@ package body Raven.Loader is
       Target.Report_Error (Message);
    end Report;
 
-   -------------
-   -- Abandon --
-   -------------
+   ----------------------
+   -- Take_Declaration --
+   ----------------------
 
-   procedure Abandon
-     (Target    : Raven.Target.Reference;
-      Start     : String;
-      Head      : String;
-      What      : String;
-      Abandoned : in out Natural)
+   function Take_Declaration
+     (Target : Raven.Target.Reference)
+      return Boolean
    is
-      Where : constant String := (if Start = "" then "" else Start & ": ");
-      Which : constant String :=
-                (if Head = "" then "a form" else Head);
-      Why   : constant String := (if What = "" then "" else ": " & What);
    begin
-      Target.Abandon_Form;
-      Abandoned := Abandoned + 1;
-      Report (Target, Where & Which & " abandoned" & Why);
-   end Abandon;
+      if Is_Head (Target, "import") then
+         Read_Import (Target, Target.Interaction_Library);
+         return True;
+      elsif Is_Head (Target, "define-library") then
+
+         --  A library typed at the host has no file, so an include in
+         --  it is looked for beside where the host is running, and a
+         --  form of it that cannot be run has nowhere to say it came
+         --  from but the host itself.
+
+         Read_Library (Target, ".", "user input");
+         return True;
+      else
+         return False;
+      end if;
+   end Take_Declaration;
 
    ------------
    -- Usable --
@@ -824,31 +850,5 @@ package body Raven.Loader is
 
       return Id;
    end Usable;
-
-   ---------------
-   -- Form_Head --
-   ---------------
-
-   function Form_Head
-     (Target : Raven.Target.Reference)
-      return String
-   is (Form_Head_Of (Target, Target.Top));
-
-   ------------------
-   -- Form_Head_Of --
-   ------------------
-
-   function Form_Head_Of
-     (Target : Raven.Target.Reference;
-      Form   : Object)
-      return String
-   is
-   begin
-      if Raven.Objects.Is_Pair (Form) then
-         return "(" & Target.Show (Target.Car (Form)) & " ...)";
-      else
-         return Target.Show (Form);
-      end if;
-   end Form_Head_Of;
 
 end Raven.Loader;

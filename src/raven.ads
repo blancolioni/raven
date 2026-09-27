@@ -604,7 +604,6 @@ private
       Ch        : out Wide_Wide_Character;
       Available : out Boolean);
 
-
    procedure Write_Character
      (This   : Raven_VM'Class;
       Ch     : Wide_Wide_Character;

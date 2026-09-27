@@ -162,6 +162,30 @@ package body Raven.Ports is
       end if;
    end Close_Port;
 
+   ----------------
+   -- Eof_Object --
+   ----------------
+
+   procedure Eof_Object (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, Raven.Objects.Eof);
+   end Eof_Object;
+
+   ----------
+   -- Free --
+   ----------
+
+   overriding procedure Free (This : in out Instance) is
+   begin
+      --  What the collector has stopped naming, given back.  The
+      --  host's own three are not, because they are not named by
+      --  anything either and must go on answering.
+
+      if not Table (This.Id).Of_Host then
+         Table (This.Id) := (others => <>);
+      end if;
+   end Free;
+
    ---------------------------
    -- Get_Output_Bytevector --
    ---------------------------
@@ -215,30 +239,6 @@ package body Raven.Ports is
       Raven.Strings.Write_String
         (VM, 1, Encode (To_Wide_Wide_String (Table (Id).Text)));
    end Get_Output_String;
-
-   ----------------
-   -- Eof_Object --
-   ----------------
-
-   procedure Eof_Object (VM : Raven_VM) is
-   begin
-      VM.Set_Slot (1, Raven.Objects.Eof);
-   end Eof_Object;
-
-   ----------
-   -- Free --
-   ----------
-
-   overriding procedure Free (This : in out Instance) is
-   begin
-      --  What the collector has stopped naming, given back.  The
-      --  host's own three are not, because they are not named by
-      --  anything either and must go on answering.
-
-      if not Table (This.Id).Of_Host then
-         Table (This.Id) := (others => <>);
-      end if;
-   end Free;
 
    ---------------------
    -- Is_Binary_Port --
@@ -307,6 +307,21 @@ package body Raven.Ports is
    begin
       VM.Set_Slot (1, B);
    end Is_Port;
+
+   ---------------------
+   -- Is_Textual_Port --
+   ---------------------
+
+   procedure Is_Textual_Port (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+      B : constant Boolean :=
+            Raven.Objects.Is_Foreign_Value (X)
+              and then VM.To_Foreign_Value (X) in Instance'Class
+              and then Table (Instance'Class (VM.To_Foreign_Value (X)).Id)
+                .Kind = Textual;
+   begin
+      VM.Set_Slot (1, B);
+   end Is_Textual_Port;
 
    -----------------------
    -- Load_Port_Library --
@@ -403,21 +418,6 @@ package body Raven.Ports is
         "no room for another port:" & Port_Id'Last'Image & " are open";
    end New_Id;
 
-   ---------------------
-   -- Is_Textual_Port --
-   ---------------------
-
-   procedure Is_Textual_Port (VM : Raven_VM) is
-      X : constant Object := VM.Get_Slot (1);
-      B : constant Boolean :=
-            Raven.Objects.Is_Foreign_Value (X)
-              and then VM.To_Foreign_Value (X) in Instance'Class
-              and then Table (Instance'Class (VM.To_Foreign_Value (X)).Id)
-                .Kind = Textual;
-   begin
-      VM.Set_Slot (1, B);
-   end Is_Textual_Port;
-
    ---------------------------
    -- Open_Input_Bytevector --
    ---------------------------
@@ -510,6 +510,28 @@ package body Raven.Ports is
       Table (Id) := (Used => True, Direction => Output, others => <>);
       VM.Set_Slot (1, Make_Port (VM, Id));
    end Open_Output_String;
+
+   -------------
+   -- Port_Of --
+   -------------
+
+   function Port_Of
+     (VM   : Raven_VM;
+      Name : String;
+      Slot : Slot_Index)
+      return Port_Id
+   is
+      X : constant Object := VM.Get_Slot (Slot);
+   begin
+      if not Raven.Objects.Is_Foreign_Value (X)
+        or else not (VM.To_Foreign_Value (X) in Instance'Class)
+      then
+         raise Constraint_Error with
+           Name & ": not a port: " & Encode (VM.Display (X));
+      end if;
+
+      return Instance'Class (VM.To_Foreign_Value (X)).Id;
+   end Port_Of;
 
    ---------------------
    -- Port_Peek_Char --
@@ -659,28 +681,6 @@ package body Raven.Ports is
 
       VM.Set_Slot (1, True);
    end Port_Ready;
-
-   -------------
-   -- Port_Of --
-   -------------
-
-   function Port_Of
-     (VM   : Raven_VM;
-      Name : String;
-      Slot : Slot_Index)
-      return Port_Id
-   is
-      X : constant Object := VM.Get_Slot (Slot);
-   begin
-      if not Raven.Objects.Is_Foreign_Value (X)
-        or else not (VM.To_Foreign_Value (X) in Instance'Class)
-      then
-         raise Constraint_Error with
-           Name & ": not a port: " & Encode (VM.Display (X));
-      end if;
-
-      return Instance'Class (VM.To_Foreign_Value (X)).Id;
-   end Port_Of;
 
    -------------------
    -- Port_U8_Ready --

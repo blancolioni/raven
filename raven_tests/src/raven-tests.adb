@@ -49,6 +49,13 @@ package body Raven.Tests is
 
    procedure Test_Heap_Size;
 
+   --------------
+   -- Failures --
+   --------------
+
+   function Failures return Natural
+   is (Failure_Count);
+
    ------------------
    -- Library_Path --
    ------------------
@@ -56,12 +63,34 @@ package body Raven.Tests is
    function Library_Path return String
    is (Raven_Library_Resources.Resource_Path & "/libraries");
 
-   ----------------
-   -- Tests_Path --
-   ----------------
+   -------------------------
+   -- Report_Scheme_Suite --
+   -------------------------
 
-   function Tests_Path return String
-   is (Raven_Tests_Resources.Resource_Path);
+   procedure Report_Scheme_Suite (VM : Raven_VM) is
+      Total  : Integer := 0;
+      Passed : Integer := -1;
+   begin
+      --  Import reports a missing or unreadable file on standard error
+      --  and carries on, so the counters may not be defined at all.
+
+      begin
+         VM.Evaluate ("num-tests");
+         Total := VM.Get_Slot (1);
+         VM.Evaluate ("passed-tests");
+         Passed := VM.Get_Slot (1);
+      exception
+         when E : others =>
+            Ada.Text_IO.Put_Line
+              (Ada.Text_IO.Standard_Error,
+               "scheme suite: " & Ada.Exceptions.Exception_Message (E));
+      end;
+
+      Test ("scheme suite ran", Total > 0);
+      Test ("scheme suite",
+            Integer'Image (Passed),
+            Integer'Image (Total));
+   end Report_Scheme_Suite;
 
    ---------------
    -- Run_Tests --
@@ -133,6 +162,56 @@ package body Raven.Tests is
       Test_Heap_Size;
    end Run_Tests;
 
+   ----------
+   -- Test --
+   ----------
+
+   procedure Test
+     (Name     : String;
+      Expected : String;
+      Found    : String)
+   is
+      use Ada.Text_IO;
+   begin
+      if Expected /= Found then
+         Failure_Count := Failure_Count + 1;
+      end if;
+
+      if Name'Length > 25 then
+         Put (Name (Name'First .. Name'First + 22)
+              & "...");
+      else
+         Put (Name);
+      end if;
+      Set_Col (30);
+      Put (Expected);
+      Set_Col (60);
+      Put (Found);
+      Set_Col (74);
+      Put (if Expected = Found then "PASS" else "FAIL");
+      New_Line;
+   end Test;
+
+   ----------
+   -- Test --
+   ----------
+
+   procedure Test
+     (Name     : String;
+      Success  : Boolean)
+   is
+      use Ada.Text_IO;
+   begin
+      if not Success then
+         Failure_Count := Failure_Count + 1;
+      end if;
+
+      Put (Name);
+      Set_Col (74);
+      Put (if Success then "PASS" else "FAIL");
+      New_Line;
+   end Test;
+
    --------------------
    -- Test_Heap_Size --
    --------------------
@@ -184,90 +263,11 @@ package body Raven.Tests is
       end;
    end Test_Heap_Size;
 
-   -------------------------
-   -- Report_Scheme_Suite --
-   -------------------------
+   ----------------
+   -- Tests_Path --
+   ----------------
 
-   procedure Report_Scheme_Suite (VM : Raven_VM) is
-      Total  : Integer := 0;
-      Passed : Integer := -1;
-   begin
-      --  Import reports a missing or unreadable file on standard error
-      --  and carries on, so the counters may not be defined at all.
-
-      begin
-         VM.Evaluate ("num-tests");
-         Total := VM.Get_Slot (1);
-         VM.Evaluate ("passed-tests");
-         Passed := VM.Get_Slot (1);
-      exception
-         when E : others =>
-            Ada.Text_IO.Put_Line
-              (Ada.Text_IO.Standard_Error,
-               "scheme suite: " & Ada.Exceptions.Exception_Message (E));
-      end;
-
-      Test ("scheme suite ran", Total > 0);
-      Test ("scheme suite",
-            Integer'Image (Passed),
-            Integer'Image (Total));
-   end Report_Scheme_Suite;
-
-   --------------
-   -- Failures --
-   --------------
-
-   function Failures return Natural
-   is (Failure_Count);
-
-   ----------
-   -- Test --
-   ----------
-
-   procedure Test
-     (Name     : String;
-      Expected : String;
-      Found    : String)
-   is
-      use Ada.Text_IO;
-   begin
-      if Expected /= Found then
-         Failure_Count := Failure_Count + 1;
-      end if;
-
-      if Name'Length > 25 then
-         Put (Name (Name'First .. Name'First + 22)
-              & "...");
-      else
-         Put (Name);
-      end if;
-      Set_Col (30);
-      Put (Expected);
-      Set_Col (60);
-      Put (Found);
-      Set_Col (74);
-      Put (if Expected = Found then "PASS" else "FAIL");
-      New_Line;
-   end Test;
-
-   ----------
-   -- Test --
-   ----------
-
-   procedure Test
-     (Name     : String;
-      Success  : Boolean)
-   is
-      use Ada.Text_IO;
-   begin
-      if not Success then
-         Failure_Count := Failure_Count + 1;
-      end if;
-
-      Put (Name);
-      Set_Col (74);
-      Put (if Success then "PASS" else "FAIL");
-      New_Line;
-   end Test;
+   function Tests_Path return String
+   is (Raven_Tests_Resources.Resource_Path);
 
 end Raven.Tests;
