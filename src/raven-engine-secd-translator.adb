@@ -442,10 +442,20 @@ package body Raven.Engine.SECD.Translator is
          --  defines, goes to that library instead, silently.  An
          --  identifier that carried where it was written would settle
          --  it; that is #24.
+         --
+         --  A name neither library accounts for is the use site's
+         --  (#168).  It went to the macro's library, where nothing
+         --  would ever define it, so a caller's forward or recursive
+         --  reference through a macro -- (define (ints n) (delay (cons
+         --  n (ints (+ n 1))))) -- was undefined for good.  At the use
+         --  site it means whatever the caller goes on to define.
 
          if Home = Library then
             Where := Library;
-         elsif Expanding and then Target.Binds (Library, Name) then
+         elsif Expanding
+           and then (Target.Binds (Library, Name)
+                     or else not Target.Binds (Home, Name))
+         then
             Where := Library;
          else
             Where := Home;

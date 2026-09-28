@@ -26,7 +26,9 @@
 ;;  make-error-object, raven-describe, raven-raise-from-machine,
 ;;  raven-guard-clauses,
 ;;  simplest-between, simplest-positive,
-;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
+;;  promise, raven-promise, promise-box, set-promise-box!,
+;;  make-promise-box, promise-done?, promise-value, promise-update!,
+;;  fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
 ;;  bytevector->list, bytevector-onto, bytevector-tail, write-char-list,
 ;;  read-line-from, read-line-onto, read-string-from, read-chars,
@@ -163,7 +165,7 @@
    ;;  what this raven is, and choosing by it
    features cond-expand
 
-   ;;  and what a promise is made of, which is a closure and a set!
-   delay delay-force force make-promise)
+   ;;  promises, which are records of their own (#168)
+   delay delay-force force make-promise promise?)
 
   (include "base-impl.scm"))

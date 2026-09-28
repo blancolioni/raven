@@ -1125,35 +1125,6 @@
 	     command ...
 	     (again (do-next variable step ...) ...)))))))
 
-;;  A promise is a procedure that answers the same thing every time
-;;  and works it out once, which is a closure and a set! -- and is
-;;  what #36 says a promise is.  force calls it.
-;;
-;;  What that costs is that a promise cannot be told from any other
-;;  procedure, so make-promise of a procedure is that procedure rather
-;;  than a promise of it.  R7RS wants them told apart, and telling
-;;  them apart wants a promise to be an object of its own.
-
-(define (make-promise-of thunk)
-  (let ((ready #f) (answer #f))
-    (lambda ()
-      (if ready
-	  answer
-	  (begin (set! answer (thunk)) (set! ready #t) answer)))))
-
-(define (make-promise value)
-  (if (procedure? value) value (make-promise-of (lambda () value))))
-
-(define (force promise) (promise))
-
-(define-syntax delay
-  (syntax-rules ()
-    ((_ expression) (make-promise-of (lambda () expression)))))
-
-(define-syntax delay-force
-  (syntax-rules ()
-    ((_ expression) (make-promise-of (lambda () (force expression))))))
-
 ;;  Records (#154).  A record is an object of its own, laid out as a
 ;;  vector is with its type in front, so that nothing else answers for
 ;;  it: it is not a vector, a pair or a procedure.  A record type is a
@@ -1253,6 +1224,55 @@
          (record-constructor type '(field ...) 'constructor))
        (define (predicate x) (record-of? type x))
        (record-field-procedures type spec ...)))))
+
+;;  Promises (#168).  A promise is a record of its own, so promise?
+;;  can tell one from a procedure and make-promise of a procedure is a
+;;  promise of it.  What it holds is a box, a pair of whether it is done
+;;  and either its value or the thunk that will work it out: forcing a
+;;  promise whose thunk answers another promise hands the other's box
+;;  to this one, so that a chain of delay-force runs in the space of
+;;  one, as R7RS asks and as its own implementation of them does.
+;;
+;;  A thunk that forces its own promise again may have finished it by
+;;  the time it answers; that answer is the promise's, and the later
+;;  one is not.
+
+(define-record-type promise
+  (raven-promise box)
+  promise?
+  (box promise-box set-promise-box!))
+
+(define (make-promise-box done? value) (raven-promise (cons done? value)))
+(define (promise-done? p) (car (promise-box p)))
+(define (promise-value p) (cdr (promise-box p)))
+
+(define (promise-update! new old)
+  (set-car! (promise-box old) (promise-done? new))
+  (set-cdr! (promise-box old) (promise-value new))
+  (set-promise-box! new (promise-box old)))
+
+;;  What is not a promise is its own value, which R7RS allows.
+
+(define (force p)
+  (if (not (promise? p))
+      p
+      (if (promise-done? p)
+          (promise-value p)
+          (let ((next ((promise-value p))))
+            (if (not (promise-done? p))
+                (promise-update! next p))
+            (force p)))))
+
+(define (make-promise value)
+  (if (promise? value) value (make-promise-box #t value)))
+
+(define-syntax delay-force
+  (syntax-rules ()
+    ((_ expression) (make-promise-box #f (lambda () expression)))))
+
+(define-syntax delay
+  (syntax-rules ()
+    ((_ expression) (delay-force (make-promise-box #t expression)))))
 
 ;;  boolean? waits here for or rather than sitting with the other
 ;;  predicates, because or is now one of the forms above.
