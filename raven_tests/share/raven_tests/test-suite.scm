@@ -1,4 +1,5 @@
-(import (scheme base) (scheme cxr) (scheme inexact))
+(import (scheme base) (scheme cxr) (scheme inexact) (scheme write) (scheme lazy)
+        (only (raven base) gensym xcons))
 
 (define num-tests 0)
 (define passed-tests 0)

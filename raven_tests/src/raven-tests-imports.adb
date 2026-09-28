@@ -56,6 +56,33 @@ package body Raven.Tests.Imports is
 
       Test_Undefined (VM, "alpha-name");
 
+      --  (scheme base) is the R7RS base library and nothing else
+      --  (#153).  write and display are (scheme write)'s, the promises
+      --  (scheme lazy)'s, and xor, fold, xcons, sum and gensym are
+      --  raven's own, in (raven base); none of them is here.
+
+      Test_Undefined (VM, "(display 1)");
+      Test_Undefined (VM, "(write 1)");
+      Test_Undefined (VM, "(force 1)");
+      Test_Undefined (VM, "(make-promise 1)");
+      Test_Undefined (VM, "(delay 1)");
+      Test_Undefined (VM, "(xor #t #f)");
+      Test_Undefined (VM, "(fold + 0 '(1))");
+      Test_Undefined (VM, "(xcons '(1) 2)");
+      Test_Undefined (VM, "(sum 1)");
+      Test_Undefined (VM, "(gensym)");
+
+      --  And each is where R7RS puts it.  (only ...) keeps the rest of
+      --  (raven base) out, so the test above still means something
+      --  for the names it does not take.
+
+      Evaluate (VM, "(import (scheme lazy))");
+      Test_Number (VM, "(force (delay (+ 1 2)))", 3);
+      Test_Number (VM, "(force (make-promise 4))", 4);
+      Evaluate (VM, "(import (only (raven base) xor))");
+      Test_Name (VM, "(xor #t #f)", "#t");
+      Test_Undefined (VM, "(gensym)");
+
       Evaluate (VM, "(import (probe alpha))");
 
       --  What the library offers.

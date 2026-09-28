@@ -134,12 +134,16 @@ package body Raven.Tests.Define is
       --  libraries there was one name to take, and the second load was
       --  what took it back.
 
-      Evaluate (VM, "(define (xcons xs x) 99)");
-      Test_Define (VM, "(xcons '(2 3) 1)", 99);
+      --  list-copy is (scheme base)'s, which offers it from (raven
+      --  base) since #153; this was xcons, which is raven's own and is
+      --  not here at all now.
+
+      Evaluate (VM, "(define (list-copy xs) 99)");
+      Test_Define (VM, "(list-copy '(2 3))", 99);
       VM.Import_Library
         ("(scheme base)",
          Library_Path & "/scheme/base.scm");
-      Test_Define (VM, "(xcons '(2 3) 1)", 99);
+      Test_Define (VM, "(list-copy '(2 3))", 99);
 
       --  The library itself still has its own, and loading it a second
       --  time did not fall over its own definitions.

@@ -175,6 +175,12 @@ package body Raven.Tests.Host_IO is
 
       Test ("a new VM has written nothing", "", Written);
 
+      --  write and display are (scheme write)'s, which a host asks for
+      --  as a program does (#153).  Asking writes nothing.
+
+      VM.Evaluate ("(import (scheme write))");
+      Test ("importing (scheme write) writes nothing", "", Written);
+
       Test_Written (VM, "(display ""abc"")", "abc");
       Test_Written (VM, "(write-string ""de"")", "abcde");
       Test_Written (VM, "(write ""f"")", "abcde""f""");

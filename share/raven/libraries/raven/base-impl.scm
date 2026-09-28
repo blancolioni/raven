@@ -1,5 +1,12 @@
 (define (eq? x y) (raven-eq? x y))
 
+;;  gensym is raven's own, and (raven base)'s to offer.  The machine's
+;;  is bound as raven-gensym, because a foreign function's name is seen
+;;  by every library whatever it imports, and one bound as gensym was
+;;  there in a program that asked only for (scheme base) (#153).
+
+(define (gensym prefix) (raven-gensym prefix))
+
 ;;  eqv? is eq? for everything but numbers, where R7RS asks whether
 ;;  they are the same number and equally exact -- which is not identity
 ;;  once a number can be boxed, because two equal bignums are two
@@ -1207,6 +1214,7 @@
 (define (newline port) (write-char #\newline port))
 
 (define (write x port) (write-string (raven-write-text x) port))
+(define (write-simple x port) (write x port))
 (define (display x port) (write-string (raven-display-text x) port))
 
 ;;  A port that has run out answers with the end of file object, which
