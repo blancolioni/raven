@@ -117,6 +117,30 @@ private package Raven.Target is
       Imported : Real_Library_Id)
    is abstract;
 
+   --  An import set (#27): only some of what Imported offers, or under
+   --  other names.  Begin_Mapped_Import starts it and Map_Import adds each
+   --  name Library is to know, as Local, for what Imported exports as
+   --  External.  Iterate_Exports is what an import set starts from.
+
+   procedure Begin_Mapped_Import
+     (This     : in out Abstraction;
+      Library  : Real_Library_Id;
+      Imported : Real_Library_Id)
+   is abstract;
+
+   procedure Map_Import
+     (This     : in out Abstraction;
+      Library  : Real_Library_Id;
+      Local    : String;
+      External : String)
+   is abstract;
+
+   procedure Iterate_Exports
+     (This    : Abstraction;
+      Library : Real_Library_Id;
+      Process : not null access procedure (Name : String))
+   is abstract;
+
    --  A library that says what it offers offers exactly that.  One
    --  that says nothing -- a file that is not written as a library --
    --  offers everything it defines.

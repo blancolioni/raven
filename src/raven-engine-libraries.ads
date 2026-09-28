@@ -58,6 +58,33 @@ private package Raven.Engine.Libraries is
       Library  : Raven.Target.Real_Library_Id;
       Imported : Raven.Target.Real_Library_Id);
 
+   --  An import of only some of what a library offers, or under other
+   --  names (#27): (only ...), (except ...), (prefix ...) and (rename
+   --  ...), however nested.  The loader works out, once, which names the
+   --  import gives this library and what the imported library offers
+   --  each as; Begin_Mapped_Import starts the import and Map_Import adds
+   --  each name to it.  Local is what a name is written as here, and
+   --  External what Imported exports it as.
+
+   procedure Begin_Mapped_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id);
+
+   procedure Map_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Local    : String;
+      External : String);
+
+   --  Every name a library offers an importer, which is what an import
+   --  set starts from.
+
+   procedure Iterate_Exports
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Process : not null access procedure (Name : String));
+
    --  A library that says what it is offers nothing until it says
    --  what it offers, and then exactly that.  A file that does not say
    --  is a library that offers everything it defines, which is what a
@@ -182,9 +209,21 @@ private
    package Name_Maps is
      new Ada.Containers.Indefinite_Ordered_Maps (String, String);
 
+   --  An import: the library, and when it was an import set, which
+   --  names it gives and what the library calls each.  A plain import
+   --  gives every name the library offers, as the library offers it, and
+   --  asks the library each time, so that a library that offers
+   --  everything it defines offers what it goes on to define.
+
+   type Import_Entry is
+      record
+         Library : Raven.Target.Real_Library_Id;
+         Mapped  : Boolean := False;
+         Names   : Name_Maps.Map;
+      end record;
+
    package Import_Vectors is
-     new Ada.Containers.Vectors
-       (Positive, Raven.Target.Real_Library_Id, Raven.Target."=");
+     new Ada.Containers.Vectors (Positive, Import_Entry);
 
    package Macro_Maps is
      new Ada.Containers.Indefinite_Hashed_Maps

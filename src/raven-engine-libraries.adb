@@ -11,6 +11,21 @@ package body Raven.Engine.Libraries is
       Name    : String)
       return Boolean;
 
+   --  Whether an import gives this library Name, and what the imported
+   --  library exports it as when it does.
+
+   function Import_Gives
+     (This    : Instance;
+      Import  : Import_Entry;
+      Name    : String)
+      return Boolean;
+
+   function Exported_As
+     (Import : Import_Entry;
+      Name   : String)
+      return String
+   is (if Import.Mapped then Import.Names.Element (Name) else Name);
+
    --  What a library that provides Name calls it.
 
    function Internal_Name
@@ -63,17 +78,28 @@ package body Raven.Engine.Libraries is
    is
       Entry_Of : constant Library_Vectors.Reference_Type :=
                    This.Table.Reference (Library);
-      Already  : constant Import_Vectors.Extended_Index :=
-                   Entry_Of.Imports.Find_Index (Imported);
    begin
       --  Imported again is imported once, and last: the most recent
-      --  import of a name is the one it means.
+      --  import of a name is the one it means.  Only a plain import of
+      --  the same library is the same import; an import set of it is
+      --  another, and both stand.
 
-      if Already /= Import_Vectors.No_Index then
-         Entry_Of.Imports.Delete (Already);
-      end if;
+      for Index in reverse
+        Entry_Of.Imports.First_Index .. Entry_Of.Imports.Last_Index
+      loop
+         declare
+            Import : constant Import_Entry := Entry_Of.Imports (Index);
+         begin
+            if Raven.Target."=" (Import.Library, Imported)
+              and then not Import.Mapped
+            then
+               Entry_Of.Imports.Delete (Index);
+            end if;
+         end;
+      end loop;
 
-      Entry_Of.Imports.Append (Imported);
+      Entry_Of.Imports.Append
+        (Import_Entry'(Library => Imported, others => <>));
    end Add_Import;
 
    --------------
@@ -87,6 +113,22 @@ package body Raven.Engine.Libraries is
    begin
       This.Paths.Append (Path);
    end Add_Path;
+
+   -------------------------
+   -- Begin_Mapped_Import --
+   -------------------------
+
+   procedure Begin_Mapped_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id)
+   is
+      Entry_Of : constant Library_Vectors.Reference_Type :=
+                   This.Table.Reference (Library);
+   begin
+      Entry_Of.Imports.Append
+        (Import_Entry'(Library => Imported, Mapped => True, Names => <>));
+   end Begin_Mapped_Import;
 
    -----------
    -- Binds --
@@ -106,8 +148,8 @@ package body Raven.Engine.Libraries is
          return True;
       end if;
 
-      for Imported of Entry_Of.Imports loop
-         if This.Provides (Imported, Name) then
+      for Import of Entry_Of.Imports loop
+         if This.Import_Gives (Import, Name) then
             return True;
          end if;
       end loop;
@@ -189,6 +231,20 @@ package body Raven.Engine.Libraries is
       return Raven.Target.No_Library;
    end Find;
 
+   ------------------
+   -- Import_Gives --
+   ------------------
+
+   function Import_Gives
+     (This    : Instance;
+      Import  : Import_Entry;
+      Name    : String)
+      return Boolean
+   is (if Import.Mapped
+       then Import.Names.Contains (Name)
+            and then This.Provides (Import.Library, Import.Names (Name))
+       else This.Provides (Import.Library, Name));
+
    -------------------
    -- Internal_Name --
    -------------------
@@ -207,6 +263,34 @@ package body Raven.Engine.Libraries is
          return Entry_Of.Exports.Element (External);
       end if;
    end Internal_Name;
+
+   ---------------------
+   -- Iterate_Exports --
+   ---------------------
+
+   procedure Iterate_Exports
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Process : not null access procedure (Name : String))
+   is
+      Entry_Of : Library_Record renames This.Table (Library);
+   begin
+      if Entry_Of.Exports_All then
+         for Name of Entry_Of.Defined loop
+            Process (Name);
+         end loop;
+
+         for Position in Entry_Of.Macros.Iterate loop
+            if not Entry_Of.Defined.Contains (Macro_Maps.Key (Position)) then
+               Process (Macro_Maps.Key (Position));
+            end if;
+         end loop;
+      else
+         for Position in Entry_Of.Exports.Iterate loop
+            Process (Name_Maps.Key (Position));
+         end loop;
+      end if;
+   end Iterate_Exports;
 
    -----------
    -- Macro --
@@ -227,12 +311,13 @@ package body Raven.Engine.Libraries is
          return Raven.Target.No_Macro;
       end if;
 
-      for Imported of reverse Entry_Of.Imports loop
-         if This.Provides (Imported, Name) then
+      for Import of reverse Entry_Of.Imports loop
+         if This.Import_Gives (Import, Name) then
             declare
                Found : constant Macro_Maps.Cursor :=
-                         This.Table (Imported).Macros.Find
-                           (This.Internal_Name (Imported, Name));
+                         This.Table (Import.Library).Macros.Find
+                           (This.Internal_Name
+                              (Import.Library, Exported_As (Import, Name)));
             begin
                if Macro_Maps.Has_Element (Found) then
                   return Macro_Maps.Element (Found);
@@ -243,6 +328,24 @@ package body Raven.Engine.Libraries is
 
       return Raven.Target.No_Macro;
    end Macro;
+
+   ----------------
+   -- Map_Import --
+   ----------------
+
+   procedure Map_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Local    : String;
+      External : String)
+   is
+      Entry_Of : constant Library_Vectors.Reference_Type :=
+                   This.Table.Reference (Library);
+      Last     : constant Import_Vectors.Reference_Type :=
+                   Entry_Of.Imports.Reference (Entry_Of.Imports.Last);
+   begin
+      Last.Names.Include (Local, External);
+   end Map_Import;
 
    ----------
    -- Mark --
@@ -314,9 +417,9 @@ package body Raven.Engine.Libraries is
          return Library;
       end if;
 
-      for Imported of reverse Entry_Of.Imports loop
-         if This.Provides (Imported, Name) then
-            return Imported;
+      for Import of reverse Entry_Of.Imports loop
+         if This.Import_Gives (Import, Name) then
+            return Import.Library;
          end if;
       end loop;
 
@@ -341,9 +444,10 @@ package body Raven.Engine.Libraries is
          return Name;
       end if;
 
-      for Imported of reverse Entry_Of.Imports loop
-         if This.Provides (Imported, Name) then
-            return This.Internal_Name (Imported, Name);
+      for Import of reverse Entry_Of.Imports loop
+         if This.Import_Gives (Import, Name) then
+            return This.Internal_Name
+              (Import.Library, Exported_As (Import, Name));
          end if;
       end loop;
 

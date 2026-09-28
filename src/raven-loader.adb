@@ -1,4 +1,6 @@
+with Ada.Containers.Indefinite_Ordered_Maps;
 with Ada.Containers.Indefinite_Vectors;
+with Ada.Containers.Vectors;
 with Ada.Directories;
 with Ada.Exceptions;
 with Ada.Strings.Fixed;
@@ -16,6 +18,61 @@ package body Raven.Loader is
 
    package String_Vectors is
      new Ada.Containers.Indefinite_Vectors (Positive, String);
+
+   package String_Maps is
+     new Ada.Containers.Indefinite_Ordered_Maps (String, String);
+
+   --  An import set (#27), read out of the declaration before anything
+   --  is loaded: the library, and what is done to what it offers,
+   --  innermost first.  A rename's names are in pairs, from and to.
+
+   type Set_Kind is (Only, Except, Prefix, Rename);
+
+   type Set_Step is
+      record
+         Kind  : Set_Kind;
+         Names : String_Vectors.Vector;
+      end record;
+
+   package Step_Vectors is
+     new Ada.Containers.Vectors (Positive, Set_Step);
+
+   type Import_Request is
+      record
+         Library : Ada.Strings.Unbounded.Unbounded_String;
+         Steps   : Step_Vectors.Vector;
+      end record;
+
+   package Request_Vectors is
+     new Ada.Containers.Vectors (Positive, Import_Request);
+
+   --  Whether Spec is an import set rather than a library name: one of
+   --  the four, and then a list.  (only) on its own, or (prefix foo),
+   --  is a library that happens to be called that.
+
+   function Is_Import_Set
+     (Target : Raven.Target.Reference;
+      Spec   : Object)
+      return Boolean;
+
+   --  Read Spec into Request, or say what is wrong with it and return
+   --  False.
+
+   function Parse_Import_Set
+     (Target  : Raven.Target.Reference;
+      Spec    : Object;
+      Request : in out Import_Request)
+      return Boolean;
+
+   --  The names an import set gives, each against what Library exports
+   --  it as, or say what is wrong and return False.
+
+   function Import_Set_Names
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id;
+      Request : Import_Request;
+      Names   : out String_Maps.Map)
+      return Boolean;
 
    --  The libraries being read, innermost last.  A library that asks
    --  for one already here has asked for itself, by however long a way
@@ -288,6 +345,108 @@ package body Raven.Loader is
       end if;
    end Import;
 
+   ----------------------
+   -- Import_Set_Names --
+   ----------------------
+
+   function Import_Set_Names
+     (Target  : Raven.Target.Reference;
+      Library : Raven.Target.Real_Library_Id;
+      Request : Import_Request;
+      Names   : out String_Maps.Map)
+      return Boolean
+   is
+      use Ada.Strings.Unbounded;
+
+      Name_Of : constant String := To_String (Request.Library);
+
+      function Missing (Step : String; Name : String) return Boolean;
+      procedure Offered (Name : String);
+
+      -------------
+      -- Missing --
+      -------------
+
+      function Missing (Step : String; Name : String) return Boolean is
+      begin
+         Report
+           (Target,
+            "import: " & Step & ": " & Name & " is not offered by "
+            & Name_Of);
+         return False;
+      end Missing;
+
+      -------------
+      -- Offered --
+      -------------
+
+      procedure Offered (Name : String) is
+      begin
+         Names.Include (Name, Name);
+      end Offered;
+
+   begin
+      Names.Clear;
+      Target.Iterate_Exports (Library, Offered'Access);
+
+      for Step of Request.Steps loop
+         declare
+            Result : String_Maps.Map;
+         begin
+            case Step.Kind is
+               when Only =>
+                  for Name of Step.Names loop
+                     if not Names.Contains (Name) then
+                        return Missing ("only", Name);
+                     end if;
+                     Result.Include (Name, Names (Name));
+                  end loop;
+
+               when Except =>
+                  Result := Names;
+                  for Name of Step.Names loop
+                     if not Result.Contains (Name) then
+                        return Missing ("except", Name);
+                     end if;
+                     Result.Delete (Name);
+                  end loop;
+
+               when Prefix =>
+                  for Position in Names.Iterate loop
+                     Result.Include
+                       (Step.Names.First_Element & String_Maps.Key (Position),
+                        String_Maps.Element (Position));
+                  end loop;
+
+               when Rename =>
+
+                  --  All at once: (rename (a b) (b a)) swaps them.
+
+                  Result := Names;
+                  for Index in 1 .. Step.Names.Last_Index / 2 loop
+                     declare
+                        From : constant String := Step.Names (2 * Index - 1);
+                     begin
+                        if not Names.Contains (From) then
+                           return Missing ("rename", From);
+                        end if;
+                        Result.Exclude (From);
+                     end;
+                  end loop;
+                  for Index in 1 .. Step.Names.Last_Index / 2 loop
+                     Result.Include
+                       (Step.Names (2 * Index),
+                        Names (Step.Names (2 * Index - 1)));
+                  end loop;
+            end case;
+
+            Names := Result;
+         end;
+      end loop;
+
+      return True;
+   end Import_Set_Names;
+
    -------------
    -- Is_Head --
    -------------
@@ -302,6 +461,34 @@ package body Raven.Loader is
       return Raven.Objects.Is_Pair (Form)
         and then Target.Car (Form) = Target.To_Symbol (Name);
    end Is_Head;
+
+   -------------------
+   -- Is_Import_Set --
+   -------------------
+
+   function Is_Import_Set
+     (Target : Raven.Target.Reference;
+      Spec   : Object)
+      return Boolean
+   is
+      use Raven.Objects;
+   begin
+      if not Is_Pair (Spec)
+        or else not Is_Symbol (Target.Car (Spec))
+        or else not Is_Pair (Target.Cdr (Spec))
+        or else not Is_Pair (Target.Cadr (Spec))
+      then
+         return False;
+      end if;
+
+      declare
+         Head : constant String :=
+                  Target.To_String (To_Symbol (Target.Car (Spec)));
+      begin
+         return Head = "only" or else Head = "except"
+           or else Head = "prefix" or else Head = "rename";
+      end;
+   end Is_Import_Set;
 
    ---------------
    -- Is_Rename --
@@ -433,6 +620,88 @@ package body Raven.Loader is
          end if;
          return Library;
    end Load_File;
+
+   ----------------------
+   -- Parse_Import_Set --
+   ----------------------
+
+   function Parse_Import_Set
+     (Target  : Raven.Target.Reference;
+      Spec    : Object;
+      Request : in out Import_Request)
+      return Boolean
+   is
+      use Raven.Objects;
+
+      function Name_Of (Item : Object) return String
+      is (Target.To_String (To_Symbol (Item)));
+
+      function Wrong (What : String) return Boolean;
+
+      -----------
+      -- Wrong --
+      -----------
+
+      function Wrong (What : String) return Boolean is
+      begin
+         Report (Target, "import: " & What & ", in " & Target.Show (Spec));
+         return False;
+      end Wrong;
+
+   begin
+      if not Is_Import_Set (Target, Spec) then
+         Request.Library :=
+           Ada.Strings.Unbounded.To_Unbounded_String
+             (Library_Name (Target, Spec));
+         return True;
+      end if;
+
+      if not Parse_Import_Set (Target, Target.Cadr (Spec), Request) then
+         return False;
+      end if;
+
+      declare
+         Head : constant String := Name_Of (Target.Car (Spec));
+         Step : Set_Step :=
+                  (Kind  => Set_Kind'Value (Head),
+                   Names => String_Vectors.Empty_Vector);
+         It   : Object := Target.Cddr (Spec);
+      begin
+         while Is_Pair (It) loop
+            declare
+               Item : constant Object := Target.Car (It);
+            begin
+               if Step.Kind /= Rename and then Is_Symbol (Item) then
+                  Step.Names.Append (Name_Of (Item));
+               elsif Step.Kind = Rename
+                 and then Is_Pair (Item)
+                 and then Is_Symbol (Target.Car (Item))
+                 and then Is_Pair (Target.Cdr (Item))
+                 and then Is_Symbol (Target.Cadr (Item))
+                 and then Target.Cddr (Item) = Nil
+               then
+                  Step.Names.Append (Name_Of (Target.Car (Item)));
+                  Step.Names.Append (Name_Of (Target.Cadr (Item)));
+               elsif Step.Kind = Rename then
+                  return Wrong
+                    ("rename: expected (from to), not " & Target.Show (Item));
+               else
+                  return Wrong
+                    (Head & ": expected a name, not " & Target.Show (Item));
+               end if;
+            end;
+            It := Target.Cdr (It);
+         end loop;
+
+         if Step.Kind = Prefix and then Step.Names.Last_Index /= 1 then
+            return Wrong ("prefix: expected one prefix");
+         end if;
+
+         Request.Steps.Append (Step);
+      end;
+
+      return True;
+   end Parse_Import_Set;
 
    ----------------
    -- Read_Begin --
@@ -753,8 +1022,8 @@ package body Raven.Loader is
      (Target  : Raven.Target.Reference;
       Library : Raven.Target.Real_Library_Id)
    is
-      Names : String_Vectors.Vector;
-      It    : Object := Target.Cdr (Target.Top);
+      Requests : Request_Vectors.Vector;
+      It       : Object := Target.Cdr (Target.Top);
    begin
       --  Everything the declaration asks for is taken out of it before
       --  anything is loaded: loading runs the machine, and nothing
@@ -762,10 +1031,13 @@ package body Raven.Loader is
 
       while Raven.Objects.Is_Pair (It) loop
          declare
-            Spec : constant Object := Target.Car (It);
+            Spec    : constant Object := Target.Car (It);
+            Request : Import_Request;
          begin
             if Raven.Objects.Is_Pair (Spec) then
-               Names.Append (Library_Name (Target, Spec));
+               if Parse_Import_Set (Target, Spec, Request) then
+                  Requests.Append (Request);
+               end if;
             else
                Report
                  (Target,
@@ -778,12 +1050,26 @@ package body Raven.Loader is
 
       Target.Drop;
 
-      for Name of Names loop
+      for Request of Requests loop
          declare
-            Id : constant Raven.Target.Library_Id := Load (Target, Name);
+            Id    : constant Raven.Target.Library_Id :=
+                      Load
+                        (Target,
+                         Ada.Strings.Unbounded.To_String (Request.Library));
+            Names : String_Maps.Map;
          begin
-            if Id /= Raven.Target.No_Library then
+            if Id = Raven.Target.No_Library then
+               null;
+            elsif Request.Steps.Is_Empty then
                Target.Add_Import (Library, Id);
+            elsif Import_Set_Names (Target, Id, Request, Names) then
+               Target.Begin_Mapped_Import (Library, Id);
+               for Position in Names.Iterate loop
+                  Target.Map_Import
+                    (Library,
+                     Local    => String_Maps.Key (Position),
+                     External => String_Maps.Element (Position));
+               end loop;
             end if;
          end;
       end loop;
