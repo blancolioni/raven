@@ -26,6 +26,27 @@ package body Raven.Engine.Libraries is
       return String
    is (if Import.Mapped then Import.Names.Element (Name) else Name);
 
+   --  Where Name, written in Library, is defined, and what it is called
+   --  there (#140).  An import that gives a name the library does not
+   --  define is followed into the library that offers it, and on from
+   --  there, because a library may offer what it imported: the end of
+   --  the walk is a library that defines the name, or one that nothing
+   --  it imports accounts for, which is where the name will be looked
+   --  for if it is ever defined.
+   --
+   --  Libraries may import each other, so a walk that goes on longer
+   --  than there are libraries has gone round.  That is Found False:
+   --  nothing accounts for the name.
+
+   procedure Trace
+     (This      : Instance;
+      Library   : Raven.Target.Real_Library_Id;
+      Name      : String;
+      Depth     : Natural;
+      Found     : out Boolean;
+      Home      : out Raven.Target.Real_Library_Id;
+      Home_Name : out Unbounded_String);
+
    --  What a library that provides Name calls it.
 
    function Internal_Name
@@ -302,29 +323,24 @@ package body Raven.Engine.Libraries is
       Name    : String)
       return Raven.Target.Macro_Id
    is
-      Entry_Of : Library_Record renames This.Table (Library);
-      Position : constant Macro_Maps.Cursor := Entry_Of.Macros.Find (Name);
+      Found     : Boolean;
+      Home      : Raven.Target.Real_Library_Id;
+      Home_Name : Unbounded_String;
    begin
-      if Macro_Maps.Has_Element (Position) then
-         return Macro_Maps.Element (Position);
-      elsif Entry_Of.Defined.Contains (Name) then
-         return Raven.Target.No_Macro;
-      end if;
+      This.Trace
+        (Library, Name, Natural (This.Table.Length),
+         Found, Home, Home_Name);
 
-      for Import of reverse Entry_Of.Imports loop
-         if This.Import_Gives (Import, Name) then
-            declare
-               Found : constant Macro_Maps.Cursor :=
-                         This.Table (Import.Library).Macros.Find
-                           (This.Internal_Name
-                              (Import.Library, Exported_As (Import, Name)));
-            begin
-               if Macro_Maps.Has_Element (Found) then
-                  return Macro_Maps.Element (Found);
-               end if;
-            end;
-         end if;
-      end loop;
+      if Found then
+         declare
+            Position : constant Macro_Maps.Cursor :=
+                         This.Table (Home).Macros.Find (To_String (Home_Name));
+         begin
+            if Macro_Maps.Has_Element (Position) then
+               return Macro_Maps.Element (Position);
+            end if;
+         end;
+      end if;
 
       return Raven.Target.No_Macro;
    end Macro;
@@ -411,19 +427,14 @@ package body Raven.Engine.Libraries is
       Name    : String)
       return Raven.Target.Real_Library_Id
    is
-      Entry_Of : Library_Record renames This.Table (Library);
+      Found     : Boolean;
+      Home      : Raven.Target.Real_Library_Id;
+      Home_Name : Unbounded_String;
    begin
-      if Entry_Of.Defined.Contains (Name) then
-         return Library;
-      end if;
-
-      for Import of reverse Entry_Of.Imports loop
-         if This.Import_Gives (Import, Name) then
-            return Import.Library;
-         end if;
-      end loop;
-
-      return Library;
+      This.Trace
+        (Library, Name, Natural (This.Table.Length),
+         Found, Home, Home_Name);
+      return (if Found then Home else Library);
    end Resolve;
 
    -------------------
@@ -436,22 +447,16 @@ package body Raven.Engine.Libraries is
       Name    : String)
       return String
    is
-      Entry_Of : Library_Record renames This.Table (Library);
+      Found     : Boolean;
+      Home      : Raven.Target.Real_Library_Id;
+      Home_Name : Unbounded_String;
    begin
       --  The same walk as Resolve, answering with the other half.
 
-      if Entry_Of.Defined.Contains (Name) then
-         return Name;
-      end if;
-
-      for Import of reverse Entry_Of.Imports loop
-         if This.Import_Gives (Import, Name) then
-            return This.Internal_Name
-              (Import.Library, Exported_As (Import, Name));
-         end if;
-      end loop;
-
-      return Name;
+      This.Trace
+        (Library, Name, Natural (This.Table.Length),
+         Found, Home, Home_Name);
+      return (if Found then To_String (Home_Name) else Name);
    end Resolved_Name;
 
    ---------------------
@@ -467,6 +472,49 @@ package body Raven.Engine.Libraries is
    begin
       Entry_Of.Exports_All := False;
    end Set_Export_List;
+
+   -----------
+   -- Trace --
+   -----------
+
+   procedure Trace
+     (This      : Instance;
+      Library   : Raven.Target.Real_Library_Id;
+      Name      : String;
+      Depth     : Natural;
+      Found     : out Boolean;
+      Home      : out Raven.Target.Real_Library_Id;
+      Home_Name : out Unbounded_String)
+   is
+      Entry_Of : Library_Record renames This.Table (Library);
+   begin
+      Found := True;
+      Home := Library;
+      Home_Name := To_Unbounded_String (Name);
+
+      if Entry_Of.Defined.Contains (Name)
+        or else Entry_Of.Macros.Contains (Name)
+      then
+         return;
+      end if;
+
+      --  The most recent import of a name is the one it means.
+
+      for Import of reverse Entry_Of.Imports loop
+         if This.Import_Gives (Import, Name) then
+            if Depth = 0 then
+               Found := False;
+            else
+               This.Trace
+                 (Import.Library,
+                  This.Internal_Name
+                    (Import.Library, Exported_As (Import, Name)),
+                  Depth - 1, Found, Home, Home_Name);
+            end if;
+            return;
+         end if;
+      end loop;
+   end Trace;
 
    --------------------
    -- Undefine_Macro --
