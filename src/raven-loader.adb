@@ -483,6 +483,7 @@ package body Raven.Loader is
             Target.Release_Stack (Restore => False);
          exception
             when E : Raven.Target.Undefined_Symbol =>
+               Target.Reset_Dynamic_State;
                Target.Release_Stack (Restore => True);
                Abandon
                  (Target, Start, Head,
@@ -490,6 +491,7 @@ package body Raven.Loader is
                   Abandoned);
 
             when Raven.Target.Translation_Error =>
+               Target.Reset_Dynamic_State;
                Target.Release_Stack (Restore => True);
                Abandon (Target, Start, Head, "", Abandoned);
          end;
@@ -718,6 +720,7 @@ package body Raven.Loader is
             end if;
          exception
             when E : Raven.Target.Undefined_Symbol =>
+               Target.Reset_Dynamic_State;
                Abandon
                  (Target, Start, To_String (Head),
                   "undefined: " & Ada.Exceptions.Exception_Message (E),
@@ -734,6 +737,7 @@ package body Raven.Loader is
             --  further.
 
             when Raven.Target.Translation_Error =>
+               Target.Reset_Dynamic_State;
                Abandon (Target, Start, To_String (Head), "", Abandoned);
          end;
       end loop;

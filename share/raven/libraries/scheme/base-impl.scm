@@ -1416,35 +1416,182 @@
 ;;  from where the program is to where it was: out of every extent it is
 ;;  leaving, running each after, and into every extent it is entering,
 ;;  running each before, outermost first.
+;;
+;;  The list is kept by the machine, in the second of its dynamic
+;;  registers, so that a run inside a host's callback puts it back and
+;;  an error that reaches the host clears it (#46).
 
-(define raven-winders '())
+(define (raven-winders) (raven-dynamic 1))
+(define (raven-set-winders! x) (raven-set-dynamic! 1 x))
 
 (define (raven-travel-to here there)
   (cond ((eq? here there) #t)
         ((< (length here) (length there))
          (raven-travel-to here (cdr there))
          ((car (car there)))
-         (set! raven-winders there))
+         (raven-set-winders! there))
         (else
-         (set! raven-winders (cdr here))
+         (raven-set-winders! (cdr here))
          ((cdr (car here)))
          (raven-travel-to (cdr here) there))))
 
 (define (call-with-current-continuation f)
   (raven-call/cc
    (lambda (k)
-     (let ((saved raven-winders))
+     (let ((saved (raven-winders)))
        (f (lambda answers
-            (raven-travel-to raven-winders saved)
+            (raven-travel-to (raven-winders) saved)
             (apply k answers)))))))
 
 (define call/cc call-with-current-continuation)
 
 (define (dynamic-wind before thunk after)
   (before)
-  (set! raven-winders (cons (cons before after) raven-winders))
+  (raven-set-winders! (cons (cons before after) (raven-winders)))
   (call-with-values thunk
     (lambda answers
-      (set! raven-winders (cdr raven-winders))
+      (raven-set-winders! (cdr (raven-winders)))
       (after)
       (apply values answers))))
+
+;;  Exceptions (#46).  The handlers a program has installed are a stack
+;;  the machine keeps, in the first of its dynamic registers: each is the
+;;  handler and the run of the machine it was installed in, innermost
+;;  first.  with-exception-handler installs one for the extent of a
+;;  thunk, by dynamic-wind, so that leaving the thunk by a continuation
+;;  uninstalls it as returning does.
+;;
+;;  raise calls the innermost handler in the extent of the raise, with
+;;  that handler taken off so that one it raises goes further out.  A
+;;  handler that returns from raise has nowhere to return to, and is a
+;;  second error raised where the handler was.  raise-continuable is
+;;  raise whose handler's answer is its own.
+;;
+;;  A handler is only for the run it was installed in.  A raise in a run
+;;  with none -- the top of a program, or a host's callback inside one
+;;  that has -- goes out as the machine's errors always have, to the
+;;  host or to the loader, which say where and count it; the object goes
+;;  with it, and the run further out that has a handler raises it there.
+;;
+;;  The errors the machine finds itself -- (car 1), a name nothing
+;;  defines, a primitive given what it cannot take -- come here too: the
+;;  machine applies raven-raise-from-machine where the error was, when
+;;  there is a handler in this run to raise it to.
+
+(define (raven-handlers) (raven-dynamic 0))
+(define (raven-set-handlers! x) (raven-set-dynamic! 0 x))
+
+(define (with-exception-handler handler thunk)
+  (let ((outer (raven-handlers)))
+    (dynamic-wind
+     (lambda ()
+       (raven-set-handlers! (cons (cons handler (raven-run-depth)) outer)))
+     thunk
+     (lambda () (raven-set-handlers! outer)))))
+
+(define (raven-with-handlers handlers thunk)
+  (let ((inner (raven-handlers)))
+    (dynamic-wind
+     (lambda () (raven-set-handlers! handlers))
+     thunk
+     (lambda () (raven-set-handlers! inner)))))
+
+(define (raven-raise obj continuable)
+  (let ((handlers (raven-handlers)))
+    (if (if (pair? handlers) (= (cdr (car handlers)) (raven-run-depth)) #f)
+        (raven-with-handlers
+         (cdr handlers)
+         (lambda ()
+           (let ((answer ((car (car handlers)) obj)))
+             (if continuable
+                 answer
+                 (raise (make-error-object
+                         "a handler returned from a raise that it cannot"
+                         (list obj)))))))
+        (raven-uncaught obj (raven-describe obj)))))
+
+(define (raise obj) (raven-raise obj #f))
+(define (raise-continuable obj) (raven-raise obj #t))
+
+;;  An error object: what error raises, with the message and irritants
+;;  kept as they were given rather than formatted into a string that a
+;;  handler would have to take apart again.  It is a vector marked with
+;;  a pair nothing else has.
+
+(define raven-error-marker (list 'error-object))
+
+(define (make-error-object message irritants)
+  (vector raven-error-marker message irritants))
+
+(define (error-object? x)
+  (if (vector? x)
+      (if (= (vector-length x) 3) (eq? (vector-ref x 0) raven-error-marker) #f)
+      #f))
+
+(define (error-object-message e) (vector-ref e 1))
+(define (error-object-irritants e) (vector-ref e 2))
+
+(define (error message . irritants)
+  (raise (make-error-object message irritants)))
+
+;;  Raven has no errors of reading or of files apart from the others, so
+;;  no error object is one of those.
+
+(define (file-error? x) #f)
+(define (read-error? x) #f)
+
+;;  What an error that reaches the host says: an error object's message
+;;  and its irritants written after it, and anything else raised said to
+;;  be that.
+
+(define (raven-describe obj)
+  (if (error-object? obj)
+      (apply string-append
+             (raven-display-text (error-object-message obj))
+             (map (lambda (i) (string-append " " (raven-write-text i)))
+                  (error-object-irritants obj)))
+      (string-append "uncaught raise of " (raven-write-text obj))))
+
+(define (raven-raise-from-machine raised? x)
+  (raise (if raised? x (make-error-object x '()))))
+
+(raven-set-dynamic! 2 raven-raise-from-machine)
+
+;;  guard, as R7RS gives it: the body is run with a handler that goes
+;;  back to where the guard was and tries the clauses there, with the
+;;  guard's own handlers.  A clause that matches is the guard's answer;
+;;  when none does, the raise goes on from where it was, continuably,
+;;  to whatever handler was further out.  The names it makes are fresh,
+;;  so a body or a clause cannot take one of them.
+
+(define (raven-guard-clauses clauses reraise)
+  (if (null? clauses)
+      reraise
+      (if (eq? (car (car (reverse clauses))) 'else)
+          `(cond ,@clauses)
+          `(cond ,@clauses (else ,reraise)))))
+
+(define-macro (guard spec . body)
+  (let ((var (car spec))
+        (clauses (cdr spec))
+        (guard-k (gensym 'guard-k))
+        (handler-k (gensym 'handler-k))
+        (condition (gensym 'condition))
+        (answers (gensym 'answers)))
+    `((call/cc
+       (lambda (,guard-k)
+         (with-exception-handler
+          (lambda (,condition)
+            ((call/cc
+              (lambda (,handler-k)
+                (,guard-k
+                 (lambda ()
+                   (let ((,var ,condition))
+                     ,(raven-guard-clauses
+                       clauses
+                       `(,handler-k
+                         (lambda () (raise-continuable ,condition)))))))))))
+          (lambda ()
+            (call-with-values (lambda () ,@body)
+              (lambda ,answers
+                (,guard-k (lambda () (apply values ,answers))))))))))))

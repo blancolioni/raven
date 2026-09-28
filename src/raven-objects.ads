@@ -283,7 +283,12 @@ private package Raven.Objects is
      with Post => Is_Foreign_Value (To_Object'Result)
      and then To_Foreign_Value_Id (To_Object'Result) = Id;
 
-   type Foreign_Function_Id is range 1 .. 99;
+   --  As many as the payload of an extended object holds, as a foreign
+   --  value's id is.  It was 1 .. 99, which the base library and a
+   --  host's own functions between them went past once exceptions
+   --  needed four more (#46).
+
+   type Foreign_Function_Id is range 1 .. 2 ** Extended_Payload_Bits - 1;
 
    function Is_Foreign_Function (X : Object) return Boolean;
    function To_Foreign_Function_Id (X : Object) return Foreign_Function_Id

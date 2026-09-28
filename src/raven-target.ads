@@ -216,6 +216,40 @@ private package Raven.Target is
       Count : Natural)
    is abstract;
 
+   --  The dynamic state a program's handlers and extents are kept in
+   --  (#46, #47): the stack of exception handlers, each with the run it
+   --  was installed in; dynamic-wind's list of extents; the procedure in
+   --  the library that raises an error the machine found; and an object
+   --  raised in a run with no handler for it, on its way out to one that
+   --  has.  They are the machine's rather than the library's, so that a
+   --  run inside a host's callback can keep them and put them back, and
+   --  so that what an error left behind can be cleared when it reaches
+   --  the host.
+
+   type Dynamic_Register is (Handler_Stack, Wind_List, Raiser, Pending_Raise);
+
+   function Dynamic_State
+     (This  : Abstraction;
+      Which : Dynamic_Register)
+      return Object
+   is abstract;
+
+   procedure Set_Dynamic_State
+     (This  : in out Abstraction;
+      Which : Dynamic_Register;
+      Value : Object)
+   is abstract;
+
+   --  How many runs of the machine are inside one another: nought at the
+   --  top, and one more inside each host callback's Apply.
+
+   function Run_Depth (This : Abstraction) return Natural is abstract;
+
+   --  Every handler and extent given up, and nothing pending: what is
+   --  left when an error has gone past all of them to the host.
+
+   procedure Reset_Dynamic_State (This : in out Abstraction) is abstract;
+
    procedure Bind_Foreign_Function
      (This           : in out Abstraction;
       Name           : String;

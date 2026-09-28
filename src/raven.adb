@@ -42,6 +42,18 @@ package body Raven is
    procedure Features_Of (VM : Raven_VM);
    procedure Holds_Requirement (VM : Raven_VM);
 
+   --  What the library's exceptions and dynamic-wind are written on
+   --  (#46, #47): the machine's dynamic registers, read and written by
+   --  their position in Raven.Target.Dynamic_Register; how many runs deep
+   --  the machine is; and the way out for what was raised with no handler
+   --  in this run to catch it, which keeps the object for a run further
+   --  out that has one and goes there as an Ada exception.
+
+   procedure Dynamic_Of (VM : Raven_VM);
+   procedure Run_Depth_Of (VM : Raven_VM);
+   procedure Set_Dynamic (VM : Raven_VM);
+   procedure Uncaught (VM : Raven_VM);
+
    procedure Check_Kind
      (This     : Raven_VM;
       Index    : Slot_Index;
@@ -215,6 +227,18 @@ package body Raven is
       return String
    is (Foreign_Value_Instance'Class (This).Show (Show_Object));
 
+   ----------------
+   -- Dynamic_Of --
+   ----------------
+
+   procedure Dynamic_Of (VM : Raven_VM) is
+      Which : constant Raven.Target.Dynamic_Register :=
+                Raven.Target.Dynamic_Register'Val
+                  (Integer'(VM.Get_Slot (1)));
+   begin
+      VM.Set_Slot (1, VM.Data.Target.Dynamic_State (Which));
+   end Dynamic_Of;
+
    -----------
    -- Equal --
    -----------
@@ -315,6 +339,15 @@ package body Raven is
 
       This.Set_Slot (1, This.Data.Target.Pop);
 
+   exception
+      when others =>
+
+         --  An error that got all the way here went past every handler
+         --  and extent the program had, and none of them is still in
+         --  force: the next form starts with none.
+
+         This.Data.Target.Reset_Dynamic_State;
+         raise;
    end Evaluate;
 
    --------------
@@ -332,6 +365,10 @@ package body Raven is
         (This.Data.Target.Interaction_Library);
       This.Data.Target.Execute;
       This.Set_Slot (1, This.Data.Target.Pop);
+   exception
+      when others =>
+         This.Data.Target.Reset_Dynamic_State;
+         raise;
    end Evaluate;
 
    -----------------
@@ -697,6 +734,14 @@ package body Raven is
         ("raven-features", Features_Of'Access, 0);
       This.Bind_Foreign_Function
         ("raven-feature-requirement?", Holds_Requirement'Access, 1);
+      This.Bind_Foreign_Function
+        ("raven-dynamic", Dynamic_Of'Access, 1);
+      This.Bind_Foreign_Function
+        ("raven-set-dynamic!", Set_Dynamic'Access, 2);
+      This.Bind_Foreign_Function
+        ("raven-run-depth", Run_Depth_Of'Access, 0);
+      This.Bind_Foreign_Function
+        ("raven-uncaught", Uncaught'Access, 2);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
@@ -783,6 +828,15 @@ package body Raven is
       This.Data.Evaluator.Report;
    end Report_State;
 
+   ------------------
+   -- Run_Depth_Of --
+   ------------------
+
+   procedure Run_Depth_Of (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, VM.Data.Target.Run_Depth);
+   end Run_Depth_Of;
+
    -------------
    -- Set_Car --
    -------------
@@ -812,6 +866,20 @@ package body Raven is
       Cell.Cdr := Value;
       This.Data.Memory.Set (Address, Cell);
    end Set_Cdr;
+
+   -----------------
+   -- Set_Dynamic --
+   -----------------
+
+   procedure Set_Dynamic (VM : Raven_VM) is
+      Which : constant Raven.Target.Dynamic_Register :=
+                Raven.Target.Dynamic_Register'Val
+                  (Integer'(VM.Get_Slot (1)));
+      Value : constant Object := VM.Get_Slot (2);
+   begin
+      VM.Data.Target.Set_Dynamic_State (Which, Value);
+      VM.Set_Slot (1, Value);
+   end Set_Dynamic;
 
    -------------------
    -- Set_Parameter --
@@ -1251,6 +1319,17 @@ package body Raven is
    begin
       return This.Data.Target.To_Symbol (Name);
    end To_Symbol;
+
+   --------------
+   -- Uncaught --
+   --------------
+
+   procedure Uncaught (VM : Raven_VM) is
+      Raised : constant Object := VM.Get_Slot (1);
+   begin
+      VM.Data.Target.Set_Dynamic_State (Raven.Target.Pending_Raise, Raised);
+      raise Constraint_Error with Raven.Strings.Get_String (VM, 2);
+   end Uncaught;
 
    ---------------
    -- User_Data --

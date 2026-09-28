@@ -12,6 +12,10 @@
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
 ;;  values-rename, let-values-expand, raven-winders, raven-travel-to,
+;;  raven-set-winders!, raven-handlers, raven-set-handlers!,
+;;  raven-with-handlers, raven-raise, raven-error-marker,
+;;  make-error-object, raven-describe, raven-raise-from-machine,
+;;  raven-guard-clauses,
 ;;  simplest-between, simplest-positive,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
@@ -64,6 +68,11 @@
 
    ;;  continuations
    call-with-current-continuation call/cc dynamic-wind
+
+   ;;  exceptions
+   raise raise-continuable with-exception-handler guard
+   error-object? error-object-message error-object-irritants
+   file-error? read-error?
    rational? real? complex? numerator denominator rationalize
    zero? positive? negative? even? odd?
    abs min max gcd lcm expt square

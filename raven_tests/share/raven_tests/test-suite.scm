@@ -877,6 +877,73 @@
                         (lambda () (add 'disconnect)))
           (if (< (length path) 4) (c 'talk2) (reverse path)))))
 
+;;  Exceptions (#46).  error raises an error object, raise raises
+;;  anything, and guard catches either, as do the errors the machine
+;;  finds itself.
+
+(test "guard catches an error" "boom"
+      (guard (e (#t (error-object-message e))) (error "boom" 1 2)))
+(test "with its irritants" '(1 2)
+      (guard (e ((error-object? e) (error-object-irritants e)))
+        (error "boom" 1 2)))
+(test "guard catches what is raised" '(caught oops)
+      (guard (e ((symbol? e) (list 'caught e))) (raise 'oops)))
+(test "a clause with =>" 42
+      (guard (e ((assq 'a e) => cdr) ((assq 'b e)))
+        (raise (list (cons 'a 42)))))
+(test "a clause of a test alone" '(b . 23)
+      (guard (e ((assq 'a e) => cdr) ((assq 'b e)))
+        (raise (list (cons 'b 23)))))
+(test "else" 'other (guard (e (else 'other)) (raise 1)))
+(test "no clause matching goes further out" 'outer
+      (guard (e (#t 'outer))
+        (guard (e ((string? e) 'inner)) (raise 'not-a-string))))
+(test "guard of nothing raised is the body" 3 (guard (e (#t 'no)) (+ 1 2)))
+(test "or its values" '(1 2)
+      (call-with-values (lambda () (guard (e (#t 0)) (values 1 2))) list))
+
+;;  The machine's own errors are catchable, and are error objects.
+
+(test "car of what is not a pair" #t
+      (guard (e (#t (error-object? e))) (car 1)))
+(test "with the machine's message" #t
+      (guard (e (#t (string? (error-object-message e)))) (car 1)))
+(test "a name nothing defines" 'undefined
+      (guard (e (#t 'undefined)) (probe-name-nothing-defines 1)))
+(test "a primitive refusing" 'caught
+      (guard (e (#t 'caught)) (vector-ref (vector 1) 5)))
+(test "and the program goes on" 5 (+ 2 3))
+
+;;  with-exception-handler, raise-continuable, and a handler that
+;;  returns from raise, which is a second error.
+
+(test "raise-continuable answers with the handler's value" 43
+      (with-exception-handler
+       (lambda (c) 42)
+       (lambda () (+ (raise-continuable 'c) 1))))
+(test "a handler returning from raise is an error" #t
+      (guard (e (#t (error-object? e)))
+        (with-exception-handler (lambda (c) 'ignored)
+                                (lambda () (raise 'x)))))
+(test "a handler raising goes further out" 'further
+      (guard (e ((eq? e 'again) 'further))
+        (with-exception-handler (lambda (c) (raise 'again))
+                                (lambda () (raise 'first)))))
+
+;;  Leaving by an exception leaves the extents it is inside.
+
+(test "dynamic-wind's after runs when a guard catches" '(before after caught)
+      (let ((log '()))
+        (guard (e (#t (set! log (cons 'caught log))))
+          (dynamic-wind (lambda () (set! log (cons 'before log)))
+                        (lambda () (error "out"))
+                        (lambda () (set! log (cons 'after log)))))
+        (reverse log)))
+
+(test "error-object? of what is not one" #f (error-object? 'x))
+(test "file-error?" #f (guard (e (#t (file-error? e))) (error "x")))
+(test "read-error?" #f (guard (e (#t (read-error? e))) (error "x")))
+
 ;;  (scheme inexact) (#105).  A square root is exact when the number is
 ;;  and its root is; everything else here is inexact.
 
