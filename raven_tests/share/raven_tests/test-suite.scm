@@ -1992,14 +1992,47 @@
 (test "characters order by code point" #t
       (< (char->integer #\a) (char->integer #\b)))
 
-;;  char=? and the rest of the character comparisons are scheme now
-;;  that these two are here, which is what they were wanted for.
+;;  The character comparisons, which were written here in scheme on
+;;  these two and are the base library's now (#157).  Each takes any
+;;  number of characters and compares code points.
 
-(define (char=? a b) (= (char->integer a) (char->integer b)))
-(define (char<? a b) (< (char->integer a) (char->integer b)))
-(test "a char=? written in scheme" #t (char=? #\a #\a))
-(test "a char=? that says no" #f (char=? #\a #\b))
-(test "a char<? written in scheme" #t (char<? #\a #\b))
+(test "char=?" #t (char=? #\a #\a))
+(test "char=? that says no" #f (char=? #\a #\b))
+(test "char=? of three" #t (char=? #\a #\a #\a))
+(test "char=? of three, one different" #f (char=? #\a #\a #\b))
+(test "char=? is case-sensitive" #f (char=? #\a #\A))
+(test "char<?" #t (char<? #\a #\b))
+(test "char<? of three in order" #t (char<? #\a #\b #\c))
+(test "char<? of three out of order" #f (char<? #\a #\c #\b))
+(test "char<? of the same" #f (char<? #\a #\a))
+(test "char>?" #t (char>? #\b #\a))
+(test "char<=? of the same" #t (char<=? #\a #\a #\b))
+(test "char<=? out of order" #f (char<=? #\b #\a))
+(test "char>=? of the same" #t (char>=? #\b #\b #\a))
+(test "char>=? out of order" #f (char>=? #\a #\b))
+(test "char<? past the ASCII range" #t (char<? #\z #\x3BB))
+(test "char=? of something else is an error" "expected a character"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (char=? #\a 1)))
+
+;;  boolean=? and symbol=?, the same shape.
+
+(test "boolean=?" #t (boolean=? #t #t))
+(test "boolean=? of two falses" #t (boolean=? #f #f))
+(test "boolean=? that says no" #f (boolean=? #t #f))
+(test "boolean=? of three" #t (boolean=? #f #f #f))
+(test "boolean=? of three, one different" #f (boolean=? #f #f #t))
+(test "boolean=? of something else is an error" "boolean=?: expected booleans"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (boolean=? #t 1)))
+(test "symbol=?" #t (symbol=? 'a 'a))
+(test "symbol=? that says no" #f (symbol=? 'a 'b))
+(test "symbol=? of three" #t (symbol=? 'a 'a 'a))
+(test "symbol=? of three, one different" #f (symbol=? 'a 'a 'b))
+(test "symbol=? of a made symbol" #t (symbol=? 'probe (string->symbol "probe")))
+(test "symbol=? of something else is an error" "symbol=?: expected symbols"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (symbol=? 'a "a")))
 
 ;;  The questions that go with them.  string? and symbol? were bound
 ;;  already and are the shape these follow.
