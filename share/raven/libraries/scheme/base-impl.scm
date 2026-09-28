@@ -226,8 +226,9 @@
 ;;  for every bit of the power rather than one for every unit of it, and
 ;;  a tail call, so a large power neither takes long nor goes deep.  A
 ;;  negative power is the reciprocal, which is exact for an exact base:
-;;  (expt 2 -3) is 1/8.  A power that is not an integer wants roots and
-;;  logarithms, which are (scheme inexact) and #105's.
+;;  (expt 2 -3) is 1/8.  A power that is not an integer is the machine's,
+;;  as a double: (expt 2 0.5) is the square root of two, and a negative
+;;  number to one is a complex number, which raven has none of.
 
 (define (expt base power)
   (if (integer? power)
@@ -235,7 +236,7 @@
        (if (negative? power)
            (/ 1 (expt-by-squaring base (exact (- power)) 1))
            (expt-by-squaring base (exact power) 1)))
-      (error "expt: a power that is not an integer wants (scheme inexact)")))
+      (raven-power base power)))
 
 (define (expt-by-squaring base power acc)
   (if (zero? power)

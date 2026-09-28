@@ -127,6 +127,30 @@ private package Raven.Numbers is
 
    function Rounded (N : Number; How : Rounding) return Number;
 
+   --  (scheme inexact) (#105).  Every answer is inexact but a square
+   --  root: R7RS lets an exact number with an exact root have it, and
+   --  raven takes that, so (sqrt 9) is 3 and (sqrt 1/4) is 1/2, while
+   --  (sqrt 2) is the double.  There are no complex numbers, so what
+   --  has only a complex answer -- the square root or logarithm of a
+   --  negative number, the arcsine of 2 -- is refused and says why, and
+   --  so is what would be an infinity, which raven does not make.
+
+   type Elementary is (Exp, Log, Sin, Cos, Tan, Asin, Acos, Atan);
+
+   function Apply (How : Elementary; N : Number) return Number;
+
+   --  atan of two arguments, which is the angle of the point (X, Y)
+   --  and knows which quadrant it is in, where atan of Y / X does not.
+
+   function Arctangent (Y, X : Number) return Number;
+
+   function Square_Root (N : Number) return Number;
+
+   --  Base to a power that is not an exact integer, which expt hands
+   --  here and does the exact integer powers itself.
+
+   function Power (Base, Exponent : Number) return Number;
+
    --  A number as it is written, in a radix from 2 to 16, without the
    --  prefix that would say which.  A rational is its numerator and its
    --  denominator with a slash between.  An inexact number is written in

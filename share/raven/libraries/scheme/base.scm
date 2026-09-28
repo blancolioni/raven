@@ -51,8 +51,9 @@
    procedure?
 
    ;;  numbers.  Exact integers of any size, exact rationals, and
-   ;;  inexact numbers that are doubles; what is not here is sqrt and
-   ;;  the rest of (scheme inexact) (#105).
+   ;;  inexact numbers that are doubles.  sqrt, exp, log and the
+   ;;  trigonometric functions are (scheme inexact)'s, where R7RS puts
+   ;;  them.
    = < > <= >= + - * / sum
    number? integer? exact-integer?
    exact? inexact? exact inexact

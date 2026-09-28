@@ -157,6 +157,30 @@ package body Raven.Tests.Numbers is
 
       Test_Message (VM, "(quotient 1/2 1)", "quotient: not an integer: 1/2");
       Test_Message (VM, "(/ 1/2 0)", "divide by zero");
+
+      --  What has only a complex answer, or would be an infinity, is
+      --  refused and says which.
+
+      VM.Evaluate ("(import (scheme inexact))");
+      Test_Message
+        (VM, "(sqrt -4)",
+         "sqrt: -4 has no real square root, and raven has no complex"
+         & " numbers");
+      Test_Message
+        (VM, "(log 0)",
+         "log: 0 has no real logarithm, and raven has no infinities");
+      Test_Message
+        (VM, "(log -1)",
+         "log: -1 has no real logarithm, and raven has no complex numbers");
+      Test_Message
+        (VM, "(asin 2)",
+         "asin: 2 is outside -1 .. 1, and raven has no complex numbers");
+      Test_Message (VM, "(atan 0 0)", "atan: the point (0, 0) has no angle");
+      Test_Message
+        (VM, "(expt -8 1/3)",
+         "expt: -8 to the power 1/3 is a complex number, and raven has none");
+      Test_Message
+        (VM, "(exp 1000)", "exp: 1000 has no answer a double holds");
       Test_Message
         (VM, "(* 1e300 1e300)",
          "inexact overflow: past what a double holds");
