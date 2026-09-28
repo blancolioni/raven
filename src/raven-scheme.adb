@@ -216,9 +216,9 @@ package body Raven.Scheme is
    is
    begin
       Evaluator.Bind_Foreign_Function
-        ("equal?", Are_Equal'Access, 2);
+        ("raven-equal?", Are_Equal'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("symbol?", Is_Symbol'Access, 1);
+        ("raven-symbol?", Is_Symbol'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-gensym", Generate_Symbol'Access, 1);
 
@@ -242,31 +242,31 @@ package body Raven.Scheme is
       --  and a character is an immediate holding its own code point.
 
       Evaluator.Bind_Foreign_Function
-        ("set-car!", Set_Car'Access, 2);
+        ("raven-set-car!", Set_Car'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("set-cdr!", Set_Cdr'Access, 2);
+        ("raven-set-cdr!", Set_Cdr'Access, 2);
 
       Evaluator.Bind_Foreign_Function
-        ("symbol->string", Symbol_To_String'Access, 1);
+        ("raven-symbol->string", Symbol_To_String'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("string->symbol", String_To_Symbol'Access, 1);
+        ("raven-string->symbol", String_To_Symbol'Access, 1);
 
       Evaluator.Bind_Foreign_Function
-        ("char->integer", Character_To_Integer'Access, 1);
+        ("raven-char->integer", Character_To_Integer'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("integer->char", Integer_To_Character'Access, 1);
+        ("raven-integer->char", Integer_To_Character'Access, 1);
 
       Evaluator.Bind_Foreign_Function
-        ("procedure?", Is_Procedure'Access, 1);
+        ("raven-procedure?", Is_Procedure'Access, 1);
 
       Evaluator.Bind_Foreign_Function
-        ("char?", Is_Character'Access, 1);
+        ("raven-char?", Is_Character'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("integer?", Is_Integer'Access, 1);
+        ("raven-integer?", Is_Integer'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("number?", Is_Number'Access, 1);
+        ("raven-number?", Is_Number'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("exact-integer?", Is_Exact_Integer'Access, 1);
+        ("raven-exact-integer?", Is_Exact_Integer'Access, 1);
 
       Raven.Scheme.Numerics.Load_Numeric_Library (Evaluator);
       Raven.Strings.Load_String_Library (Evaluator);

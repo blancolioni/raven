@@ -7,6 +7,49 @@
 
 (define (gensym prefix) (raven-gensym prefix))
 
+;;  The rest of what the machine does for this library under an R7RS
+;;  name, which it binds under a raven- one for the same reason
+;;  (#166): a foreign function is in every library, so one bound as
+;;  vector-ref was there in a library that imported nothing, and no
+;;  import set could leave it out.  Each is the machine's procedure
+;;  itself, offered under the name a program writes.
+
+(define binary-port? raven-binary-port?)
+(define bytevector-length raven-bytevector-length)
+(define bytevector-u8-ref raven-bytevector-u8-ref)
+(define bytevector-u8-set! raven-bytevector-u8-set!)
+(define bytevector? raven-bytevector?)
+(define char->integer raven-char->integer)
+(define char? raven-char?)
+(define equal? raven-equal?)
+(define exact-integer? raven-exact-integer?)
+(define get-output-bytevector raven-get-output-bytevector)
+(define get-output-string raven-get-output-string)
+(define input-port? raven-input-port?)
+(define integer->char raven-integer->char)
+(define integer? raven-integer?)
+(define number? raven-number?)
+(define open-input-bytevector raven-open-input-bytevector)
+(define open-input-string raven-open-input-string)
+(define open-output-bytevector raven-open-output-bytevector)
+(define open-output-string raven-open-output-string)
+(define output-port? raven-output-port?)
+(define port? raven-port?)
+(define procedure? raven-procedure?)
+(define set-car! raven-set-car!)
+(define set-cdr! raven-set-cdr!)
+(define string->symbol raven-string->symbol)
+(define string->utf8 raven-string->utf8)
+(define string? raven-string?)
+(define symbol->string raven-symbol->string)
+(define symbol? raven-symbol?)
+(define textual-port? raven-textual-port?)
+(define utf8->string raven-utf8->string)
+(define vector-length raven-vector-length)
+(define vector-ref raven-vector-ref)
+(define vector-set! raven-vector-set!)
+(define vector? raven-vector?)
+
 ;;  eqv? is eq? for everything but numbers, where R7RS asks whether
 ;;  they are the same number and equally exact -- which is not identity
 ;;  once a number can be boxed, because two equal bignums are two
