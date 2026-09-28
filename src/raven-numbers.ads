@@ -1,3 +1,5 @@
+private with Ada.Numerics.Big_Numbers.Big_Integers;
+
 with Raven.Objects;
 
 --  Numbers, as arithmetic sees them: decoded from an object, operated
@@ -6,23 +8,27 @@ with Raven.Objects;
 --  This is the seam the numeric tower goes behind (#45).  Every
 --  arithmetic primitive raven has goes through it, and does nothing
 --  else itself: decode each operand, ask this for the answer, encode
---  it.  So when there are floats, bignums and rationals, each is a kind
---  of Number here and a case in each operation, and the primitives and
---  the scheme library above them do not change.
+--  it.  So each kind of number is a kind of Number here and a case in
+--  each operation, and the primitives and the scheme library above them
+--  do not change when one is added.
 --
---  There is one kind so far, the fixnum: an integer in an object's
---  payload.  Nothing a program can see is different; what is different
---  is that there is one place for the rest to go.
+--  Two kinds so far.  A fixnum is an integer in an object's payload,
+--  29 bits and a sign.  A bignum is an exact integer past that (#102),
+--  held in the heap as a block of packed bytes and worked on as Ada's
+--  Big_Integer: decoding one copies its digits out and encoding one
+--  copies them back, which is the same order of work as adding two of
+--  them and less than multiplying them.  Two fixnums never become a
+--  Big_Integer at all; their answer is worked out in Long_Long_Integer,
+--  where it cannot overflow, and only made a bignum if it does not fit.
 --
---  Normalisation is the invariant, and it is written down while there
---  is nothing yet to normalise so that what comes later inherits it
---  rather than having to be audited for it: every Number an operation
---  gives back is in the smallest representation that holds it exactly.
---  An integer that fits in a fixnum is a fixnum, however it was
---  arrived at -- (- (expt 2 40) (expt 2 40)) is a fixnum zero and not
---  a boxed one -- and a rational whose denominator is one will be an
---  integer.  Encode depends on it, and so does equality: two normal
---  numbers that are equal are the same word when they fit in one.
+--  Normalisation is the invariant: every Number an operation gives back
+--  is in the smallest representation that holds it exactly.  An integer
+--  that fits in a fixnum is a fixnum, however it was arrived at --
+--  (- (expt 2 40) (expt 2 40)) is a fixnum zero and not a boxed one --
+--  and a rational whose denominator is one will be an integer.  Encode
+--  depends on it, and so does equality: a bignum and a fixnum are never
+--  the same number, and two normal numbers that fit in a word are equal
+--  when they are the same word.
 
 private package Raven.Numbers is
 
@@ -33,15 +39,25 @@ private package Raven.Numbers is
 
    function Is_Arithmetic (X : Object) return Boolean;
 
-   function Decode (X : Object) return Number
+   --  Decoding a bignum reads its block, and encoding one makes a block,
+   --  which may collect.  Nothing a Number holds is in the heap, so a
+   --  collection while encoding moves nothing a Number needs; but an
+   --  object the caller read before Encode is somewhere else afterwards.
+
+   function Decode
+     (VM : Raven_VM'Class;
+      X  : Object)
+      return Number
      with Pre => Is_Arithmetic (X);
 
-   function Encode (N : Number) return Object
+   function Encode
+     (VM : Raven_VM'Class;
+      N  : Number)
+      return Object
      with Post => Is_Arithmetic (Encode'Result);
 
    --  The operations.  Each gives back a normal Number, or raises
-   --  Constraint_Error saying why there is none: an integer past what
-   --  a fixnum holds, until there are bignums to hold it (#102), or a
+   --  Constraint_Error saying why there is none, which is now only a
    --  division by zero.
 
    function Add (Left, Right : Number) return Number;
@@ -59,31 +75,50 @@ private package Raven.Numbers is
    --  whatever it is held as, so (= 2 2.0) will be true once there are
    --  floats to ask it of.  Eqv is eqv?, and asks more: equal, and both
    --  exact or both inexact, so (eqv? 2 2.0) is false.  Neither is
-   --  identity.  Two equal bignums will be two objects, and asking
-   --  whether they are the same word would say they are not.
-   --
-   --  With fixnums alone the two agree, and agree with identity: that
-   --  is why = could be eq? until now, and why it cannot stay so.
+   --  identity: two equal bignums are two objects.
 
    function Equal (Left, Right : Number) return Boolean;
    function Eqv (Left, Right : Number) return Boolean;
 
-   --  A number as it is written, for messages about one.
+   --  A number as it is written, in a radix from 2 to 16, without the
+   --  prefix that would say which.
 
-   function Image (N : Number) return String;
+   subtype Radix is Positive range 2 .. 16;
+
+   function Image
+     (N    : Number;
+      Base : Radix := 10)
+      return String;
+
+   --  An exact integer written as the reader takes one: an optional sign,
+   --  an optional #b, #o, #d or #x that overrides Base, and at least one
+   --  digit of the base.  Valid is false for anything else, and N is then
+   --  nought.
+
+   procedure Read
+     (Text  : String;
+      Base  : Radix;
+      N     : out Number;
+      Valid : out Boolean);
 
 private
 
-   type Number_Kind is (Fixnum);
+   use Ada.Numerics.Big_Numbers.Big_Integers;
+
+   type Number_Kind is (Fixnum, Bignum);
 
    subtype Fixnum_Value is Integer
      range Raven.Objects.Min_Integer .. Raven.Objects.Max_Integer;
+
+   --  A Bignum's Big is never in Fixnum_Value's range.
 
    type Number (Kind : Number_Kind := Fixnum) is
       record
          case Kind is
             when Fixnum =>
                Value : Fixnum_Value := 0;
+            when Bignum =>
+               Big   : Big_Integer;
          end case;
       end record;
 

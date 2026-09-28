@@ -97,6 +97,15 @@
 
 (define (num-eq? a b) (raven-num-eq a b))
 
+;;  A number as text and text as a number, in radix 2, 8, 10 or 16.
+;;  string->number answers #f for text that is not a number.
+
+(define (number->string n radix)
+  (raven-number->string n (optional radix 10)))
+
+(define (string->number s radix)
+  (raven-string->number s (optional radix 10)))
+
 
 (define (+ . xs) (fold raven-add 0 xs))
 (define (* . xs) (fold raven-mul 1 xs))

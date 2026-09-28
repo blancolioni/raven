@@ -103,6 +103,23 @@ package body Raven.Engine.Memory is
       Length : Natural)
       return Object;
 
+   overriding function New_Bignum
+     (This     : in out Instance;
+      Length   : Natural;
+      Negative : Boolean)
+      return Object;
+
+   overriding function Is_Negative
+     (This : Instance;
+      X    : Object)
+      return Boolean;
+
+   --  What keeps its elements as packed bytes: a bytevector, and a
+   --  bignum's magnitude.
+
+   function Holds_Bytes (V : Object) return Boolean
+   is (Raven.Objects.Is_Bytevector (V) or else Raven.Objects.Is_Bignum (V));
+
    overriding function Vector_Length
      (This : Instance;
       V    : Object)
@@ -649,6 +666,20 @@ package body Raven.Engine.Memory is
       in This.To_Space .. This.To_Space + This.Space_Size - 1;
    end In_To_Space;
 
+   -----------------
+   -- Is_Negative --
+   -----------------
+
+   overriding function Is_Negative
+     (This : Instance;
+      X    : Object)
+      return Boolean
+   is
+   begin
+      return This.Core (Raven.Objects.Get_Address (X)).Cdr
+        = Raven.Objects.To_Object (Integer'(1));
+   end Is_Negative;
+
    ----------
    -- Mark --
    ----------
@@ -728,13 +759,13 @@ package body Raven.Engine.Memory is
             --  first.
 
             if Raven.Objects.Is_Vector (Item)
-              or else Raven.Objects.Is_Bytevector (Item)
+              or else Holds_Bytes (Item)
             then
                Cell.Car :=
                  Raven.Objects.To_Pair
                    (Copy_Block
                       (This, Address,
-                       (if Raven.Objects.Is_Bytevector (Item)
+                       (if Holds_Bytes (Item)
                         then Byte_Cells_For
                           (Raven.Objects.To_Integer (Cell.Car))
                         else Cells_For
@@ -762,12 +793,36 @@ package body Raven.Engine.Memory is
          elsif Raven.Objects.Is_Bytevector (Item) then
             return Raven.Objects.To_Bytevector
               (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Bignum (Item) then
+            return Raven.Objects.To_Bignum
+              (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
          end if;
       end;
 
    end Move;
+
+   ----------------
+   -- New_Bignum --
+   ----------------
+
+   overriding function New_Bignum
+     (This     : in out Instance;
+      Length   : Natural;
+      Negative : Boolean)
+      return Object
+   is
+      Bytes : constant Object := This.New_Bytevector (Length);
+      Base  : constant Address_Type := Raven.Objects.Get_Address (Bytes);
+   begin
+      --  A bytevector's block with the sign in the half of the header a
+      --  bytevector leaves nil, and the tag that says it is a number.
+
+      This.Core (Base).Cdr :=
+        Raven.Objects.To_Object (Integer'(if Negative then 1 else 0));
+      return Raven.Objects.To_Bignum (Base);
+   end New_Bignum;
 
    --------------------
    -- New_Bytevector --
@@ -967,7 +1022,7 @@ package body Raven.Engine.Memory is
       Value : Object)
    is
    begin
-      if Raven.Objects.Is_Bytevector (V) then
+      if Holds_Bytes (V) then
          Set_Byte (This, V, Index, Value);
          return;
       end if;
@@ -1006,7 +1061,7 @@ package body Raven.Engine.Memory is
       return Object
    is
    begin
-      if Raven.Objects.Is_Bytevector (V) then
+      if Holds_Bytes (V) then
          return Raven.Objects.To_Object (Integer (Get_Byte (This, V, Index)));
       end if;
 

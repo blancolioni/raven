@@ -168,6 +168,23 @@ private package Raven.Objects is
      and then Has_Address (To_Bytevector'Result)
      and then Get_Address (To_Bytevector'Result) = Address;
 
+   --  An exact integer past what a fixnum holds (#102).  It is a block
+   --  in the heap laid out as a bytevector is -- a header, and then the
+   --  magnitude in packed bytes, least significant first -- with the
+   --  sign in the other half of the header.  The collector moves it as
+   --  it moves a bytevector, and nothing outside Raven.Numbers reads it.
+   --
+   --  A bignum is never one that a fixnum could hold: every number an
+   --  operation gives back is normal (#100), so a bignum and a fixnum
+   --  are never the same number.
+
+   function Is_Bignum (X : Object) return Boolean;
+   function To_Bignum (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Bignum (To_Bignum'Result)
+     and then Has_Address (To_Bignum'Result)
+     and then Get_Address (To_Bignum'Result) = Address;
+
    function Is_Closure (X : Object) return Boolean;
    function To_Closure (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -300,6 +317,7 @@ private
    Vector_Tag      : constant := Escape_Tag + 7 * Extended_Step;
    Bytevector_Tag  : constant := Escape_Tag + 8 * Extended_Step;
    Bytes_Tag       : constant := Escape_Tag + 9 * Extended_Step;
+   Bignum_Tag      : constant := Escape_Tag + 10 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -373,7 +391,7 @@ private
    --  both and set for the pair tag and the escape.
 
    function Is_Number (X : Object) return Boolean
-   is ((X and 2#10#) = 0);
+   is ((X and 2#10#) = 0 or else Full_Tag (X) = Bignum_Tag);
 
    function Is_Integer (X : Object) return Boolean
    is (Tag (X) = Integer_Tag);
@@ -430,7 +448,8 @@ private
    is (Tag (X) = Pair_Tag
        or else Full_Tag (X) = Closure_Tag
        or else Full_Tag (X) = Vector_Tag
-       or else Full_Tag (X) = Bytevector_Tag);
+       or else Full_Tag (X) = Bytevector_Tag
+       or else Full_Tag (X) = Bignum_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -457,6 +476,12 @@ private
 
    function Is_Packed_Bytes (X : Object) return Boolean
    is (Full_Tag (X) = Bytes_Tag);
+
+   function Is_Bignum (X : Object) return Boolean
+   is (Full_Tag (X) = Bignum_Tag);
+
+   function To_Bignum (Address : Address_Type) return Object
+   is (Extend (Object (Address), Bignum_Tag));
 
    function No_Bytes return Object
    is (Extend (0, Bytes_Tag));

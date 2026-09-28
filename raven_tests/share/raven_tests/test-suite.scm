@@ -549,6 +549,75 @@
 
 (test "= over a float and an integer that look equal" #f (= 2.0 2))
 
+;;  Exact integers past 29 bits are bignums, and are the same numbers
+;;  a program would expect: they compare, they are integers, and two
+;;  equal ones made separately are =, eqv? and equal? though they are
+;;  two objects.
+
+(define probe-big (expt 2 100))
+
+(test "a bignum is a number" #t (number? probe-big))
+(test "and an integer" #t (integer? probe-big))
+(test "and an exact one" #t (exact-integer? probe-big))
+(test "and written as its digits" "1267650600228229401496703205376"
+      (number->string probe-big))
+(test "two equal bignums are =" #t (= probe-big (expt 2 100)))
+(test "and eqv?" #t (eqv? probe-big (expt 2 100)))
+(test "and equal?" #t (equal? (list probe-big) (list (expt 2 100))))
+(test "and memv finds one" #t (if (memv (expt 2 100) (list 1 probe-big)) #t #f))
+(test "a bignum and a fixnum are not =" #f (= probe-big 1))
+(test "a bignum is more than any fixnum" #t (> probe-big 536870911))
+(test "and a negative one less" #t (< (- probe-big) -536870912))
+(test "bignums order" #t (< (expt 2 99) probe-big (expt 2 101)))
+(test "the largest fixnum and one past" #t (< 536870911 536870912))
+(test "gcd of two bignums" 4294967296 (gcd (expt 2 32) (expt 2 40)))
+(test "a factorial" "30414093201713378043612608166064768844377641568960512000000000000"
+      (number->string
+       ((lambda (f) (f f 50))
+        (lambda (self n) (if (= n 0) 1 (* n (self self (- n 1))))))))
+
+;;  And it is the heap's: a collection moves it and it is the same
+;;  number afterwards.
+
+(define (probe-big-churn n)
+  (if (= n 0) '() (cons n (probe-big-churn (- n 1)))))
+
+(define probe-kept-big (* probe-big 3))
+(probe-big-churn 3000)
+(test "a bignum survives a collection" "3802951800684688204490109616128"
+      (number->string probe-kept-big))
+
+;;  number->string and string->number, which there were none of, so no
+;;  number could be turned into text a program could hold.
+
+(test "number->string" "42" (number->string 42))
+(test "number->string of a negative" "-42" (number->string -42))
+(test "number->string in binary" "101010" (number->string 42 2))
+(test "and octal" "52" (number->string 42 8))
+(test "and hexadecimal" "2a" (number->string 42 16))
+(test "a bignum in hexadecimal" "10000000000000000000000000"
+      (number->string probe-big 16))
+;;  A float is written as raven writes every float, which is #103's to
+;;  make shorter; what matters here is that it reads back.
+
+(test "number->string of a float reads back" 1.5
+      (string->number (number->string 1.5)))
+(test "string->number" 42 (string->number "42"))
+(test "string->number of a negative" -42 (string->number "-42"))
+(test "string->number in a radix" 42 (string->number "2a" 16))
+(test "string->number with a prefix" 42 (string->number "#x2a"))
+(test "string->number of a bignum" #t
+      (= probe-big (string->number "1267650600228229401496703205376")))
+(test "string->number of a float" 1.5 (string->number "1.5"))
+(test "string->number of a float with an exponent" 1500.0
+      (string->number "1.5e3"))
+(test "string->number of what is not a number" #f (string->number "abc"))
+(test "string->number of a digit the radix has not" #f
+      (string->number "19" 8))
+(test "string->number of nothing" #f (string->number ""))
+(test "and back" "-1267650600228229401496703205376"
+      (number->string (string->number (number->string (- probe-big)))))
+
 ;;  Numbers arrived at differently are still the same number.
 
 (test "= over a sum and a literal" #t (= (+ 1 1) 2))
@@ -2627,7 +2696,7 @@
 (test "raven is one" #t (probe-has? 'raven))
 (test "and full-unicode" #t (probe-has? 'full-unicode))
 (test "and not ratios, yet" #f (probe-has? 'ratios))
-(test "nor exact-closed" #f (probe-has? 'exact-closed))
+(test "but exact-closed, since bignums" #t (probe-has? 'exact-closed))
 
 ;;  cond-expand as an expression, which chooses where it is expanded:
 ;;  a clause not chosen is never read as code, so it may use what is

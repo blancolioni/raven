@@ -673,6 +673,20 @@ private
       Length : Natural)
       return Object;
 
+   --  A bignum's block and its sign, for Raven.Numbers, which is the one
+   --  thing that makes or reads one.
+
+   function New_Bignum
+     (This     : Raven_VM'Class;
+      Length   : Natural;
+      Negative : Boolean)
+      return Object;
+
+   function Is_Negative
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Boolean;
+
    function Vector_Length
      (This : Raven_VM'Class;
       V    : Object)

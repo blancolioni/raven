@@ -58,6 +58,7 @@
    number? integer? exact-integer?
    zero? positive? negative? even? odd?
    abs min max gcd lcm expt square
+   number->string string->number
    ;;
    ;;  truncate/ and floor/ belong with these four and are not here:
    ;;  each answers two values, and there are no multiple values yet.

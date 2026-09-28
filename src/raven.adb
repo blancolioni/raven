@@ -250,7 +250,8 @@ package body Raven is
          --  boxed.
 
          B := Raven.Numbers.Eqv
-                (Raven.Numbers.Decode (X), Raven.Numbers.Decode (Y));
+                (Raven.Numbers.Decode (This, X),
+                 Raven.Numbers.Decode (This, Y));
       elsif Is_Foreign_Value (X) then
          B := This.To_Foreign_Value (X).Equal
            (This.To_Foreign_Value (Y), Equal_Object'Access);
@@ -499,6 +500,16 @@ package body Raven is
       Raven.Loader.Import (This.Data.Target, Name, Path);
    end Import_Library;
 
+   -----------------
+   -- Is_Negative --
+   -----------------
+
+   function Is_Negative
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Boolean
+   is (This.Data.Memory.Is_Negative (X));
+
    ----------
    -- Kind --
    ----------
@@ -555,6 +566,17 @@ package body Raven is
       Length : Natural)
       return Object
    is (This.Data.Memory.New_Bytevector (Length));
+
+   ----------------
+   -- New_Bignum --
+   ----------------
+
+   function New_Bignum
+     (This     : Raven_VM'Class;
+      Length   : Natural;
+      Negative : Boolean)
+      return Object
+   is (This.Data.Memory.New_Bignum (Length, Negative));
 
    ----------------
    -- New_Symbol --

@@ -260,24 +260,6 @@ package body Raven.Tests.Host_IO is
       Forget;
       Complains (VM, "(string-length ""\q"")", "bad escape");
 
-      --  An integer literal past what an object holds is refused by the
-      --  reader and says so.  It was read into an Ada Integer and
-      --  overflowed on the way in, so a literal too large was not even
-      --  the right error; one past 2**31 was not a number at all.
-
-      Forget;
-      Complains (VM, "536870912", "number out of range for an integer");
-      Forget;
-      Complains (VM, "-536870913", "number out of range for an integer");
-      Forget;
-      Complains (VM, "#x20000000", "number out of range for an integer");
-      Forget;
-      Complains (VM, "12345678901234", "number out of range for an integer");
-      Forget;
-      Complains
-        (VM, "99999999999999999999999999999999",
-         "number out of range for an integer");
-
       --  And a form the loader gives up on, which says which file,
       --  which line and which form, and is counted where the host can
       --  ask.  The message named whatever was undefined at the moment

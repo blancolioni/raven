@@ -246,27 +246,24 @@ package body Raven.Parser is
 
             when Tok_Integer =>
 
-               --  Read wide and refused if it is past what an object
-               --  holds, as a float that does not fit is.  It used to
-               --  be read into an Integer and overflow on the way, so
-               --  a literal too large was not even the right error.
+               --  Read wide, and a fixnum when it fits.  One that does
+               --  not is a bignum, which the machine makes: it is the
+               --  heap's, and the lexer has only the text.  It used to be
+               --  refused (#99), and before that read into an Integer and
+               --  overflowed on the way.
 
                declare
                   Value : constant Long_Long_Integer :=
                             Lex.Tok_Integer_Value;
                begin
-                  if Value not in
+                  if Value in
                     Raven.Objects.Min_Integer .. Raven.Objects.Max_Integer
                   then
-                     Lex.Error
-                       ("number out of range for an integer: "
-                        & Lex.Tok_Text);
-                     Lex.Scan;
-                     Target.Push_Nil;
-                  else
                      Target.Push (Raven.Objects.To_Object (Integer (Value)));
-                     Lex.Scan;
+                  else
+                     Target.Push (Target.Read_Integer (Encode (Lex.Tok_Text)));
                   end if;
+                  Lex.Scan;
                end;
 
             when Tok_Float =>

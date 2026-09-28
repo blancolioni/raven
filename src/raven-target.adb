@@ -97,6 +97,8 @@ package body Raven.Target is
          return "#eof";
       elsif Is_Instruction (X) then
          return To_Instruction (X)'Image;
+      elsif Is_Bignum (X) then
+         return This.Show_Bignum (X);
       elsif Is_Integer (X) then
          declare
             I   : constant Integer := To_Integer (X);
