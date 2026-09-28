@@ -11,7 +11,7 @@
 ;;  assoc-by, list-walk?, extreme, inexact-if-any, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
-;;  values-rename, let-values-expand,
+;;  values-rename, let-values-expand, raven-winders, raven-travel-to,
 ;;  simplest-between, simplest-positive,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
@@ -61,6 +61,9 @@
 
    ;;  multiple values
    values call-with-values let-values let*-values define-values
+
+   ;;  continuations
+   call-with-current-continuation call/cc dynamic-wind
    rational? real? complex? numerator denominator rationalize
    zero? positive? negative? even? odd?
    abs min max gcd lcm expt square

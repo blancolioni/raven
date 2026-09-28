@@ -185,7 +185,10 @@ package body Raven.Scheme is
       --  asked about before -- a closure was a pair and answered to
       --  pair? along with every list.
 
-      VM.Set_Slot (1, Is_Closure (X) or else Is_Foreign_Function (X));
+      VM.Set_Slot
+        (1,
+         Is_Closure (X) or else Is_Foreign_Function (X)
+           or else Is_Continuation (X) or else X = Call_CC);
    end Is_Procedure;
 
    ---------------
@@ -220,6 +223,13 @@ package body Raven.Scheme is
         ("symbol?", Is_Symbol'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("gensym", Generate_Symbol'Access, 1);
+
+      --  The machine's own procedure, which call/cc is written on: a
+      --  name for an object rather than a foreign function, because
+      --  what it does is to the machine's registers and happens where
+      --  the machine applies it.
+
+      Evaluator.Bind ("raven-call/cc", Raven.Objects.Call_CC, 1);
 
       Evaluator.Bind_Foreign_Function
         ("raven-make-values", Make_Values'Access, 1);

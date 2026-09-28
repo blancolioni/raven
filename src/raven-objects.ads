@@ -18,6 +18,13 @@ private package Raven.Objects is
    function Is_Eof (X : Object) return Boolean;
 
    function Lambda return Object;
+
+   --  The procedure call/cc is written on (#47).  It is the machine's:
+   --  applying it captures the machine's registers, which no procedure
+   --  written in scheme or bound by a host can reach.
+
+   function Call_CC return Object;
+
    function Cond return Object;
    function Define return Object;
    function If_Obj return Object;
@@ -95,6 +102,18 @@ private package Raven.Objects is
    --  is the list of them.  It is not a pair, so a program cannot take
    --  it for a list, and call-with-values is what takes it apart.  One
    --  value is never one of these; it is the value.
+
+   --  A continuation (#47): one cell whose car is the list of the
+   --  machine's four registers as they were when it was captured, and
+   --  how deep in runs of the machine it was.  Applying one puts them
+   --  back.
+
+   function Is_Continuation (X : Object) return Boolean;
+   function To_Continuation (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Continuation (To_Continuation'Result)
+     and then Has_Address (To_Continuation'Result)
+     and then Get_Address (To_Continuation'Result) = Address;
 
    function Is_Values (X : Object) return Boolean;
    function To_Values (Address : Address_Type) return Object
@@ -366,6 +385,7 @@ private
    Flonum_Tag      : constant := Escape_Tag + 11 * Extended_Step;
    Ratnum_Tag      : constant := Escape_Tag + 12 * Extended_Step;
    Values_Tag      : constant := Escape_Tag + 13 * Extended_Step;
+   Continuation_Tag : constant := Escape_Tag + 14 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -398,6 +418,7 @@ private
    Define_Payload    : constant := 8;
    If_Payload        : constant := 9;
    Eof_Payload       : constant := 10;
+   Call_CC_Payload   : constant := 11;
 
    function Nil return Object
    is (Extend (Nil_Payload, Constant_Tag));
@@ -416,6 +437,9 @@ private
 
    function Lambda return Object
    is (Extend (Lambda_Payload, Constant_Tag));
+
+   function Call_CC return Object
+   is (Extend (Call_CC_Payload, Constant_Tag));
 
    function Cond return Object
    is (Extend (Cond_Payload, Constant_Tag));
@@ -503,7 +527,8 @@ private
        or else Full_Tag (X) = Bignum_Tag
        or else Full_Tag (X) = Flonum_Tag
        or else Full_Tag (X) = Ratnum_Tag
-       or else Full_Tag (X) = Values_Tag);
+       or else Full_Tag (X) = Values_Tag
+       or else Full_Tag (X) = Continuation_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -542,6 +567,12 @@ private
 
    function Is_Values (X : Object) return Boolean
    is (Full_Tag (X) = Values_Tag);
+
+   function Is_Continuation (X : Object) return Boolean
+   is (Full_Tag (X) = Continuation_Tag);
+
+   function To_Continuation (Address : Address_Type) return Object
+   is (Extend (Object (Address), Continuation_Tag));
 
    function To_Values (Address : Address_Type) return Object
    is (Extend (Object (Address), Values_Tag));

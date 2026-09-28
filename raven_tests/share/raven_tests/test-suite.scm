@@ -811,6 +811,72 @@
       (let-values (((s r) (exact-integer-sqrt (+ (expt 10 40) 7))))
         (and (= s (expt 10 20)) (= r 7))))
 
+;;  Continuations (#47).  A continuation is the machine's registers as
+;;  they were, and invoking one puts them back: out of a computation,
+;;  or back into one that has already returned.
+
+(test "call/cc escaping" 3 (+ 1 (call/cc (lambda (k) (+ 10 (k 2))))))
+(test "call/cc not escaping" 11 (+ 1 (call/cc (lambda (k) 10))))
+(test "call/cc in tail position" 5 ((lambda () (call/cc (lambda (k) (k 5))))))
+(test "call-with-current-continuation by its long name" 4
+      (call-with-current-continuation (lambda (k) (k 4))))
+
+(define (probe-find-first pred xs)
+  (call/cc
+   (lambda (return)
+     (for-each (lambda (x) (if (pred x) (return x))) xs)
+     #f)))
+
+(test "an early way out of a loop" 4 (probe-find-first even? '(1 3 4 5 6)))
+(test "and none" #f (probe-find-first even? '(1 3 5)))
+
+(test "re-entering a continuation" '(3 2 1)
+      (let ((k #f) (seen '()))
+        (let ((n (call/cc (lambda (c) (set! k c) 1))))
+          (set! seen (cons n seen))
+          (if (< n 3) (k (+ n 1)) seen))))
+
+(test "several values through a continuation" '(1 2)
+      (call-with-values (lambda () (call/cc (lambda (k) (k 1 2)))) list))
+(test "call/cc is a procedure" #t (procedure? call/cc))
+(test "and so is a continuation" #t (call/cc procedure?))
+
+;;  dynamic-wind, which call/cc consults on the way out and back in.
+
+(test "dynamic-wind in order" '(before during after)
+      (let ((log '()))
+        (dynamic-wind (lambda () (set! log (cons 'before log)))
+                      (lambda () (set! log (cons 'during log)))
+                      (lambda () (set! log (cons 'after log))))
+        (reverse log)))
+(test "and answers with the thunk's value" 7
+      (dynamic-wind (lambda () #f) (lambda () 7) (lambda () #f)))
+(test "or its values" '(1 2)
+      (call-with-values
+          (lambda ()
+            (dynamic-wind (lambda () #f) (lambda () (values 1 2)) (lambda () #f)))
+        list))
+(test "escaping out runs the after" '(before after out)
+      (let ((log '()))
+        (let ((answer
+               (call/cc
+                (lambda (k)
+                  (dynamic-wind (lambda () (set! log (cons 'before log)))
+                                (lambda () (k 'out) (set! log (cons 'never log)))
+                                (lambda () (set! log (cons 'after log))))))))
+          (reverse (cons answer log)))))
+
+;;  R7RS's own example: going back in runs the before again.
+
+(test "re-entering runs the before again"
+      '(connect talk1 disconnect connect talk2 disconnect)
+      (let ((path '()) (c #f))
+        (let ((add (lambda (s) (set! path (cons s path)))))
+          (dynamic-wind (lambda () (add 'connect))
+                        (lambda () (add (call/cc (lambda (c0) (set! c c0) 'talk1))))
+                        (lambda () (add 'disconnect)))
+          (if (< (length path) 4) (c 'talk2) (reverse path)))))
+
 ;;  (scheme inexact) (#105).  A square root is exact when the number is
 ;;  and its root is; everything else here is inexact.
 
