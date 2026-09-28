@@ -136,6 +136,27 @@ private package Raven.Memory is
    is abstract
      with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
 
+   --  Changing a value where it is (#158), for a value that a program
+   --  may change, such as a string.  Update changes what it holds, and
+   --  Process must not make anything, as Query's must not.  Replace
+   --  puts another value of the same kind in its place, which is how
+   --  one grows: every object that is the value is the new one after.
+
+   procedure Update_Foreign_Value
+     (This    : in out Abstraction;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : in out Foreign_Value_Instance'Class))
+   is abstract
+     with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
+
+   procedure Replace_Foreign_Value
+     (This      : in out Abstraction;
+      Value     : Object;
+      New_Value : Foreign_Value_Instance'Class)
+   is abstract
+     with Pre'Class => Raven.Objects.Is_Foreign_Value (Value);
+
    --  Giving up everything held.  Every foreign value still live is
    --  told, because Free is how one gives back whatever it stood for
    --  -- an open file, a host's memory -- and no collection happens

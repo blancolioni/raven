@@ -530,6 +530,22 @@ package Raven is
       Process : not null access
         procedure (Item : Foreign_Value_Instance'Class));
 
+   --  Changing a value where it is (#158): Update changes what it
+   --  holds, under the same rule as Query, and Replace puts another
+   --  value of the same kind in its place.  Every object that is the
+   --  value sees the change, because they are all the one value.
+
+   procedure Update_Foreign_Value
+     (This    : Raven_VM'Class;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : in out Foreign_Value_Instance'Class));
+
+   procedure Replace_Foreign_Value
+     (This      : Raven_VM'Class;
+      Value     : Object;
+      New_Value : Foreign_Value_Instance'Class);
+
    type Foreign_Function_Handler is access
      procedure (VM : Raven_VM);
 

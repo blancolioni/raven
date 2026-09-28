@@ -460,7 +460,7 @@ package body Raven.Engine.SECD is
      (This : in out Instance;
       Text : Wide_Wide_String)
       return Object
-   is (This.Memory.Create_Foreign_Value (Raven.Strings.To_Value (Text)));
+   is (This.Memory.Create_Foreign_Value (Raven.Strings.To_Literal (Text)));
 
    function Is_Empty
      (This : in out Instance'Class;

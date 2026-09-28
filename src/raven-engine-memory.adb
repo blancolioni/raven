@@ -171,6 +171,17 @@ package body Raven.Engine.Memory is
       Process : not null access
         procedure (Item : Foreign_Value_Instance'Class));
 
+   overriding procedure Update_Foreign_Value
+     (This    : in out Instance;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : in out Foreign_Value_Instance'Class));
+
+   overriding procedure Replace_Foreign_Value
+     (This      : in out Instance;
+      Value     : Object;
+      New_Value : Foreign_Value_Instance'Class);
+
    overriding procedure Report (This : Instance);
 
    function Quick_Allocate
@@ -999,6 +1010,37 @@ package body Raven.Engine.Memory is
       return Result;
    end Quick_Allocate;
 
+   ---------------------------
+   -- Replace_Foreign_Value --
+   ---------------------------
+
+   overriding procedure Replace_Foreign_Value
+     (This      : in out Instance;
+      Value     : Object;
+      New_Value : Foreign_Value_Instance'Class)
+   is
+      Position : constant Foreign_Value_Lists.Cursor :=
+                   This.Value_Ids (Objects.To_Foreign_Value_Id (Value));
+      Old      : constant Foreign_Value_Lists.Constant_Reference_Type :=
+                   This.Value_List.Constant_Reference (Position);
+      Table_Id : constant Natural := Old.Element.Table_Id;
+      Marked   : constant Boolean := Old.Element.Marked;
+   begin
+      --  What the table keeps of a value is its own, and goes over to
+      --  the new one: its id, which the sweep reads back, and whether a
+      --  collection under way has marked it.
+
+      This.Value_List.Replace_Element (Position, New_Value);
+
+      declare
+         New_Ref : constant Foreign_Value_Lists.Reference_Type :=
+                     This.Value_List.Reference (Position);
+      begin
+         New_Ref.Element.Table_Id := Table_Id;
+         New_Ref.Element.Marked := Marked;
+      end;
+   end Replace_Foreign_Value;
+
    ------------
    -- Report --
    ------------
@@ -1134,6 +1176,23 @@ package body Raven.Engine.Memory is
    begin
       This.Trace_GC := Enabled;
    end Trace_GC;
+
+   --------------------------
+   -- Update_Foreign_Value --
+   --------------------------
+
+   overriding procedure Update_Foreign_Value
+     (This    : in out Instance;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : in out Foreign_Value_Instance'Class))
+   is
+   begin
+      Foreign_Value_Lists.Update_Element
+        (This.Value_List,
+         This.Value_Ids (Objects.To_Foreign_Value_Id (Value)),
+         Process);
+   end Update_Foreign_Value;
 
    --------------------
    -- Vector_Element --
