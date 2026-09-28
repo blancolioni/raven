@@ -121,6 +121,8 @@ package body Raven.Tests.Numbers is
       Test_Message
         (VM, "(* 1.5 2)", "*: raven has no arithmetic on floats yet: 1.5");
       Test_Message (VM, "(< 1 'a)", "comparison: not a number: a");
+      Test_Message (VM, "(= 1 'a)", "=: not a number: a");
+      Test_Message (VM, "(= 1.5 'a)", "=: not a number: a");
 
       --  And Raven.Numbers itself, which every primitive now goes
       --  through: what goes in comes out, at both ends, and an answer is
@@ -147,6 +149,11 @@ package body Raven.Tests.Numbers is
                Less_Or_Equal (Decode (Smallest), Decode (Largest))
                  and then not Less_Or_Equal
                                 (Decode (Largest), Decode (Smallest)));
+         Test ("= and eqv? are the machine's",
+               Equal (Decode (Largest), Decode (Largest))
+                 and then Eqv (Decode (Smallest), Decode (Smallest))
+                 and then not Equal (Decode (Largest), Decode (Smallest))
+                 and then not Eqv (Decode (Largest), Decode (Smallest)));
       end;
    end Run_Tests;
 

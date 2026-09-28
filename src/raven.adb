@@ -6,6 +6,7 @@ with Raven.Features;
 with Raven.IO;
 with Raven.Loader;
 with Raven.Memory;
+with Raven.Numbers;
 with Raven.Objects;
 with Raven.Parser;
 with Raven.Strings;
@@ -240,6 +241,16 @@ package body Raven is
          B := True;
       elsif not Tag_Equal (X, Y) then
          B := False;
+      elsif Raven.Numbers.Is_Arithmetic (X)
+        and then Raven.Numbers.Is_Arithmetic (Y)
+      then
+
+         --  equal? on numbers is eqv?, which is the same number and
+         --  equally exact, and not the same word once a number can be
+         --  boxed.
+
+         B := Raven.Numbers.Eqv
+                (Raven.Numbers.Decode (X), Raven.Numbers.Decode (Y));
       elsif Is_Foreign_Value (X) then
          B := This.To_Foreign_Value (X).Equal
            (This.To_Foreign_Value (Y), Equal_Object'Access);

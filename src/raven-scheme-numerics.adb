@@ -13,6 +13,13 @@ package body Raven.Scheme.Numerics is
    procedure Add (VM : Raven_VM);
    procedure Divide (VM : Raven_VM);
    procedure Leq (VM : Raven_VM);
+
+   --  = and the number half of eqv?, which were identity.  They are the
+   --  machine's now, because identity stops being equality as soon as a
+   --  number can be boxed: two equal bignums are two objects.
+
+   procedure Num_Eq (VM : Raven_VM);
+   procedure Num_Eqv (VM : Raven_VM);
    procedure Multiply (VM : Raven_VM);
    procedure Sub (VM : Raven_VM);
 
@@ -85,6 +92,10 @@ package body Raven.Scheme.Numerics is
         ("raven-mul", Multiply'Access, 2);
       Evaluator.Bind_Foreign_Function
         ("raven-div", Divide'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-num-eq", Num_Eq'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-num-eqv", Num_Eqv'Access, 2);
    end Load_Numeric_Library;
 
    --------------
@@ -98,6 +109,66 @@ package body Raven.Scheme.Numerics is
       VM.Set_Slot
         (1, Raven.Numbers.Encode (Raven.Numbers.Multiply (Left, Right)));
    end Multiply;
+
+   ------------
+   -- Num_Eq --
+   ------------
+
+   procedure Num_Eq (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+      Y : constant Object := VM.Get_Slot (2);
+   begin
+      --  A float is a number that arithmetic cannot take yet (#103), and
+      --  = on two of them was identity, which for an immediate float is
+      --  right within the type and wrong across it: (= 1.5 1.5) is #t
+      --  and (= 2.0 2) is #f.  That much is kept as it was until floats
+      --  go through the seam and = can say #t to the second.
+
+      if Raven.Objects.Is_Float (X) or else Raven.Objects.Is_Float (Y) then
+         if not Raven.Objects.Is_Number (X) then
+            raise Constraint_Error with
+              "=: not a number: " & Encode (VM.Display (X));
+         elsif not Raven.Objects.Is_Number (Y) then
+            raise Constraint_Error with
+              "=: not a number: " & Encode (VM.Display (Y));
+         end if;
+
+         VM.Set_Slot (1, Boolean'(X = Y));
+         return;
+      end if;
+
+      declare
+         Left  : constant Raven.Numbers.Number := Operand (VM, "=", 1);
+         Right : constant Raven.Numbers.Number := Operand (VM, "=", 2);
+      begin
+         VM.Set_Slot (1, Raven.Numbers.Equal (Left, Right));
+      end;
+   end Num_Eq;
+
+   -------------
+   -- Num_Eqv --
+   -------------
+
+   --  Two numbers, as eqv? asks about them.  Anything else is eq?'s
+   --  question, and the library asks it there; this is only reached with
+   --  two numbers.  A float is compared as the word it is, which for an
+   --  immediate float is what eqv? means.
+
+   procedure Num_Eqv (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+      Y : constant Object := VM.Get_Slot (2);
+   begin
+      if Raven.Numbers.Is_Arithmetic (X)
+        and then Raven.Numbers.Is_Arithmetic (Y)
+      then
+         VM.Set_Slot
+           (1,
+            Raven.Numbers.Eqv
+              (Raven.Numbers.Decode (X), Raven.Numbers.Decode (Y)));
+      else
+         VM.Set_Slot (1, Boolean'(X = Y));
+      end if;
+   end Num_Eqv;
 
    -------------
    -- Operand --

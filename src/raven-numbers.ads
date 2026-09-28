@@ -55,6 +55,19 @@ private package Raven.Numbers is
 
    function Less_Or_Equal (Left, Right : Number) return Boolean;
 
+   --  Two questions R7RS keeps apart.  Equal is =: the same number,
+   --  whatever it is held as, so (= 2 2.0) will be true once there are
+   --  floats to ask it of.  Eqv is eqv?, and asks more: equal, and both
+   --  exact or both inexact, so (eqv? 2 2.0) is false.  Neither is
+   --  identity.  Two equal bignums will be two objects, and asking
+   --  whether they are the same word would say they are not.
+   --
+   --  With fixnums alone the two agree, and agree with identity: that
+   --  is why = could be eq? until now, and why it cannot stay so.
+
+   function Equal (Left, Right : Number) return Boolean;
+   function Eqv (Left, Right : Number) return Boolean;
+
    --  A number as it is written, for messages about one.
 
    function Image (N : Number) return String;

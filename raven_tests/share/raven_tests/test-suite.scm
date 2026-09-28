@@ -531,9 +531,10 @@
           '(1 2 3) '(10 20))
 (test "for-each stops at the shorter" 2 shortest-seen)
 
-;;  = asks about numbers now, where it used to ask about identity and
-;;  answer for anything at all.  Within a type it is what it was,
-;;  because a number is an immediate and two equal ones are one word.
+;;  = asks about numbers, where it used to ask about identity and
+;;  answer for anything at all.  And it is the machine's comparison
+;;  now rather than eq?, which was numeric equality only while every
+;;  number was one word: two equal bignums will be two objects.
 
 (test "= over equal integers" #t (= 1 1))
 (test "= over unequal integers" #f (= 1 2))
@@ -542,11 +543,17 @@
 (test "= over equal floats" #t (= 2.5 2.5))
 (test "= over unequal floats" #f (= 2.5 2.0))
 
-;;  Across the two it is not, and cannot be here: raven-leq takes two
-;;  integers and is the only comparison the machine has, so (= 2.0 2)
-;;  is written down as what happens rather than left to be found.
+;;  Across the two it is not yet: a float is a number arithmetic cannot
+;;  take until #103, and = on one is still identity, so (= 2.0 2) is
+;;  written down as what happens rather than left to be found.
 
 (test "= over a float and an integer that look equal" #f (= 2.0 2))
+
+;;  Numbers arrived at differently are still the same number.
+
+(test "= over a sum and a literal" #t (= (+ 1 1) 2))
+(test "= over two products" #t (= (* 23170 23170) (* 23170 23170)))
+(test "= at the edge" #t (= (- 536870911 1) 536870910))
 
 ;;  - and / want an argument.  + and * do not, because there is a
 ;;  number that leaves a sum or a product alone and there is no such
@@ -570,10 +577,20 @@
 (for-each (lambda (x) (set! for-each-count (+ for-each-count 1))) '())
 (test "for-each over nothing does nothing" 0 for-each-count)
 
-;;  eqv? is eq? for everything raven has, and answers the same
-;;  questions.
+;;  eqv? is eq? for everything but numbers, where it asks whether they
+;;  are the same number and equally exact.  For what raven has so far
+;;  those answer the same way, and these say they still do.
 
 (test "eqv? of a symbol with itself" #t (eqv? 'a 'a))
+(test "eqv? of a sum and a literal" #t (eqv? (+ 1 1) 2))
+(test "eqv? of a number and a symbol" #f (eqv? 1 'a))
+(test "eqv? of a symbol and a number" #f (eqv? 'a 1))
+(test "eqv? of a float with itself" #t (eqv? 1.5 1.5))
+(test "eqv? of an integer and a float" #f (eqv? 2 2.0))
+(test "eqv? of two strings" #f (eqv? "a" "a"))
+(test "memv of a number arrived at" '(2 3) (memv (+ 1 1) '(1 2 3)))
+(test "equal? of lists of numbers arrived at" #t
+      (equal? '(1 2) (list 1 (+ 1 1))))
 (test "eqv? of two symbols" #f (eqv? 'a 'b))
 (test "eqv? of a number with itself" #t (eqv? 42 42))
 (test "eqv? of two numbers" #f (eqv? 42 43))
