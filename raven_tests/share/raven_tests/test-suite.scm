@@ -942,6 +942,24 @@
         (reverse log)))
 
 (test "error-object? of what is not one" #f (error-object? 'x))
+
+;;  An error object is a record of its own (#172), where it was a
+;;  vector a program could take apart and write into.
+
+(define caught-error (guard (e (#t e)) (error "caught" 1 2)))
+(test "an error object is not a vector" #f (vector? caught-error))
+(test "nor a pair" #f (pair? caught-error))
+(test "and is still an error object" #t (error-object? caught-error))
+(test "with its message" "caught" (error-object-message caught-error))
+(test "and its irritants" '(1 2) (error-object-irritants caught-error))
+(test "a vector that looks like one is not one" #f
+      (error-object? (vector (list 'error-object) "caught" '(1 2))))
+(test "an error object written" "#<error-object>"
+      (let ((port (open-output-string)))
+        (write caught-error port)
+        (get-output-string port)))
+(test "one the machine raised is one too" #f
+      (guard (e (#t (vector? e))) (car 1)))
 (test "file-error?" #f (guard (e (#t (file-error? e))) (error "x")))
 (test "read-error?" #f (guard (e (#t (read-error? e))) (error "x")))
 

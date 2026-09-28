@@ -22,7 +22,7 @@
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
 ;;  values-rename, let-values-expand, raven-winders, raven-travel-to,
 ;;  raven-set-winders!, raven-handlers, raven-set-handlers!,
-;;  raven-with-handlers, raven-raise, raven-error-marker,
+;;  raven-with-handlers, raven-raise, error-object,
 ;;  make-error-object, raven-describe, raven-raise-from-machine,
 ;;  raven-guard-clauses,
 ;;  simplest-between, simplest-positive,
