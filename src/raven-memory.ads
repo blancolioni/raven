@@ -76,6 +76,21 @@ private package Raven.Memory is
       return Boolean
    is abstract;
 
+   --  A boxed double, and the double in one.
+
+   function New_Flonum
+     (This  : in out Abstraction;
+      Value : Long_Float)
+      return Object
+   is abstract;
+
+   function Flonum_Value
+     (This : Abstraction;
+      X    : Object)
+      return Long_Float
+   is abstract
+     with Pre'Class => Raven.Objects.Is_Flonum (X);
+
    function Vector_Element
      (This  : Abstraction;
       V     : Object;

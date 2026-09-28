@@ -155,8 +155,19 @@
 ;;  for it twice, which would be a walk of the list for every element
 ;;  of it.
 
-(define (min . xs) (extreme < xs))
-(define (max . xs) (extreme > xs))
+;;  min and max answer inexact when any argument is, as every other
+;;  operation does: the answer can be no more exact than what it was
+;;  chosen from.  (max 1 2.0) is 2.0 and (max 3 2.0) is 3.0.
+
+(define (min . xs) (inexact-if-any xs (extreme < xs)))
+(define (max . xs) (inexact-if-any xs (extreme > xs)))
+
+(define (inexact-if-any xs x)
+  (if (null? xs)
+      x
+      (if (raven-exact? (car xs))
+          (inexact-if-any (cdr xs) x)
+          (raven-inexact x))))
 
 (define (extreme better? xs)
   (if (null? (cdr xs))
@@ -219,15 +230,26 @@
       (error "expt: a negative power is a rational, which raven has no numbers for")
       (if (zero? power) 1 (* base (expt base (- power 1))))))
 
-;;  Every number here is an integer, so rounding one is giving it
-;;  back.  They are written out rather than left out because a program
-;;  that rounds is a program that works, and what it says about where
-;;  it expects a fraction is worth keeping in it.
+;;  Rounding, which gives an exact number back as it is and rounds an
+;;  inexact one to a whole inexact number: (floor 2.5) is 2.0, not 2.
+;;  round goes to the even one of two that are as near, as R7RS asks,
+;;  so (round 2.5) is 2.0 and (round 3.5) is 4.0.  They were the
+;;  identity while every number was an integer.
 
-(define (floor x) x)
-(define (ceiling x) x)
-(define (truncate x) x)
-(define (round x) x)
+(define (floor x) (raven-round x 0))
+(define (ceiling x) (raven-round x 1))
+(define (truncate x) (raven-round x 2))
+(define (round x) (raven-round x 3))
+
+;;  Exactness.  An operation with any inexact argument answers inexact,
+;;  which the machine does; these ask which a number is and give the
+;;  other kind of it.  exact of a double that is not a whole number has
+;;  nothing to answer with until there are exact fractions (#104).
+
+(define (exact? z) (raven-exact? z))
+(define (inexact? z) (not (raven-exact? z)))
+(define (exact z) (raven-exact z))
+(define (inexact z) (raven-inexact z))
 
 (define (optional value default) (if (eq? value '()) default value))
 

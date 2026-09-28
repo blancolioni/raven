@@ -38,6 +38,27 @@ package body Raven.Objects is
    function Single_Mantissa (W : Object) return Object
    is (W mod 2 ** Mantissa_Bits);
 
+   --------------------
+   -- Fits_Immediate --
+   --------------------
+
+   function Fits_Immediate (X : Long_Float) return Boolean is
+   begin
+      --  In Float's range, the same number as a Float, and a Float this
+      --  encoding holds.  The first is asked first so that the second
+      --  cannot overflow.
+
+      if abs X > Long_Float (Float'Last) then
+         return False;
+      end if;
+
+      declare
+         F : constant Float := Float (X);
+      begin
+         return Long_Float (F) = X and then Is_Representable (F);
+      end;
+   end Fits_Immediate;
+
    function Image
      (X : Object)
       return String
@@ -104,9 +125,9 @@ package body Raven.Objects is
       end if;
    end Image;
 
-   ---------------------
+   ----------------------
    -- Is_Representable --
-   ---------------------
+   ----------------------
 
    function Is_Representable (F : Float) return Boolean is
       W : constant Object := To_Word (F);

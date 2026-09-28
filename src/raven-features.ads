@@ -8,8 +8,9 @@
 --  and exact-closed, ratios, exact-complex and ieee-float are how a
 --  program tells one from another and adapts, rather than failing
 --  somewhere far from the cause.  Each is added by the change that
---  makes it true: exact-closed came with bignums (#102), and ratios,
---  exact-complex and ieee-float are not here because they are not.
+--  makes it true: exact-closed came with bignums (#102) and ieee-float
+--  with doubles (#103), and ratios and exact-complex are not here
+--  because they are not.
 --
 --  r7rs is not here either.  Every R7RS implementation has it, and it
 --  is a claim that the whole of the small language is present, which

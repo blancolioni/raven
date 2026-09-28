@@ -265,7 +265,7 @@
 (test "an exponent without a point" #t (number? 1e2))
 (test "and it is the number it says" #t (eq? 1e2 100.0))
 (test "an exponent written with a capital" #t (eq? 1E2 100.0))
-(test "a negative exponent without a point" #t (eq? 1e-2 0.01))
+(test "a negative exponent without a point" #t (eqv? 1e-2 0.01))
 (test "a signed number with an exponent" #t (eq? -1e2 -100.0))
 
 (test "a decimal with no zero in front" #t (number? .5))
@@ -289,17 +289,24 @@
 (test "a plain integer is still an integer" #t (exact-integer? 123))
 (test "a number with an exponent is not" #f (exact-integer? 1e2))
 
-;;  What it gives up for keeping the mantissa is range: six bits of
-;;  exponent reach from about 2**-30 up to just short of 2**32, and a
-;;  number outside that is reported where it is written and read as
-;;  nil rather than quietly losing its bottom bits.
+;;  An inexact number is a double (#103), kept as the immediate float
+;;  when that holds it exactly -- a single's mantissa and six bits of
+;;  exponent -- and boxed in the heap when it does not.  So 1.5 and
+;;  1500.0 are immediates, and 0.1, which no single holds exactly, is a
+;;  boxed double: the double 0.1 and not the single one.  Two of those
+;;  written apart are two objects, so it is eqv? that says they are the
+;;  same number; eq? on numbers is not a question R7RS answers.
 
 (test "a float near the top of the range" #t (number? 1.0e9))
 (test "a float near the bottom of the range" #t (number? 1.0e-9))
 (test "a float written with an exponent is a float" #t (number? 1.5e3))
 (test "and is the number it says" #t (eq? 1.5e3 1500.0))
 
-(test "the same float written twice is the same object" #t (eq? 0.1 0.1))
+(test "the same double written twice is the same number" #t (eqv? 0.1 0.1))
+(test "and the same float the same object, when it is an immediate" #t
+      (eq? 0.5 0.5))
+(test "a double past what the immediate holds" #t (number? 1.0e300))
+(test "and one below it" #t (= (* 1.0e-200 1.0e200) 1.0))
 (test "two different floats are not" #f (eq? 0.1 0.2))
 (test "equal? over floats" #t (equal? 0.25 0.25))
 (test "equal? over floats that differ" #f (equal? 0.25 0.5))
@@ -543,11 +550,11 @@
 (test "= over equal floats" #t (= 2.5 2.5))
 (test "= over unequal floats" #f (= 2.5 2.0))
 
-;;  Across the two it is not yet: a float is a number arithmetic cannot
-;;  take until #103, and = on one is still identity, so (= 2.0 2) is
-;;  written down as what happens rather than left to be found.
+;;  And across the two: = compares numbers, not how they are held, so
+;;  (= 2.0 2) is #t.  It was #f while = on a float was identity.
 
-(test "= over a float and an integer that look equal" #f (= 2.0 2))
+(test "= over a float and an integer that look equal" #t (= 2.0 2))
+(test "but they are not eqv?, being exact and inexact" #f (eqv? 2.0 2))
 
 ;;  Exact integers past 29 bits are bignums, and are the same numbers
 ;;  a program would expect: they compare, they are integers, and two
@@ -597,11 +604,82 @@
 (test "and hexadecimal" "2a" (number->string 42 16))
 (test "a bignum in hexadecimal" "10000000000000000000000000"
       (number->string probe-big 16))
-;;  A float is written as raven writes every float, which is #103's to
-;;  make shorter; what matters here is that it reads back.
-
+(test "number->string of a float" "1.5" (number->string 1.5))
 (test "number->string of a float reads back" 1.5
       (string->number (number->string 1.5)))
+
+;;  Inexact arithmetic (#103).  An inexact number is a double, and an
+;;  operation with any inexact argument answers inexact: the answer can
+;;  be no more exact than what it was worked out from.
+
+(test "a float added" 4.0 (+ 1.5 2.5))
+(test "contagion: an integer and a float" 3.5 (+ 1 2.5))
+(test "and the answer is inexact even when whole" #f (exact? (+ 1 2.0)))
+(test "a float multiplied" 3.75 (* 1.5 2.5))
+(test "a float subtracted" -1.0 (- 1.5 2.5))
+(test "division with a float divides" 3.5 (/ 7 2.0))
+(test "and exact division still truncates" 3 (/ 7 2))
+(test "floats compare" #t (< 1.5 2.5))
+(test "across exactness" #t (< 1 1.5 2))
+(test "a float and a bignum" #t (< 1.0e20 (expt 10 21)))
+(test "0.1 is the double 0.1" "0.30000000000000004"
+      (number->string (+ 0.1 0.2)))
+
+;;  Written as the shortest decimal that reads back as the same double,
+;;  with a point always and an exponent only far from one.
+
+(test "a double written" "0.1" (number->string 0.1))
+(test "a whole double written" "100.0" (number->string 100.0))
+(test "a large one" "1e+30" (number->string 1e30))
+(test "a small one" "1.5e-10" (number->string 1.5e-10))
+(test "a negative one" "-2.5" (number->string -2.5))
+(test "minus nought" "-0.0" (number->string -0.0))
+
+;;  exact? and inexact?, and each kind as the other.
+
+(test "exact? of an integer" #t (exact? 1))
+(test "exact? of a bignum" #t (exact? (expt 2 100)))
+(test "exact? of a float" #f (exact? 1.5))
+(test "inexact? of a float" #t (inexact? 1.5))
+(test "inexact of an integer" 2.0 (inexact 2))
+(test "and it is inexact" #t (inexact? (inexact 2)))
+(test "inexact of a bignum" 1.2676506002282294e30 (inexact (expt 2 100)))
+(test "exact of a whole float" 2 (exact 2.0))
+(test "and it is exact" #t (exact? (exact 2.0)))
+(test "exact of a large whole double, which is the double's own number"
+      1000000000000000019884624838656 (exact 1e30))
+(test "integer? of a whole float" #t (integer? 2.0))
+(test "integer? of one that is not" #f (integer? 2.5))
+(test "exact-integer? of a whole float" #f (exact-integer? 2.0))
+
+;;  floor, ceiling, truncate and round, which were the identity.
+
+(test "floor of a float" 2.0 (floor 2.5))
+(test "floor of a negative" -3.0 (floor -2.5))
+(test "ceiling" 3.0 (ceiling 2.5))
+(test "truncate" -2.0 (truncate -2.5))
+(test "round to even, down" 2.0 (round 2.5))
+(test "round to even, up" 4.0 (round 3.5))
+(test "round of a negative" -2.0 (round -2.5))
+(test "floor of an integer is the integer" 7 (floor 7))
+(test "and exact" #t (exact? (floor 7)))
+
+;;  min and max answer inexact when any argument is.
+
+(test "max of exact numbers is exact" 3 (max 1 3 2))
+(test "max with a float among them" 3.0 (max 3 2.0))
+(test "and inexact" #f (exact? (max 3 2.0)))
+(test "min with a float" 1.0 (min 1 2.0))
+
+;;  A boxed double is the heap's, and is the same number after a
+;;  collection has moved it.
+
+(define probe-kept-double (* 0.1 3))
+(probe-big-churn 3000)
+(test "a boxed double survives a collection" "0.30000000000000004"
+      (number->string probe-kept-double))
+(test "and a double past the immediate's range is written back" "1e+300"
+      (number->string 1e300))
 (test "string->number" 42 (string->number "42"))
 (test "string->number of a negative" -42 (string->number "-42"))
 (test "string->number in a radix" 42 (string->number "2a" 16))
@@ -2697,6 +2775,7 @@
 (test "and full-unicode" #t (probe-has? 'full-unicode))
 (test "and not ratios, yet" #f (probe-has? 'ratios))
 (test "but exact-closed, since bignums" #t (probe-has? 'exact-closed))
+(test "and ieee-float, since doubles" #t (probe-has? 'ieee-float))
 
 ;;  cond-expand as an expression, which chooses where it is expanded:
 ;;  a clause not chosen is never read as code, so it may use what is

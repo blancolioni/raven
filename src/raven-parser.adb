@@ -268,26 +268,35 @@ package body Raven.Parser is
 
             when Tok_Float =>
 
-               --  Raven's float keeps every mantissa bit of a single
-               --  and shortens the exponent, so what it cannot hold is
-               --  a number too large or too small rather than one too
-               --  precise.  Saying so here is the whole of what the
-               --  encoding asks of the reader; it used to mask the
-               --  bottom of the number off instead, and 0.1 read as a
-               --  broken promise.
+               --  A double, kept as the immediate float when that holds
+               --  it exactly and boxed by the machine when it does not.
+               --  It used to be a single, and one outside what the
+               --  immediate holds was refused; before that the bottom
+               --  of the number was masked off, and 0.1 read as a
+               --  broken promise.  What is refused now is only what a
+               --  double cannot hold.
 
                declare
-                  Value : constant Float := Lex.Tok_Float_Value;
+                  Value : Long_Float;
+                  Fits  : Boolean := True;
                begin
-                  if not Raven.Objects.Is_Representable (Value) then
+                  begin
+                     Value := Lex.Tok_Float_Value;
+                  exception
+                     when Constraint_Error =>
+                        Fits := False;
+                  end;
+
+                  if not Fits then
                      Lex.Error
                        ("number out of range for a float: " & Lex.Tok_Text);
-                     Lex.Scan;
                      Target.Push_Nil;
+                  elsif Raven.Objects.Fits_Immediate (Value) then
+                     Target.Push (Raven.Objects.To_Object (Float (Value)));
                   else
-                     Target.Push (Raven.Objects.To_Object (Value));
-                     Lex.Scan;
+                     Target.Push (Target.Read_Inexact (Value));
                   end if;
+                  Lex.Scan;
                end;
             when others =>
                Lex.Error ("bad token");
