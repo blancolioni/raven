@@ -55,6 +55,23 @@ package body Raven.Numbers is
    is (Raven.Objects.To_Object (N.Value));
 
    -----------
+   -- Equal --
+   -----------
+
+   function Equal (Left, Right : Number) return Boolean
+   is (Left.Value = Right.Value);
+
+   ---------
+   -- Eqv --
+   ---------
+
+   --  Every fixnum is exact, so this is Equal until there is an inexact
+   --  number to tell it from.
+
+   function Eqv (Left, Right : Number) return Boolean
+   is (Equal (Left, Right));
+
+   -----------
    -- Image --
    -----------
 

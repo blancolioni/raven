@@ -1,13 +1,17 @@
 (define (eq? x y) (raven-eq? x y))
 
-;;  eqv? is eq?, and stays eq? until there is something raven can
-;;  represent that eq? answers wrongly for.  Everything it has now is
-;;  an immediate or a pointer to the one object, and identity is the
-;;  whole of the question for both.  Numbers are where that stops
-;;  holding, and there are no numbers here yet that it does not
-;;  answer for.
+;;  eqv? is eq? for everything but numbers, where R7RS asks whether
+;;  they are the same number and equally exact -- which is not identity
+;;  once a number can be boxed, because two equal bignums are two
+;;  objects.  So two numbers are the machine's to compare.  The same
+;;  word is the same thing whatever it is, so that is asked first.
 
-(define (eqv? x y) (eq? x y))
+(define (eqv? x y)
+  (if (eq? x y)
+      #t
+      (if (number? x)
+	  (if (number? y) (raven-num-eqv x y) #f)
+	  #f)))
 
 (define (null? x) (eq? x '()))
 
@@ -84,18 +88,14 @@
 ;;  = asks about numbers, where it used to ask about identity and
 ;;  answer for anything at all: (= 'a 'a) was #t.
 ;;
-;;  Within a type eq? is numeric equality here, because a number is an
-;;  immediate and two equal ones are the same word.  Across types it is
-;;  not: (= 2.0 2) is #f where R7RS asks for #t, and answering that
-;;  wants a comparison the machine does not have, raven-leq taking two
-;;  integers.  That half is the numeric tower's.
+;;  = is the machine's comparison, through the same seam as the rest
+;;  of arithmetic.  It was eq?, which was numeric equality only while
+;;  every number was an immediate: two equal bignums are two objects.
+;;  What is not a number is refused there, and says which it was.
 
 (define (= . xs) (all-left-assoc num-eq? #t xs))
 
-(define (num-eq? a b)
-  (if (if (number? a) (number? b) #f)
-      (eq? a b)
-      (error "=: expected numbers")))
+(define (num-eq? a b) (raven-num-eq a b))
 
 
 (define (+ . xs) (fold raven-add 0 xs))
