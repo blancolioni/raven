@@ -13,10 +13,14 @@ private package Raven.Parser is
 
    type Instance is tagged limited private;
 
+   --  Fold_Case reads the source as though it began with #!fold-case,
+   --  which is include-ci.
+
    procedure Open
-     (This   : in out Instance;
-      Name   : String;
-      Source : String);
+     (This      : in out Instance;
+      Name      : String;
+      Source    : String;
+      Fold_Case : Boolean := False);
 
    function At_End (This : Instance) return Boolean;
 

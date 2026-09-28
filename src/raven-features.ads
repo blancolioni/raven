@@ -24,8 +24,8 @@ private package Raven.Features is
    function Feature (Index : Positive) return String
      with Pre => Index <= Count;
 
-   --  Symbols are folded to lower case when they are read, so a feature
-   --  is asked for in lower case and the list is kept that way.
+   --  A feature is a symbol, and a symbol is its name as written, so
+   --  the list is kept in lower case, which is how R7RS spells them.
 
    function Is_Feature (Name : String) return Boolean;
 

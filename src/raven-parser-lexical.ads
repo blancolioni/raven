@@ -7,10 +7,14 @@ private package Raven.Parser.Lexical is
 
    type Instance is tagged private;
 
+   --  Fold_Case is whether the source is read as though it began with
+   --  #!fold-case, which is how include-ci reads a file.
+
    procedure Open
-     (This   : in out Instance;
-      Name   : String;
-      Source : Wide_Wide_String);
+     (This      : in out Instance;
+      Name      : String;
+      Source    : Wide_Wide_String;
+      Fold_Case : Boolean := False);
 
    procedure Close (This : in out Instance);
 
@@ -70,6 +74,7 @@ private
          Tok_Text   : Unbounded_Wide_Wide_String;
          Tok_Char   : Wide_Wide_Character;
          EOF        : Boolean;
+         Fold_Case  : Boolean;
       end record;
 
    Empty_Stream : constant Source_Stream_Record :=
@@ -83,7 +88,8 @@ private
                      Tok           => Tok_None,
                      Tok_Text      => Null_Unbounded_Wide_Wide_String,
                      Tok_Char      => ' ',
-                     EOF           => True);
+                     EOF           => True,
+                     Fold_Case     => False);
 
    Max_Source_Files : constant := 10;
 

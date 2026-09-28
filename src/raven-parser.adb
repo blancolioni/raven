@@ -44,13 +44,14 @@ package body Raven.Parser is
    ----------
 
    procedure Open
-     (This   : in out Instance;
-      Name   : String;
-      Source : String)
+     (This      : in out Instance;
+      Name      : String;
+      Source    : String;
+      Fold_Case : Boolean := False)
    is
    begin
       This.Data := new Source_Record;
-      This.Data.Lex.Open (Name, Decode (Source));
+      This.Data.Lex.Open (Name, Decode (Source), Fold_Case);
    end Open;
 
    ----------------------

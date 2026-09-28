@@ -222,12 +222,14 @@ package body Raven.Parser.Lexical is
    ----------
 
    procedure Open
-     (This   : in out Instance;
-      Name   : String;
-      Source : Wide_Wide_String)
+     (This      : in out Instance;
+      Name      : String;
+      Source    : Wide_Wide_String;
+      Fold_Case : Boolean := False)
    is
    begin
       This.Open_Stream (Name);
+      This.Current_Stream.Fold_Case := Fold_Case;
       declare
          Start : Positive := Source'First;
       begin
@@ -340,6 +342,16 @@ package body Raven.Parser.Lexical is
                Buffer (Count) := Current_Stream.Ch;
                This.Next_Character;
             end loop;
+
+            --  A character name is folded after #!fold-case, as an
+            --  identifier is; a character on its own is itself, so
+            --  #\A is still A.
+
+            if Count > 1 and then Current_Stream.Fold_Case then
+               return Raven.Parser.Lexical.Characters.Name_To_Character
+                 (Ada.Wide_Wide_Characters.Handling.To_Lower
+                    (Buffer (1 .. Count)));
+            end if;
 
             return Raven.Parser.Lexical.Characters.Name_To_Character
               (Buffer (1 .. Count));
@@ -648,6 +660,22 @@ package body Raven.Parser.Lexical is
 
                   This.Stop_Token;
 
+                  --  The directives, which say how the rest of this
+                  --  source is read and are otherwise comments.  A name
+                  --  is folded to lower case after #!fold-case and read
+                  --  as written after #!no-fold-case, which is how a
+                  --  source starts; a name between bars never is.
+
+                  if This.Tok_Text = "#!fold-case" then
+                     Current_Stream.Fold_Case := True;
+                     This.Scan;
+                     return;
+                  elsif This.Tok_Text = "#!no-fold-case" then
+                     Current_Stream.Fold_Case := False;
+                     This.Scan;
+                     return;
+                  end if;
+
                   if This.Tok_Text = "#u8"
                     and then Current_Stream.Ch = '('
                   then
@@ -657,6 +685,15 @@ package body Raven.Parser.Lexical is
                      Tok :=
                        Raven.Parser.Lexical.Identifiers.Classify_Identifier
                          (This.Tok_Text);
+
+                     if Tok = Tok_Identifier
+                       and then Current_Stream.Fold_Case
+                     then
+                        Current_Stream.Tok_Text :=
+                          To_Unbounded_Wide_Wide_String
+                            (Ada.Wide_Wide_Characters.Handling.To_Lower
+                               (This.Tok_Text));
+                     end if;
                   end if;
 
                else

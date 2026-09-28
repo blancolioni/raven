@@ -1943,6 +1943,33 @@
 (test "symbol->string of a name with punctuation" "set-car!"
       (symbol->string 'set-car!))
 
+;;  A symbol is its name as written (#160).  Every name was folded to
+;;  lower case as it was interned, so Foo and foo were one symbol and
+;;  string->symbol could not give back the string it was handed.
+
+(test "case tells symbols apart" #f (eq? 'Foo 'foo))
+(test "a name keeps its case" "Foo" (symbol->string 'Foo))
+(test "string->symbol keeps its case" "mISSISSIppi"
+      (symbol->string (string->symbol "mISSISSIppi")))
+(test "and reads as the name written" #t
+      (eq? 'bitBlt (string->symbol "bitBlt")))
+(test "a name in capitals is not the keyword" #t
+      (let ((IF 1) (Lambda 2)) (= (+ IF Lambda) 3)))
+
+;;  After #!fold-case a name is read folded to lower case, and a
+;;  character name too; a name between bars is not.  #!no-fold-case
+;;  puts it back, which is how the rest of this file is read.
+
+#!fold-case
+(test "#!fold-case folds a name" #t (eq? 'ABC 'abc))
+(TEST "and every name" "abc" (Symbol->String 'AbC))
+(test "and a character name" #\space #\SPACE)
+(test "but not a character" #f (eqv? #\A #\a))
+(test "nor a name between bars" "ABC" (symbol->string '|ABC|))
+(test "nor a string" "ABC" (string-copy "ABC"))
+#!no-fold-case
+(test "#!no-fold-case reads names as written again" #f (eq? 'ABC 'abc))
+
 ;;  A generated symbol has a name so that it can be shown, and is not
 ;;  the symbol that name reads as.  string->symbol is what finally
 ;;  lets that be asked.
