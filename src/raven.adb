@@ -486,6 +486,18 @@ package body Raven is
         (Position => This.Data.Evaluator.Hold (This.Get_Slot (Index)));
    end Get_Slot;
 
+   -----------------
+   -- Hold_Object --
+   -----------------
+
+   procedure Hold_Object
+     (This  : Raven_VM'Class;
+      Value : Object)
+   is
+   begin
+      This.Data.Target.Push (Value);
+   end Hold_Object;
+
    -----------------------
    -- Holds_Requirement --
    -----------------------
@@ -599,6 +611,19 @@ package body Raven is
    is (This.Data.Memory.New_Flonum (Value));
 
    ----------------
+   -- New_Ratnum --
+   ----------------
+
+   function New_Ratnum
+     (This        : Raven_VM'Class;
+      Numerator   : Object;
+      Denominator : Object)
+      return Object
+   is (Raven.Objects.To_Ratnum
+         (Raven.Objects.Get_Address
+            (This.Data.Memory.Cons (Numerator, Denominator))));
+
+   ----------------
    -- New_Symbol --
    ----------------
 
@@ -681,6 +706,26 @@ package body Raven is
       This.Data.Memory.Query_Foreign_Value (Value, Process);
    end Query_Foreign_Value;
 
+   ------------------------
+   -- Ratnum_Denominator --
+   ------------------------
+
+   function Ratnum_Denominator
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object
+   is (This.Data.Memory.Get (Raven.Objects.Get_Address (X)).Cdr);
+
+   ----------------------
+   -- Ratnum_Numerator --
+   ----------------------
+
+   function Ratnum_Numerator
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object
+   is (This.Data.Memory.Get (Raven.Objects.Get_Address (X)).Car);
+
    --------------------
    -- Read_Character --
    --------------------
@@ -707,6 +752,15 @@ package body Raven is
          This.Data.Evaluator.Release (Value.Position);
       end if;
    end Release;
+
+   --------------------
+   -- Release_Object --
+   --------------------
+
+   function Release_Object (This : Raven_VM'Class) return Object is
+   begin
+      return This.Data.Target.Pop;
+   end Release_Object;
 
    ------------------
    -- Report_State --

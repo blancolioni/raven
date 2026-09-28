@@ -13,11 +13,11 @@
 
   (export conditional-which conditional-library conditional-nested)
 
-  ;;  ratios is not true yet and raven is, so the second clause is
+  ;;  exact-complex is not true and raven is, so the second clause is
   ;;  chosen; the first would be an error if it were read.
 
   (cond-expand
-   (ratios
+   (exact-complex
     (begin (define conditional-which (no-such-procedure))))
    (raven
     (begin (define conditional-which 'raven)))
@@ -40,7 +40,7 @@
   ;;  though they were written at the top.
 
   (cond-expand
-   ((and raven (not ratios))
+   ((and raven (not exact-complex))
     (cond-expand
-     ((or ratios full-unicode)
+     ((or exact-complex full-unicode)
       (begin (define conditional-nested 'nested)))))))

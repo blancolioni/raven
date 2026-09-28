@@ -4,6 +4,11 @@ private package Raven.Parser.Tokens is
       (Tok_None, Tok_End_Of_File, Tok_Bad_Character,
        Tok_Identifier, Tok_String, Tok_Character, Tok_Integer, Tok_Float,
 
+       --  An exact rational written with a slash, 7/2, which the reader
+       --  hands to the machine to make (#104).
+
+       Tok_Rational,
+
        --  A name written between vertical bars is a name and nothing
        --  else, which is what tells it from the one above: |#t| is a
        --  symbol whose name is #t, where #t is a boolean.

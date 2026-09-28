@@ -266,6 +266,15 @@ package body Raven.Parser is
                   Lex.Scan;
                end;
 
+            when Tok_Rational =>
+
+               --  Made by the machine, as a bignum is: its parts may be
+               --  bignums, and it is a cell in the heap.  One that is an
+               --  integer after all, 6/2, is the integer.
+
+               Target.Push (Target.Read_Integer (Encode (Lex.Tok_Text)));
+               Lex.Scan;
+
             when Tok_Float =>
 
                --  A double, kept as the immediate float when that holds

@@ -290,6 +290,38 @@ package body Raven.Tests.Library is
       Test_Library (VM, "(probe-answer)", False);
       VM.Bind_Foreign_Function ("probe-answer", Probe_True'Access, 0);
       Test_Library (VM, "(probe-answer)", True);
+
+      --  A bytevector's bytes are packed, six to a cell, where they were
+      --  one to an object and two to a cell (#123).  Sixty thousand
+      --  bytes were thirty thousand cells, which with the base library
+      --  is more than half of the default heap and could not be made
+      --  at all; packed they are ten thousand.  In a VM of its own, so that
+      --  what else is live is the base library and nothing more.
+
+      declare
+         Fresh : Raven_VM := New_VM (Library_Path => Library_Path);
+      begin
+         Fresh.Evaluate ("(import (scheme base))");
+         Fresh.Evaluate ("(define big (make-bytevector 60000 7))");
+         Fresh.Evaluate ("(bytevector-u8-set! big 59999 200)");
+
+         --  Garbage and nothing else, by a tail call, so that the heap is
+         --  collected several times and the stack does not grow.
+
+         Fresh.Evaluate
+           ("(define (churn n) (if (= n 0) 0"
+            & " (begin (cons n n) (churn (- n 1)))))");
+         Fresh.Evaluate ("(churn 40000)");
+
+         Fresh.Evaluate ("(bytevector-length big)");
+         Test ("sixty thousand bytes fit", Fresh.Show_Slot (1) = "60000");
+         Fresh.Evaluate ("(bytevector-u8-ref big 59999)");
+         Test ("and survive a collection", Fresh.Show_Slot (1) = "200");
+         Fresh.Evaluate ("(bytevector-u8-ref big 30000)");
+         Test ("with the rest as they were", Fresh.Show_Slot (1) = "7");
+
+         Fresh.Close_VM;
+      end;
    end Run_Tests;
 
    ----------------

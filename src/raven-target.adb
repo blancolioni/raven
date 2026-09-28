@@ -97,7 +97,9 @@ package body Raven.Target is
          return "#eof";
       elsif Is_Instruction (X) then
          return To_Instruction (X)'Image;
-      elsif Is_Bignum (X) or else Is_Float (X) or else Is_Flonum (X) then
+      elsif Is_Bignum (X) or else Is_Ratnum (X)
+        or else Is_Float (X) or else Is_Flonum (X)
+      then
          return This.Show_Number (X);
       elsif Is_Integer (X) then
          declare

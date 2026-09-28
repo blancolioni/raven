@@ -6,6 +6,9 @@ package body Raven.Numbers is
    package Wide_Conversions is
      new Signed_Conversions (Long_Long_Integer);
 
+   package Double_Conversions is
+     new Float_Conversions (Long_Float);
+
    Byte_Base : constant Big_Integer := To_Big_Integer (256);
 
    --  The Number an exact integer is, made normal: a fixnum when it
@@ -13,6 +16,20 @@ package body Raven.Numbers is
 
    function Normal (Wide : Long_Long_Integer) return Number;
    function Normal (Big : Big_Integer) return Number;
+
+   --  And an exact rational, made an integer when its denominator is
+   --  one, which is how (/ 6 2) is the fixnum 3.
+
+   function Normal (Real : Big_Real) return Number;
+
+   --  Any exact number as a Big_Real, for an operation one of whose
+   --  operands is a rational.
+
+   function To_Real (N : Number) return Big_Real
+     with Pre => N.Kind /= Flonum;
+
+   function Either_Ratnum (Left, Right : Number) return Boolean
+   is (Left.Kind = Ratnum or else Right.Kind = Ratnum);
 
    --  An inexact answer, refused if it is past what a double holds.
    --  Ada gives an infinity or raises there depending on the checks it
@@ -34,7 +51,7 @@ package body Raven.Numbers is
    --  an operation whose operands are not both fixnums.
 
    function To_Big (N : Number) return Big_Integer
-     with Pre => N.Kind /= Flonum;
+     with Pre => N.Kind in Fixnum | Bignum;
 
    function To_Double (N : Number) return Long_Float;
 
@@ -61,6 +78,8 @@ package body Raven.Numbers is
    function Add (Left, Right : Number) return Number
    is (if Either_Inexact (Left, Right)
        then Double_Op (Left, '+', Right)
+       elsif Either_Ratnum (Left, Right)
+       then Normal (To_Real (Left) + To_Real (Right))
        elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) + Widened (Right))
        else Normal (To_Big (Left) + To_Big (Right)));
@@ -96,6 +115,11 @@ package body Raven.Numbers is
                  Inexact => Long_Float (Raven.Objects.To_Float (X)));
       elsif Raven.Objects.Is_Flonum (X) then
          return (Kind => Flonum, Inexact => VM.Flonum_Value (X));
+      elsif Raven.Objects.Is_Ratnum (X) then
+         return (Kind  => Ratnum,
+                 Ratio =>
+                   To_Big (Decode (VM, VM.Ratnum_Numerator (X)))
+                   / To_Big (Decode (VM, VM.Ratnum_Denominator (X))));
       end if;
 
       --  Most significant byte first, so each is one multiply and one
@@ -116,6 +140,16 @@ package body Raven.Numbers is
       end;
    end Decode;
 
+   -----------------
+   -- Denominator --
+   -----------------
+
+   function Denominator (N : Number) return Number
+   is (case N.Kind is
+          when Fixnum | Bignum => (Kind => Fixnum, Value => 1),
+          when Ratnum          => Normal (Denominator (N.Ratio)),
+          when Flonum          => To_Inexact (Denominator (To_Exact (N))));
+
    ------------
    -- Divide --
    ------------
@@ -126,14 +160,21 @@ package body Raven.Numbers is
          raise Constraint_Error with "divide by zero";
       end if;
 
-      --  The one fixnum division that does not fit, the smallest by -1,
-      --  is one past the largest and is a bignum like any other.
+      --  Exact, and an integer when it comes out even: two fixnums that
+      --  divide exactly are divided as fixnums, and anything else is a
+      --  rational made normal.  The one fixnum division that does not
+      --  fit, the smallest by -1, is one past the largest and is a
+      --  bignum like any other.
 
-      return (if Either_Inexact (Left, Right)
-              then Double_Op (Left, '/', Right)
-              elsif Both_Fixnums (Left, Right)
-              then Normal (Widened (Left) / Widened (Right))
-              else Normal (To_Big (Left) / To_Big (Right)));
+      if Either_Inexact (Left, Right) then
+         return Double_Op (Left, '/', Right);
+      elsif Both_Fixnums (Left, Right)
+        and then Left.Value rem Right.Value = 0
+      then
+         return Normal (Widened (Left) / Widened (Right));
+      else
+         return Normal (To_Real (Left) / To_Real (Right));
+      end if;
    end Divide;
 
    ------------------
@@ -268,6 +309,30 @@ package body Raven.Numbers is
                return VM.New_Flonum (N.Inexact);
             end if;
 
+         when Ratnum =>
+
+            --  Numerator and denominator are each an integer, and either
+            --  may be a bignum, which is made in the heap and may collect.
+            --  The numerator is held on the machine's stack while the
+            --  denominator is made, so that a collection then moves it
+            --  and it is still where it is afterwards; and the cons that
+            --  pairs them keeps both across the one it may make.
+
+            declare
+               Held : constant Object :=
+                        Encode (VM, Normal (Numerator (N.Ratio)));
+            begin
+               VM.Hold_Object (Held);
+            end;
+
+            declare
+               Lower : constant Object :=
+                         Encode (VM, Normal (Denominator (N.Ratio)));
+               Upper : constant Object := VM.Release_Object;
+            begin
+               return VM.New_Ratnum (Upper, Lower);
+            end;
+
          when Bignum =>
             null;
       end case;
@@ -317,6 +382,8 @@ package body Raven.Numbers is
    function Equal (Left, Right : Number) return Boolean
    is (if Either_Inexact (Left, Right)
        then To_Double (Left) = To_Double (Right)
+       elsif Either_Ratnum (Left, Right)
+       then To_Real (Left) = To_Real (Right)
        elsif Both_Fixnums (Left, Right)
        then Left.Value = Right.Value
        elsif Left.Kind = Right.Kind
@@ -378,6 +445,9 @@ package body Raven.Numbers is
    begin
       if N.Kind = Flonum then
          return Double_Image (N.Inexact);
+      elsif N.Kind = Ratnum then
+         return Image (Normal (Numerator (N.Ratio)), Base)
+           & "/" & Image (Normal (Denominator (N.Ratio)), Base);
       end if;
 
       Magnitude := abs To_Big (N);
@@ -415,8 +485,11 @@ package body Raven.Numbers is
    --------------
 
    function Is_Whole (N : Number) return Boolean
-   is (N.Kind /= Flonum
-       or else N.Inexact = Long_Float'Truncation (N.Inexact));
+   is (case N.Kind is
+          when Fixnum | Bignum => True,
+          when Ratnum          => False,
+          when Flonum          =>
+             N.Inexact = Long_Float'Truncation (N.Inexact));
 
    -------------------
    -- Less_Or_Equal --
@@ -425,6 +498,8 @@ package body Raven.Numbers is
    function Less_Or_Equal (Left, Right : Number) return Boolean
    is (if Either_Inexact (Left, Right)
        then To_Double (Left) <= To_Double (Right)
+       elsif Either_Ratnum (Left, Right)
+       then To_Real (Left) <= To_Real (Right)
        elsif Both_Fixnums (Left, Right)
        then Left.Value <= Right.Value
        else To_Big (Left) <= To_Big (Right));
@@ -436,6 +511,8 @@ package body Raven.Numbers is
    function Multiply (Left, Right : Number) return Number
    is (if Either_Inexact (Left, Right)
        then Double_Op (Left, '*', Right)
+       elsif Either_Ratnum (Left, Right)
+       then Normal (To_Real (Left) * To_Real (Right))
        elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) * Widened (Right))
        else Normal (To_Big (Left) * To_Big (Right)));
@@ -461,6 +538,44 @@ package body Raven.Numbers is
        then (Kind => Fixnum, Value => To_Integer (Big))
        else (Kind => Bignum, Big => Big));
 
+   ------------
+   -- Normal --
+   ------------
+
+   function Normal (Real : Big_Real) return Number
+   is (if Denominator (Real) = To_Big_Integer (1)
+       then Normal (Numerator (Real))
+       else (Kind => Ratnum, Ratio => Real));
+
+   ---------------
+   -- Numerator --
+   ---------------
+
+   function Numerator (N : Number) return Number
+   is (case N.Kind is
+          when Fixnum | Bignum => N,
+          when Ratnum          => Normal (Numerator (N.Ratio)),
+          when Flonum          => To_Inexact (Numerator (To_Exact (N))));
+
+   --------------
+   -- Quotient --
+   --------------
+
+   function Quotient (Left, Right : Number) return Number is
+   begin
+      if Equal (Right, (Kind => Fixnum, Value => 0)) then
+         raise Constraint_Error with "divide by zero";
+      end if;
+
+      return (if Either_Inexact (Left, Right)
+              then Checked_Inexact
+                     (Long_Float'Truncation
+                        (To_Double (Left) / To_Double (Right)))
+              elsif Both_Fixnums (Left, Right)
+              then Normal (Widened (Left) / Widened (Right))
+              else Normal (Big_Integer'(To_Big (Left) / To_Big (Right))));
+   end Quotient;
+
    ----------
    -- Read --
    ----------
@@ -476,6 +591,13 @@ package body Raven.Numbers is
       Negative : Boolean := False;
       Result   : Big_Integer := To_Big_Integer (0);
       Seen     : Boolean := False;
+
+      --  After a slash, the digits go to the denominator, and there have
+      --  to be some.
+
+      Slash       : Boolean := False;
+      Lower       : Big_Integer := To_Big_Integer (0);
+      Seen_Lower  : Boolean := False;
 
       procedure Take_Sign;
 
@@ -530,21 +652,40 @@ package body Raven.Numbers is
                   null;
             end case;
 
-            if Digit not in 0 .. In_Base - 1 then
+            if Ch = '/' and then Seen and then not Slash then
+               Slash := True;
+            elsif Digit not in 0 .. In_Base - 1 then
                return;
+            elsif Slash then
+               Lower := Lower * To_Big_Integer (In_Base)
+                 + To_Big_Integer (Digit);
+               Seen_Lower := True;
+            else
+               Result := Result * To_Big_Integer (In_Base)
+                 + To_Big_Integer (Digit);
+               Seen := True;
             end if;
-
-            Result := Result * To_Big_Integer (In_Base)
-              + To_Big_Integer (Digit);
-            Seen := True;
          end;
          Here := Here + 1;
       end loop;
 
-      if Seen then
-         N := Normal (if Negative then -Result else Result);
-         Valid := True;
+      if not Seen or else Slash /= Seen_Lower then
+         return;
       end if;
+
+      if Negative then
+         Result := -Result;
+      end if;
+
+      if not Slash then
+         N := Normal (Result);
+      elsif Lower = To_Big_Integer (0) then
+         return;
+      else
+         N := Normal (Big_Real'(Result / Lower));
+      end if;
+
+      Valid := True;
    end Read;
 
    ------------------
@@ -637,8 +778,37 @@ package body Raven.Numbers is
 
    function Rounded (N : Number; How : Rounding) return Number is
    begin
-      if Is_Exact (N) then
+      if N.Kind in Fixnum | Bignum then
          return N;
+      end if;
+
+      --  A rational rounds to an exact integer.  Big_Integer's division
+      --  truncates towards nought, and the denominator is positive, so
+      --  the floor is the truncation or one below it, and the rest
+      --  follows from the floor and what is left over.
+
+      if N.Kind = Ratnum then
+         declare
+            Upper   : constant Big_Integer := Numerator (N.Ratio);
+            Lower   : constant Big_Integer := Denominator (N.Ratio);
+            Trunc   : constant Big_Integer := Upper / Lower;
+            Floored : constant Big_Integer :=
+                        (if Upper < To_Big_Integer (0) then Trunc - 1
+                         else Trunc);
+            Twice   : constant Big_Integer :=
+                        2 * (Upper - Floored * Lower);
+         begin
+            return Normal
+              (case How is
+                  when Floor    => Floored,
+                  when Ceiling  => Floored + 1,
+                  when Truncate => Trunc,
+                  when Round    =>
+                    (if Twice < Lower then Floored
+                     elsif Twice > Lower then Floored + 1
+                     elsif Floored rem 2 = To_Big_Integer (0) then Floored
+                     else Floored + 1));
+         end;
       end if;
 
       return (Kind    => Flonum,
@@ -658,6 +828,8 @@ package body Raven.Numbers is
    function Subtract (Left, Right : Number) return Number
    is (if Either_Inexact (Left, Right)
        then Double_Op (Left, '-', Right)
+       elsif Either_Ratnum (Left, Right)
+       then Normal (To_Real (Left) - To_Real (Right))
        elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) - Widened (Right))
        else Normal (To_Big (Left) - To_Big (Right)));
@@ -684,11 +856,13 @@ package body Raven.Numbers is
             return N.Inexact;
          when Bignum =>
             return Long_Float'Value (To_String (N.Big));
+         when Ratnum =>
+            return Double_Conversions.From_Big_Real (N.Ratio);
       end case;
    exception
       when Constraint_Error =>
          raise Constraint_Error with
-           "inexact overflow: " & To_String (N.Big)
+           "inexact overflow: " & Image (N)
            & " is past what a double holds";
    end To_Double;
 
@@ -702,10 +876,12 @@ package body Raven.Numbers is
          return N;
       end if;
 
+      --  A double that is not whole is the exact fraction it is, which
+      --  is a dyadic one: (exact 0.5) is 1/2 and (exact 0.1) is the
+      --  fraction nearest a tenth that a double holds.
+
       if not Is_Whole (N) then
-         raise Constraint_Error with
-           "exact: " & Double_Image (N.Inexact)
-           & " is not a whole number, and there are no exact fractions yet";
+         return Normal (Double_Conversions.To_Big_Real (N.Inexact));
       end if;
 
       --  A whole double is its significand times a power of two, and
@@ -739,5 +915,16 @@ package body Raven.Numbers is
 
    function To_Inexact (N : Number) return Number
    is (if Is_Exact (N) then Checked_Inexact (To_Double (N)) else N);
+
+   -------------
+   -- To_Real --
+   -------------
+
+   function To_Real (N : Number) return Big_Real
+   is (case N.Kind is
+          when Fixnum => To_Big_Real (To_Big_Integer (N.Value)),
+          when Bignum => To_Big_Real (N.Big),
+          when Ratnum => N.Ratio,
+          when Flonum => raise Program_Error);
 
 end Raven.Numbers;

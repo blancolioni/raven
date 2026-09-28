@@ -175,11 +175,11 @@
       ((lambda (rest) (if (better? (car xs) rest) (car xs) rest))
        (extreme better? (cdr xs)))))
 
-;;  Division.  The machine divides towards zero, so what raven-div
+;;  Division.  The machine divides towards zero, so what raven-quotient
 ;;  does is the truncating quotient, and the remainder follows from it
 ;;  without dividing again.
 
-(define (truncate-quotient x y) (raven-div x y))
+(define (truncate-quotient x y) (raven-quotient x y))
 (define (truncate-remainder x y) (- x (* y (truncate-quotient x y))))
 
 (define (quotient x y) (truncate-quotient x y))
@@ -222,13 +222,71 @@
       0
       (abs (quotient (* a b) (gcd2 a b)))))
 
-;;  expt raises to a whole power by multiplying.  A negative power is
-;;  a rational, and rationals are the numeric tower rather than this.
+;;  expt raises to a whole power by squaring, which is a multiplication
+;;  for every bit of the power rather than one for every unit of it, and
+;;  a tail call, so a large power neither takes long nor goes deep.  A
+;;  negative power is the reciprocal, which is exact for an exact base:
+;;  (expt 2 -3) is 1/8.  A power that is not an integer wants roots and
+;;  logarithms, which are (scheme inexact) and #105's.
 
 (define (expt base power)
-  (if (negative? power)
-      (error "expt: a negative power is a rational, which raven has no numbers for")
-      (if (zero? power) 1 (* base (expt base (- power 1))))))
+  (if (integer? power)
+      ((lambda (answer) (if (exact? power) answer (inexact answer)))
+       (if (negative? power)
+           (/ 1 (expt-by-squaring base (exact (- power)) 1))
+           (expt-by-squaring base (exact power) 1)))
+      (error "expt: a power that is not an integer wants (scheme inexact)")))
+
+(define (expt-by-squaring base power acc)
+  (if (zero? power)
+      acc
+      (if (even? power)
+          (expt-by-squaring (* base base) (quotient power 2) acc)
+          (expt-by-squaring base (- power 1) (* acc base)))))
+
+;;  A number is rational, real and complex here: every number raven has
+;;  is a finite real, and there is no infinity or NaN to be the one that
+;;  is real and not rational.
+
+(define (rational? x) (number? x))
+(define (real? x) (number? x))
+(define (complex? x) (number? x))
+
+;;  A rational's parts in lowest terms, with the denominator positive.
+;;  An integer is itself over one, and an inexact number's parts are its
+;;  exact ones made inexact: (denominator 0.5) is 2.0.
+
+(define (numerator q) (raven-numerator q))
+(define (denominator q) (raven-denominator q))
+
+;;  The simplest rational within y of x, which is the one with the
+;;  smallest denominator, and the smallest numerator of those: the
+;;  Stern-Brocot search, written without let because let is not here
+;;  yet.  (rationalize 3/10 1/10) is 1/3, and inexact if either argument
+;;  is.
+
+(define (rationalize x y) (simplest-between (- x y) (+ x y)))
+
+(define (simplest-between lo hi)
+  (if (< hi lo)
+      (simplest-between hi lo)
+      (if (= lo hi)
+          lo
+          (if (positive? lo)
+              (simplest-positive lo hi)
+              (if (negative? hi)
+                  (- (simplest-positive (- hi) (- lo)))
+                  (if (if (exact? lo) (exact? hi) #f) 0 0.0))))))
+
+(define (simplest-positive lo hi)
+  ((lambda (fl)
+     (if (= fl lo)
+         fl
+         (if (< fl (floor hi))
+             (+ fl 1)
+             (+ fl (/ 1 (simplest-positive (/ 1 (- hi fl))
+                                           (/ 1 (- lo fl))))))))
+   (floor lo)))
 
 ;;  Rounding, which gives an exact number back as it is and rounds an
 ;;  inexact one to a whole inexact number: (floor 2.5) is 2.0, not 2.

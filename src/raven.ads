@@ -697,6 +697,37 @@ private
       X    : Object)
       return Long_Float;
 
+   --  An exact rational's cell, and its two halves.  New_Ratnum is a
+   --  cons, which keeps both its arguments across the collection it may
+   --  make.
+
+   function New_Ratnum
+     (This        : Raven_VM'Class;
+      Numerator   : Object;
+      Denominator : Object)
+      return Object;
+
+   function Ratnum_Numerator
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object;
+
+   function Ratnum_Denominator
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object;
+
+   --  An object kept on the machine's stack, which the collector walks,
+   --  across something that may collect, and taken back afterwards --
+   --  where it may no longer be where it was.  They go in pairs, and in
+   --  order.
+
+   procedure Hold_Object
+     (This  : Raven_VM'Class;
+      Value : Object);
+
+   function Release_Object (This : Raven_VM'Class) return Object;
+
    function Vector_Length
      (This : Raven_VM'Class;
       V    : Object)

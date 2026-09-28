@@ -618,7 +618,7 @@
 (test "a float multiplied" 3.75 (* 1.5 2.5))
 (test "a float subtracted" -1.0 (- 1.5 2.5))
 (test "division with a float divides" 3.5 (/ 7 2.0))
-(test "and exact division still truncates" 3 (/ 7 2))
+(test "and exact division is exact" 7/2 (/ 7 2))
 (test "floats compare" #t (< 1.5 2.5))
 (test "across exactness" #t (< 1 1.5 2))
 (test "a float and a bignum" #t (< 1.0e20 (expt 10 21)))
@@ -671,6 +671,100 @@
 (test "and inexact" #f (exact? (max 3 2.0)))
 (test "min with a float" 1.0 (min 1 2.0))
 
+;;  Exact rationals (#104).  / is exact for exact arguments, and an
+;;  answer whose denominator is one is the integer: (/ 6 2) is 3.
+
+(test "a rational" 5/6 (+ 1/2 1/3))
+(test "multiplied" 1/2 (* 2/3 3/4))
+(test "and subtracted to nothing, which is the integer" 0 (- 1/2 1/2))
+(test "and that is exact and an integer" #t (exact-integer? (- 1/2 1/2)))
+(test "a division that comes out even is an integer" 3 (/ 6 2))
+(test "and one that does not is in lowest terms" 3/2 (/ 6 4))
+(test "a negative one" -1/2 (/ 1 -2))
+(test "with a float it is inexact" 1.0 (+ 1/2 0.5))
+(test "read in lowest terms" -1/2 -3/6)
+(test "read as an integer when it is one" 2 6/3)
+(test "read in a radix" 1/10 #x1/a)
+(test "a rational is a number" #t (number? 1/2))
+(test "and rational" #t (rational? 1/2))
+(test "and real" #t (real? 1/2))
+(test "and exact" #t (exact? 1/2))
+(test "and not an integer" #f (integer? 1/2))
+(test "rationals compare" #t (< 1/3 1/2 2/3))
+(test "against integers" #t (< 1/2 1))
+(test "= across exactness" #t (= 1/2 0.5))
+(test "but not eqv?" #f (eqv? 1/2 0.5))
+(test "eqv? of two made apart" #t (eqv? 1/2 (/ 2 4)))
+(test "equal? of lists of them" #t (equal? (list 1/2) (list (/ 3 6))))
+
+;;  numerator and denominator, in lowest terms.
+
+(test "numerator" 3 (numerator 6/4))
+(test "denominator" 2 (denominator 6/4))
+(test "numerator of a negative" -1 (numerator -1/2))
+(test "denominator of an integer" 1 (denominator 5))
+(test "denominator of a double" 2.0 (denominator 0.5))
+
+;;  Rounding a rational gives an exact integer.
+
+(test "floor of a rational" 3 (floor 7/2))
+(test "floor of a negative one" -4 (floor -7/2))
+(test "ceiling" 4 (ceiling 7/2))
+(test "truncate" -3 (truncate -7/2))
+(test "round to even, up" 4 (round 7/2))
+(test "round to even, down" 2 (round 5/2))
+(test "round of one not halfway" 1 (round 4/3))
+(test "and exact" #t (exact? (floor 7/2)))
+
+;;  Every double is an exact rational, so exact always answers.
+
+(test "exact of a half" 1/2 (exact 0.5))
+(test "exact of a tenth, which is not a tenth"
+      3602879701896397/36028797018963968 (exact 0.1))
+(test "inexact of a third" 0.3333333333333333 (inexact 1/3))
+
+;;  Written and read.
+
+(test "number->string of a rational" "7/2" (number->string 7/2))
+(test "in binary" "11/100" (number->string 3/4 2))
+(test "string->number of one" 7/2 (string->number "7/2"))
+(test "of one over nought" #f (string->number "1/0"))
+(test "of one with no denominator" #f (string->number "1/"))
+
+;;  expt by squaring, with a negative power the reciprocal.
+
+(test "expt to a negative power" 1/8 (expt 2 -3))
+(test "expt of a rational" 4/9 (expt 2/3 2))
+(test "expt of a double" 8.0 (expt 2.0 3))
+(test "expt to an inexact power is inexact" 8.0 (expt 2 3.0))
+(test "expt to a large power" #t (= (expt 2 1000) (* (expt 2 500) (expt 2 500))))
+
+;;  rationalize: the simplest rational within the tolerance, which is
+;;  R7RS's own example.
+
+(test "rationalize" 1/3 (rationalize 3/10 1/10))
+(test "rationalize of an inexact" 0.3333333333333333 (rationalize 0.3 1/10))
+(test "rationalize of a negative" -1/3 (rationalize -3/10 1/10))
+
+;;  Quotient and the rest are still integer division.
+
+(test "quotient" 3 (quotient 7 2))
+(test "remainder" 1 (remainder 7 2))
+(test "modulo" 1 (modulo -7 2))
+
+;;  A rational whose parts are bignums, and one that a collection has
+;;  moved.
+
+(define probe-big-ratio (/ (expt 2 100) 3))
+(test "a rational of a bignum" "1267650600228229401496703205376/3"
+      (number->string probe-big-ratio))
+(test "and back to the bignum" #t (= (* probe-big-ratio 3) (expt 2 100)))
+(define probe-kept-ratio (/ 22 7))
+(probe-big-churn 3000)
+(test "a rational survives a collection" 22/7 probe-kept-ratio)
+(test "and so does one of bignums" "1267650600228229401496703205376/3"
+      (number->string probe-big-ratio))
+
 ;;  A boxed double is the heap's, and is the same number after a
 ;;  collection has moved it.
 
@@ -710,7 +804,7 @@
 (test "* with no arguments" 1 (*))
 (test "- with one argument negates" -5 (- 5))
 (test "- with two subtracts" 7 (- 10 3))
-(test "/ with one argument inverts" 0 (/ 2))
+(test "/ with one argument inverts" 1/2 (/ 2))
 (test "/ with two divides" 3 (/ 6 2))
 
 ;;  for-each is map without the answer: it is asked for what the
@@ -2293,21 +2387,9 @@
 (test "and the same integer as any other 255" #t
       (eq? (bytevector-u8-ref probe-packed 0) 255))
 
-;;  Twenty-four thousand bytes were twelve thousand cells, which with
-;;  the suite's own and a collection's worth of churn is more than the
-;;  space it runs in.  Packed they are four thousand.  The margin is
-;;  not wide: the suite's own heap grows as the library does.
-
-(define probe-big-bytes (make-bytevector 24000 7))
-(bytevector-u8-set! probe-big-bytes 23999 200)
-
-(vector-churn 3000)
-
-(test "twenty-four thousand bytes fit" 24000 (bytevector-length probe-big-bytes))
-(test "and survive a collection" 200 (bytevector-u8-ref probe-big-bytes 23999))
-(test "with the rest as they were" 7 (bytevector-u8-ref probe-big-bytes 12000))
-
-(set! probe-big-bytes #f)
+;;  How much a large bytevector saves is tested in a VM of its own, in
+;;  the library suite: here it depended on how much of the heap the rest
+;;  of this suite was holding, which grows as the suite does.
 
 ;;  A string written in the source is one object, made when it is
 ;;  read.  It used to read as the form that builds a string, so every
@@ -2773,7 +2855,8 @@
       (and (list? (features)) (symbol? (car (features)))))
 (test "raven is one" #t (probe-has? 'raven))
 (test "and full-unicode" #t (probe-has? 'full-unicode))
-(test "and not ratios, yet" #f (probe-has? 'ratios))
+(test "and ratios, since exact rationals" #t (probe-has? 'ratios))
+(test "but not exact-complex" #f (probe-has? 'exact-complex))
 (test "but exact-closed, since bignums" #t (probe-has? 'exact-closed))
 (test "and ieee-float, since doubles" #t (probe-has? 'ieee-float))
 
@@ -2784,20 +2867,21 @@
 (test "cond-expand takes a feature it has" 'yes
       (cond-expand (raven 'yes) (else 'no)))
 (test "and passes one it has not" 'no
-      (cond-expand (ratios 'yes) (else 'no)))
+      (cond-expand (exact-complex 'yes) (else 'no)))
 (test "and the first that holds" 1
       (cond-expand (raven 1) (full-unicode 2)))
 (test "and a clause of several" 3 (cond-expand (raven 1 2 3)))
 (test "and" 1 (cond-expand ((and raven full-unicode) 1) (else 2)))
-(test "and one that does not" 2 (cond-expand ((and raven ratios) 1) (else 2)))
-(test "or" 1 (cond-expand ((or ratios raven) 1) (else 2)))
-(test "not" 1 (cond-expand ((not ratios) 1) (else 2)))
+(test "and one that does not" 2
+      (cond-expand ((and raven exact-complex) 1) (else 2)))
+(test "or" 1 (cond-expand ((or exact-complex raven) 1) (else 2)))
+(test "not" 1 (cond-expand ((not exact-complex) 1) (else 2)))
 (test "a library that is here" 1
       (cond-expand ((library (scheme base)) 1) (else 2)))
 (test "and one that is not" 2
       (cond-expand ((library (no such library)) 1) (else 2)))
 (test "a clause not chosen is not read" 'fine
-      (cond-expand (ratios (no-such-procedure 1)) (else 'fine)))
+      (cond-expand (exact-complex (no-such-procedure 1)) (else 'fine)))
 
 ;;  And as a definition, where it stands among definitions.
 

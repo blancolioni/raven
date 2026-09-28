@@ -37,6 +37,17 @@ package body Raven.Scheme.Numerics is
 
    procedure Round (VM : Raven_VM);
 
+   --  Integer division, which truncate-quotient and so quotient,
+   --  remainder and modulo are written on: / is exact division now, and
+   --  (/ 7 2) is 7/2.
+
+   procedure Quotient (VM : Raven_VM);
+
+   --  A rational's parts (#104).
+
+   procedure Numerator (VM : Raven_VM);
+   procedure Denominator (VM : Raven_VM);
+
    --  A number written out and read back, in radix 2, 8, 10 or 16.
 
    procedure Number_To_String (VM : Raven_VM);
@@ -72,14 +83,26 @@ package body Raven.Scheme.Numerics is
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Add (Left, Right)));
    end Add;
 
+   -----------------
+   -- Denominator --
+   -----------------
+
+   procedure Denominator (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM, Raven.Numbers.Denominator (Operand (VM, "denominator", 1))));
+   end Denominator;
+
    ------------
    -- Divide --
    ------------
 
-   --  An exact division throws the remainder away, because R7RS asks
-   --  for 7/2 and there is no exact fraction to answer with (#104).  A
-   --  division with an inexact operand is the double it comes to:
-   --  (/ 7 2.0) is 3.5.
+   --  Exact for exact operands, so (/ 7 2) is 7/2 and (/ 6 2) the
+   --  integer 3; it threw the remainder away while there were no exact
+   --  fractions.  A division with an inexact operand is the double it
+   --  comes to: (/ 7 2.0) is 3.5.
 
    procedure Divide (VM : Raven_VM) is
       Left  : constant Raven.Numbers.Number := Operand (VM, "/", 1);
@@ -144,6 +167,12 @@ package body Raven.Scheme.Numerics is
         ("raven-inexact", To_Inexact'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-round", Round'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-quotient", Quotient'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-numerator", Numerator'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-denominator", Denominator'Access, 1);
    end Load_Numeric_Library;
 
    --------------
@@ -204,6 +233,18 @@ package body Raven.Scheme.Numerics is
       Raven.Strings.Write_String (VM, 1, Raven.Numbers.Image (N, Base));
    end Number_To_String;
 
+   ---------------
+   -- Numerator --
+   ---------------
+
+   procedure Numerator (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM, Raven.Numbers.Numerator (Operand (VM, "numerator", 1))));
+   end Numerator;
+
    -------------
    -- Operand --
    -------------
@@ -223,6 +264,26 @@ package body Raven.Scheme.Numerics is
 
       return Raven.Numbers.Decode (VM, X);
    end Operand;
+
+   --------------
+   -- Quotient --
+   --------------
+
+   procedure Quotient (VM : Raven_VM) is
+      Left  : constant Raven.Numbers.Number := Operand (VM, "quotient", 1);
+      Right : constant Raven.Numbers.Number := Operand (VM, "quotient", 2);
+   begin
+      if not Raven.Numbers.Is_Whole (Left) then
+         raise Constraint_Error with
+           "quotient: not an integer: " & Raven.Numbers.Image (Left);
+      elsif not Raven.Numbers.Is_Whole (Right) then
+         raise Constraint_Error with
+           "quotient: not an integer: " & Raven.Numbers.Image (Right);
+      end if;
+
+      VM.Set_Slot
+        (1, Raven.Numbers.Encode (VM, Raven.Numbers.Quotient (Left, Right)));
+   end Quotient;
 
    --------------
    -- Radix_In --

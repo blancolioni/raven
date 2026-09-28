@@ -83,6 +83,21 @@ private package Raven.Objects is
 
    function Fits_Immediate (X : Long_Float) return Boolean;
 
+   --  An exact rational that is not an integer (#104): one cell, its car
+   --  the numerator and its cdr the denominator, each an exact integer
+   --  object -- a fixnum or a bignum.  It is always in lowest terms with
+   --  a positive denominator, and never has a denominator of one, which
+   --  would be an integer: normalisation (#100) sees to all three.  The
+   --  collector copies it as it copies a pair and traces both halves, as
+   --  it does a closure's.
+
+   function Is_Ratnum (X : Object) return Boolean;
+   function To_Ratnum (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Ratnum (To_Ratnum'Result)
+     and then Has_Address (To_Ratnum'Result)
+     and then Get_Address (To_Ratnum'Result) = Address;
+
    function Is_Flonum (X : Object) return Boolean;
    function To_Flonum (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -337,6 +352,7 @@ private
    Bytes_Tag       : constant := Escape_Tag + 9 * Extended_Step;
    Bignum_Tag      : constant := Escape_Tag + 10 * Extended_Step;
    Flonum_Tag      : constant := Escape_Tag + 11 * Extended_Step;
+   Ratnum_Tag      : constant := Escape_Tag + 12 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -412,7 +428,8 @@ private
    function Is_Number (X : Object) return Boolean
    is ((X and 2#10#) = 0
        or else Full_Tag (X) = Bignum_Tag
-       or else Full_Tag (X) = Flonum_Tag);
+       or else Full_Tag (X) = Flonum_Tag
+       or else Full_Tag (X) = Ratnum_Tag);
 
    function Is_Integer (X : Object) return Boolean
    is (Tag (X) = Integer_Tag);
@@ -471,7 +488,8 @@ private
        or else Full_Tag (X) = Vector_Tag
        or else Full_Tag (X) = Bytevector_Tag
        or else Full_Tag (X) = Bignum_Tag
-       or else Full_Tag (X) = Flonum_Tag);
+       or else Full_Tag (X) = Flonum_Tag
+       or else Full_Tag (X) = Ratnum_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -504,6 +522,12 @@ private
 
    function Is_Flonum (X : Object) return Boolean
    is (Full_Tag (X) = Flonum_Tag);
+
+   function Is_Ratnum (X : Object) return Boolean
+   is (Full_Tag (X) = Ratnum_Tag);
+
+   function To_Ratnum (Address : Address_Type) return Object
+   is (Extend (Object (Address), Ratnum_Tag));
 
    function To_Flonum (Address : Address_Type) return Object
    is (Extend (Object (Address), Flonum_Tag));
