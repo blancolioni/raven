@@ -2,6 +2,9 @@ with Ada.Exceptions;
 with Ada.Strings.Fixed;
 with Ada.Text_IO;
 
+with Raven.Numbers;
+with Raven.Objects;
+
 package body Raven.Tests.Numbers is
 
    procedure Test_Error
@@ -108,6 +111,43 @@ package body Raven.Tests.Numbers is
         (VM, "(* -536870912 2)",
          "integer overflow: -536870912 * 2 is past the smallest integer"
          & " raven holds, -536870912");
+
+      --  What arithmetic is given that it cannot take is refused by the
+      --  primitive that was asked, and a float is said to be a number,
+      --  which it is, that there is no arithmetic on yet.  Both were a
+      --  failed precondition on Get_Slot, out of the machine.
+
+      Test_Message (VM, "(+ 1 'a)", "+: not a number: a");
+      Test_Message
+        (VM, "(* 1.5 2)", "*: raven has no arithmetic on floats yet: 1.5");
+      Test_Message (VM, "(< 1 'a)", "comparison: not a number: a");
+
+      --  And Raven.Numbers itself, which every primitive now goes
+      --  through: what goes in comes out, at both ends, and an answer is
+      --  normal -- a zero arrived at by subtraction is the fixnum zero,
+      --  the same word as the zero read from the source.
+
+      declare
+         use Raven.Numbers;
+
+         Largest  : constant Object :=
+                      Raven.Objects.To_Object
+                        (Integer'(Raven.Objects.Max_Integer));
+         Smallest : constant Object :=
+                      Raven.Objects.To_Object
+                        (Integer'(Raven.Objects.Min_Integer));
+      begin
+         Test ("a number decoded and encoded is itself",
+               Encode (Decode (Largest)) = Largest
+                 and then Encode (Decode (Smallest)) = Smallest);
+         Test ("an answer is normal",
+               Encode (Subtract (Decode (Largest), Decode (Largest)))
+                 = Raven.Objects.To_Object (Integer'(0)));
+         Test ("and compares as the number it is",
+               Less_Or_Equal (Decode (Smallest), Decode (Largest))
+                 and then not Less_Or_Equal
+                                (Decode (Largest), Decode (Smallest)));
+      end;
    end Run_Tests;
 
    ----------------
