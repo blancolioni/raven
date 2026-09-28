@@ -1721,21 +1721,15 @@
 
 ;;  An error object: what error raises, with the message and irritants
 ;;  kept as they were given rather than formatted into a string that a
-;;  handler would have to take apart again.  It is a vector marked with
-;;  a pair nothing else has.
+;;  handler would have to take apart again.  It is a record of its own
+;;  (#172), so it is not a vector that a program could take apart or
+;;  write into, and it is written as #<error-object>.
 
-(define raven-error-marker (list 'error-object))
-
-(define (make-error-object message irritants)
-  (vector raven-error-marker message irritants))
-
-(define (error-object? x)
-  (if (vector? x)
-      (if (= (vector-length x) 3) (eq? (vector-ref x 0) raven-error-marker) #f)
-      #f))
-
-(define (error-object-message e) (vector-ref e 1))
-(define (error-object-irritants e) (vector-ref e 2))
+(define-record-type error-object
+  (make-error-object message irritants)
+  error-object?
+  (message error-object-message)
+  (irritants error-object-irritants))
 
 (define (error message . irritants)
   (raise (make-error-object message irritants)))
