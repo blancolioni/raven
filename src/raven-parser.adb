@@ -1,4 +1,5 @@
 with Ada.Strings.Fixed;
+with Ada.Strings.Wide_Wide_Fixed;
 with Ada.Unchecked_Deallocation;
 with Raven.Objects;
 with Raven.Parser.Tokens;             use Raven.Parser.Tokens;
@@ -136,6 +137,31 @@ package body Raven.Parser is
                      --  it as the same object the reader's ' produces.
 
                      Target.Push (Raven.Objects.Quote);
+                  elsif Sym'Length > 2
+                    and then Sym (Sym'First) = '#'
+                    and then Ada.Strings.Wide_Wide_Fixed.Index
+                               ("eEiIbBoOdDxX", [Sym (Sym'First + 1)]) > 0
+                  then
+
+                     --  A number with an exactness prefix, or a radix and
+                     --  an exactness, which the lexer takes for a name:
+                     --  #e0.5, #i1/2, #x#e1F (#159).  Text with such a
+                     --  prefix that is not a number is a name, as #b12
+                     --  has always been.
+
+                     declare
+                        Valid  : Boolean;
+                        Number : constant Object :=
+                                   Target.Read_Number (Encode (Sym), Valid);
+                     begin
+                        if Valid then
+                           Target.Push (Number);
+                        else
+                           Target.Push
+                             (Raven.Objects.To_Object
+                                (Target.To_Symbol_Id (Encode (Sym))));
+                        end if;
+                     end;
                   else
                      Target.Push
                        (Raven.Objects.To_Object

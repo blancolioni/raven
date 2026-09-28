@@ -6,6 +6,13 @@ package body Raven.Target is
 
    function To_String (X : Object) return String;
 
+   --  A symbol's name as write writes it, or as display does.
+
+   function Symbol_Text
+     (Name     : String;
+      Readable : Boolean)
+      return String;
+
    -----------------------
    -- Character_To_Name --
    -----------------------
@@ -134,7 +141,8 @@ package body Raven.Target is
             end if;
          end;
       elsif Is_Symbol (X) then
-         return This.To_String (Raven.Objects.To_Symbol (X));
+         return Symbol_Text
+           (This.To_String (Raven.Objects.To_Symbol (X)), Readable);
       elsif Is_Closure (X) then
 
          --  What a procedure shows as, rather than the whole of its
@@ -203,6 +211,91 @@ package body Raven.Target is
          return To_String (X);
       end if;
    end Show;
+
+   -----------------
+   -- Symbol_Text --
+   -----------------
+
+   function Symbol_Text
+     (Name     : String;
+      Readable : Boolean)
+      return String
+   is
+      function Needs_Bars return Boolean;
+
+      ----------------
+      -- Needs_Bars --
+      ----------------
+
+      --  Whether the name would not read back as this symbol written as
+      --  it is: it is empty, has in it what ends a name or starts
+      --  something else, or reads as a number, a dot or a # form.
+
+      function Needs_Bars return Boolean is
+         First : Character;
+      begin
+         if Name'Length = 0 or else Name = "." then
+            return True;
+         end if;
+
+         for Ch of Name loop
+            if Character'Pos (Ch) < 33
+              or else Ch in '(' | ')' | '"' | ';' | ''' | '`' | ','
+                          | '|' | '[' | ']' | '{' | '}' | '\'
+            then
+               return True;
+            end if;
+         end loop;
+
+         First := Name (Name'First);
+
+         if First in '0' .. '9' | '#' then
+            return True;
+         elsif First in '+' | '-' | '.'
+           and then Name'Length > 1
+           and then Name (Name'First + 1) in '0' .. '9' | '.'
+           and then Name /= "..."
+         then
+            return True;
+         end if;
+
+         return False;
+      end Needs_Bars;
+
+   begin
+      --  A name that would not read back is written between bars
+      --  (#159), with a bar or a backslash in it escaped and a control
+      --  character written as its code.  display writes it as it is.
+
+      if not Readable or else not Needs_Bars then
+         return Name;
+      end if;
+
+      declare
+         Hex    : constant String := "0123456789ABCDEF";
+         Result : String (1 .. 6 * Name'Length + 2);
+         Last   : Natural := 1;
+      begin
+         Result (1) := '|';
+         for Ch of Name loop
+            if Ch = '|' or else Ch = '\' then
+               Result (Last + 1 .. Last + 2) := ['\', Ch];
+               Last := Last + 2;
+            elsif Character'Pos (Ch) < 32 then
+               Result (Last + 1 .. Last + 5) :=
+                 ['\', 'x', Hex (Character'Pos (Ch) / 16 + 1),
+                  Hex (Character'Pos (Ch) mod 16 + 1), ';'];
+               Last := Last + 5;
+            else
+               Last := Last + 1;
+               Result (Last) := Ch;
+            end if;
+         end loop;
+         Last := Last + 1;
+         Result (Last) := '|';
+         return Result (1 .. Last);
+      end;
+   end Symbol_Text;
 
    ---------------
    -- To_String --

@@ -377,6 +377,17 @@ private package Raven.Target is
       return Object
    is abstract;
 
+   --  A number with an exactness or radix prefix the lexer did not take
+   --  for one (#159), such as #e0.5 or #x#e1F, as the object it is, or
+   --  Valid false for text that is not a number.
+
+   function Read_Number
+     (This  : in out Abstraction;
+      Text  : String;
+      Valid : out Boolean)
+      return Object
+   is abstract;
+
    procedure Set_Parameter
      (This  : in out Abstraction;
       Name  : String;

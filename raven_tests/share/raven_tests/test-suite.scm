@@ -234,10 +234,10 @@
 (test "an eight in an octal number is a name" #t (symbol? '#o18))
 
 ;;  #e and #i are the other two things that can follow a # on a
-;;  number, and stay names while there is no exactness to change.
+;;  number, and say whether it is exact (#159).
 
-(test "an exactness prefix is still a name" #t (symbol? '#e1))
-(test "the other exactness prefix is still a name" #t (symbol? '#i1))
+(test "an exactness prefix makes a number" 1 '#e1)
+(test "the other exactness prefix makes an inexact one" #t (inexact? '#i1))
 
 ;;  And a number with no prefix is what it was.
 
@@ -3553,6 +3553,70 @@
   (local-a (make-local 5)))
 
 (test "a record type defined in a body" 5 (local-record-field))
+
+;;  What #159 found missing of the optional arguments: the part of a
+;;  string or a bytevector utf8->string, string->utf8 and write-string
+;;  take between start and end.
+
+(test "utf8->string from start" "bc" (utf8->string (bytevector 97 98 99) 1))
+(test "utf8->string between" "b" (utf8->string (bytevector 97 98 99) 1 2))
+(test "string->utf8 from start" (bytevector 98 99) (string->utf8 "abc" 1))
+(test "string->utf8 between" (bytevector 98) (string->utf8 "abc" 1 2))
+(test "write-string from start" "cd"
+      (let ((p (open-output-string))) (write-string "abcd" p 2) (get-output-string p)))
+(test "write-string between" "bc"
+      (let ((p (open-output-string))) (write-string "abcd" p 1 3) (get-output-string p)))
+
+;;  A number may say whether it is exact, before or after its radix.
+
+(test "#e of a decimal is exact" 1/2 #e0.5)
+(test "#i of a rational is inexact" 0.5 #i1/2)
+(test "#e is exact" #t (exact? #e1.5))
+(test "#i is inexact" #t (inexact? #i3))
+(test "#x then #e" 255 #x#eFF)
+(test "#e then #x" 255 #e#xff)
+(test "and in either case" 1/4 #E0.25)
+(test "string->number with #e" 1/2 (string->number "#e0.5"))
+(test "string->number with #i" 3.0 (string->number "#i3"))
+(test "string->number with two radixes is not a number" #f
+      (string->number "#x#x1"))
+
+;;  A string may go over more than one line, and each line ending is a
+;;  newline in it.  A backslash at the end of a line, and the blanks at
+;;  the start of the next, are nothing.
+
+(test "a string over two lines" 3 (string-length "a
+b"))
+(test "holds the line ending" #\newline (string-ref "a
+b" 1))
+(test "and a line that was empty" 4 (string-length "a
+
+b"))
+(test "a string that starts at the end of a line" "
+x" (string #\newline #\x))
+(test "a line continuation" "ab" "a\
+      b")
+(test "an escape at the end of a line" 4 (string-length "x\t
+y"))
+
+;;  write writes a name between bars when it would not read back as
+;;  the same symbol otherwise, and display writes it as it is.
+
+(define (written x)
+  (let ((p (open-output-string))) (write x p) (get-output-string p)))
+(define (displayed x)
+  (let ((p (open-output-string))) (display x p) (get-output-string p)))
+
+(test "a plain name is written plainly" "abc" (written 'abc))
+(test "a name with a space" "|a b|" (written (string->symbol "a b")))
+(test "the empty name" "||" (written (string->symbol "")))
+(test "a name that starts with a digit" "|1abc|" (written (string->symbol "1abc")))
+(test "a name that reads as a number" "|+5|" (written (string->symbol "+5")))
+(test "a dot" "|.|" (written (string->symbol ".")))
+(test "a name that starts with #" "|#t|" (written (string->symbol "#t")))
+(test "a bar in a name is escaped" "|a\\|b|" (written (string->symbol "a|b")))
+(test "the peculiar names are plain" "(+ - ... ->x)" (written '(+ - ... ->x)))
+(test "display writes the name as it is" "a b" (displayed (string->symbol "a b")))
 
 (write-string "Tests: ")
 (display num-tests)

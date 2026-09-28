@@ -442,11 +442,7 @@ package body Raven.Scheme.Numerics is
          N     : Raven.Numbers.Number;
          Valid : Boolean;
       begin
-         Raven.Numbers.Read (Text, Base, N, Valid);
-
-         if not Valid and then Base = 10 then
-            Raven.Numbers.Read_Decimal (Text, N, Valid);
-         end if;
+         Raven.Numbers.Read_Number (Text, Base, N, Valid);
 
          if Valid then
             VM.Set_Slot (1, Raven.Numbers.Encode (VM, N));
