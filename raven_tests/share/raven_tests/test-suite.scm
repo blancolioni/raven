@@ -1515,6 +1515,73 @@
     ((_ x) (list 'caught x))))
 (test "a quoted name in a template is data" '(caught 9) (quotes-a-name caught))
 
+;;  And the other half (#24): a name a template writes and does not
+;;  bind means what it meant where the macro was written, whatever the
+;;  caller binds the name to.  The template has an alias of it, which a
+;;  binding of the caller's cannot be.
+
+(define (twice-it x) (+ x x))
+(define-syntax uses-twice-it (syntax-rules () ((_ x) (twice-it x))))
+
+(test "a template's name, called" 10 (uses-twice-it 5))
+(test "is not the caller's lambda parameter" 10
+      ((lambda (twice-it) (uses-twice-it 5)) (lambda (y) 99)))
+(test "nor the caller's let" 10
+      (let ((twice-it (lambda (y) 99))) (uses-twice-it 5)))
+
+(define-syntax pair-up (syntax-rules () ((_ a b) (list a b))))
+
+(test "a template's list is list" '(1 2)
+      (let ((list (lambda args 'mine))) (pair-up 1 2)))
+(test "and the caller's list in what it passed is the caller's" '(mine 2)
+      (let ((list (lambda args 'mine))) (pair-up (list) 2)))
+
+;;  The forms a template writes -- begin, set!, cond and its else --
+;;  are those forms, and a name it sets is its own.
+
+(define set-it-probe 0)
+(define-syntax set-it
+  (syntax-rules () ((_ v) (begin (set! set-it-probe v) set-it-probe))))
+
+(test "a template's set! sets the template's name" '((7 5) 7)
+      (let* ((inside (let ((set-it-probe 5))
+                       (let* ((set-to (set-it 7))) (list set-to set-it-probe))))
+             (outside set-it-probe))
+        (list inside outside)))
+
+(define-syntax pick
+  (syntax-rules ()
+    ((_ x) (cond ((= x 1) 'one) (else 'other)))))
+(test "a template's cond and else" '(one other) (list (pick 1) (pick 2)))
+
+;;  What a template quotes, quasiquotes or hands case is the name as
+;;  written.
+
+(define-syntax name-of (syntax-rules () ((_) 'template-name)))
+(test "a template's quoted name" #t (eq? (name-of) 'template-name))
+
+(define-syntax tagged (syntax-rules () ((_ x) `(tag ,x))))
+(test "a template's quasiquoted name" #t
+      (let ((v (tagged 5))) (and (eq? (car v) 'tag) (= (cadr v) 5))))
+
+(define-syntax kind
+  (syntax-rules ()
+    ((_ x) (case x ((red green) 'colour) (else 'other)))))
+(test "a template's case data" '(colour other) (list (kind 'red) (kind 'blue)))
+
+;;  A macro written in a body still means that body's names by its
+;;  template, and a name the template writes may be defined after the
+;;  macro is.
+
+(test "a macro in a body means the body's names" 5
+      (let ((n 5))
+        (let-syntax ((get-n (syntax-rules () ((_) n))))
+          (get-n))))
+
+(define-syntax call-later (syntax-rules () ((_) (defined-after-the-macro))))
+(define (defined-after-the-macro) 'later)
+(test "a template's name defined after the macro" 'later (call-later))
+
 ;;  The library's own macros are written with syntax-rules now.  or
 ;;  holds what it tests in a name of its own, which it could not do
 ;;  while a name a template binds was the caller's.

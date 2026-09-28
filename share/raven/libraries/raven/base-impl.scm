@@ -694,21 +694,27 @@
 ;;  what the name matched; at depth n it is a list of depth n-1 values,
 ;;  one for each repetition, which is what a name under n ellipses holds.
 ;;
-;;  define-syntax is a define-macro, so it inherits what define-macro
-;;  guarantees, which is nothing: a name a template introduces means
-;;  whatever it means where the macro is used.  Generate one with gensym
-;;  where that matters.
+;;  A name a template writes and does not bind means what it meant
+;;  where the macro was written (#24): the expansion has an alias of it
+;;  in its place, which the translator reads in the macro's library, so
+;;  no binding the caller makes can take it over.
+;;
+;;  A macro may be written by a template, so what the expander looks
+;;  for -- an ellipsis, _, a literal, the forms that bind -- is looked
+;;  for as the name an alias stands for.
 
 (define sr-none (gensym 'no-match))
 
+(define (sr-is? x name) (eq? (raven-syntax-name x) name))
+
 (define (sr-ellipsis? x)
-  (if (pair? x) (eq? (car x) '...) #f))
+  (if (pair? x) (sr-is? (car x) '...) #f))
 
 (define (sr-vars pattern literals)
   (if (symbol? pattern)
-      (if (eq? pattern '_)
+      (if (sr-is? pattern '_)
           '()
-          (if (eq? pattern '...)
+          (if (sr-is? pattern '...)
               '()
               (if (eq? (memq pattern literals) #f)
                   (list pattern)
@@ -761,11 +767,11 @@
               (if (equal? pattern form) bindings sr-none)))))
 
 (define (sr-match-name pattern form literals depth bindings)
-  (if (eq? pattern '_)
+  (if (sr-is? pattern '_)
       bindings
       (if (eq? (memq pattern literals) #f)
           (cons (list pattern depth form) bindings)
-          (if (eq? form pattern) bindings sr-none))))
+          (if (sr-is? form (raven-syntax-name pattern)) bindings sr-none))))
 
 (define (sr-match-repeated sub tail form literals depth bindings)
   ((lambda (split)
@@ -819,24 +825,25 @@
 
 ;;  The names a template binds are renamed, each to a symbol nothing
 ;;  can write, so that what the caller hands the macro keeps its own
-;;  meaning inside them.  Only what the template binds is renamed: a
-;;  name it merely refers to still means whatever it means where the
-;;  macro is used, which is what define-macro means and no more.
+;;  meaning inside them.  Every other name the template writes is an
+;;  alias (#24), which means what it meant where the macro was written.
 ;;
 ;;  A name that came from the pattern is the caller's own and is left
-;;  alone.  lambda and let are the forms looked at: a binding the
-;;  expander does not recognise is left alone too, which costs the
-;;  caller nothing it had before.
+;;  alone.  lambda and let are the forms looked at for what a template
+;;  binds; a name bound some other way is an alias, and a binding of an
+;;  alias is the template's, so it is the template's name all the same.
 ;;
-;;  A name written inside a quasiquote in a template is renamed as
-;;  though it were code, where hygiene would hand back the name as
-;;  written.  A quote is read properly; a quasiquote is not, yet.
+;;  A name inside a quote or a quasiquote is data, and the translator
+;;  reads an alias there as the name it stands for.  A name a template
+;;  binds is renamed inside a quasiquote as though it were code, where
+;;  hygiene would hand back the name as written; a quote is left as it
+;;  was written.
 
 (define (sr-names x)
   (if (symbol? x)
-      (if (eq? x '...)
+      (if (sr-is? x '...)
           '()
-          (if (eq? x '_) '() (list x)))
+          (if (sr-is? x '_) '() (list x)))
       (if (pair? x)
           (append (sr-names (car x)) (sr-names (cdr x)))
           '())))
@@ -858,7 +865,7 @@
 (define (sr-bound-here template)
   (if (eq? (car template) 'lambda)
       (if (pair? (cdr template)) (sr-names (cadr template)) '())
-      (if (eq? (car template) 'let)
+      (if (sr-is? (car template) 'let)
 	  (if (pair? (cdr template))
 	      (if (symbol? (cadr template))
 		  (cons (cadr template)
@@ -891,6 +898,24 @@
 
 (define (sr-renames template bindings)
   (sr-fresh (sr-introduced (sr-binders template) bindings)))
+
+;;  An alias of each name the template writes that neither the pattern
+;;  bound nor the template binds, one for each name however often it is
+;;  written.
+
+(define (sr-aliases names bindings made)
+  (if (null? names)
+      made
+      (if (if (assq (car names) bindings) #t (assq (car names) made))
+          (sr-aliases (cdr names) bindings made)
+          (sr-aliases (cdr names) bindings
+                      (cons (cons (car names) (raven-make-alias (car names)))
+                            made)))))
+
+(define (sr-names-for template bindings)
+  ((lambda (renames)
+     (sr-aliases (sr-names template) bindings renames))
+   (sr-renames template bindings)))
 
 (define (sr-instantiate template bindings renames)
   (if (symbol? template)
@@ -971,12 +996,12 @@
             (if (eq? bindings sr-none)
                 (sr-expand literals (cdr rules) args)
                 (sr-instantiate (cadr rule) bindings
-                                (sr-renames (cadr rule) bindings))))
+                                (sr-names-for (cadr rule) bindings))))
           (sr-match (cdr (car rule)) args literals 0 '())))
        (car rules))))
 
 (define (sr-syntax-rules? spec)
-  (if (pair? spec) (eq? (car spec) 'syntax-rules) #f))
+  (if (pair? spec) (sr-is? (car spec) 'syntax-rules) #f))
 
 ;;  define-syntax writes a define-macro that hands the form it was used
 ;;  on to the expander, along with the literals and the rules.  So a
@@ -1577,12 +1602,23 @@
 ;;  define-library declaration of the same name asks it too.  None
 ;;  holding is left unspecified by R7RS, and here is nothing.
 
+;;  A requirement a template wrote is a name it wrote (#24), and is
+;;  asked about as that name.
+
+(define (raven-strip-syntax x)
+  (if (symbol? x)
+      (raven-syntax-name x)
+      (if (pair? x)
+          (cons (raven-strip-syntax (car x)) (raven-strip-syntax (cdr x)))
+          x)))
+
 (define (cond-expand-choose clauses)
   (if (null? clauses)
       '(if #f #f)
-      (if (if (eq? (car (car clauses)) 'else)
+      (if (if (eq? (raven-syntax-name (car (car clauses))) 'else)
 	      #t
-	      (raven-feature-requirement? (car (car clauses))))
+	      (raven-feature-requirement?
+               (raven-strip-syntax (car (car clauses)))))
 	  (cons 'begin (cdr (car clauses)))
 	  (cond-expand-choose (cdr clauses)))))
 
@@ -1848,7 +1884,7 @@
 (define (raven-guard-clauses clauses reraise)
   (if (null? clauses)
       reraise
-      (if (eq? (car (car (reverse clauses))) 'else)
+      (if (eq? (raven-syntax-name (car (car (reverse clauses)))) 'else)
           `(cond ,@clauses)
           `(cond ,@clauses (else ,reraise)))))
 

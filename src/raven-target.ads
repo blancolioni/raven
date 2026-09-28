@@ -393,6 +393,21 @@ private package Raven.Target is
       return Boolean
    is abstract;
 
+   --  The library whose macro is being expanded (#24), which is where an
+   --  alias syntax-rules makes for a name its template wrote stands:
+   --  the translator says so while it runs a macro's body, and says
+   --  No_Library again after.
+
+   procedure Set_Expansion_Library
+     (This    : in out Abstraction;
+      Library : Library_Id)
+   is abstract;
+
+   function Expansion_Library
+     (This : Abstraction)
+      return Library_Id
+   is abstract;
+
    function Append_Lists
      (This  : in out Abstraction;
       List1 : Object;

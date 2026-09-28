@@ -101,6 +101,13 @@ package body Raven.Tests.Imports is
 
       Test_Number (VM, "(alpha-twice 21)", 42);
 
+      --  And a binding here of the name its template writes does not
+      --  take it over (#24): the template's alpha-helper is the
+      --  library's, whatever the caller calls alpha-helper.
+
+      Test_Number
+        (VM, "(let ((alpha-helper (lambda (x) 0))) (alpha-twice 21))", 42);
+
       --  A second library defines a name the first one defines, and
       --  each keeps its own.  Here the most recent import is the one
       --  that answers.

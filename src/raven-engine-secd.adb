@@ -95,6 +95,7 @@ package body Raven.Engine.SECD is
          Translators : Translator_Vectors.Vector;
          Trace       : Boolean := False;
          Dynamic     : Dynamic_Registers := [others => Objects.Nil];
+         Expansion   : Raven.Target.Library_Id := Raven.Target.No_Library;
       end record;
 
    type Instance_Reference is access all Instance'Class;
@@ -314,6 +315,25 @@ package body Raven.Engine.SECD is
       return String
    is (This.Syms.To_String (Id));
 
+   overriding function New_Alias_Id
+     (This     : in out Instance;
+      Original : Raven.Objects.Symbol_Id;
+      Library  : Positive)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.New_Alias_Id (Original, Library));
+
+   overriding function Alias_Original
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.Alias_Original (Id));
+
+   overriding function Alias_Library
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
+   is (This.Syms.Alias_Library (Id));
+
    overriding procedure Report (This : Instance);
 
    --  Where a complaint about a form goes, and a form given up on.
@@ -359,6 +379,15 @@ package body Raven.Engine.SECD is
      (This : Instance)
       return Boolean
    is (This.Trace);
+
+   overriding function Expansion_Library
+     (This : Instance)
+      return Raven.Target.Library_Id
+   is (This.Expansion);
+
+   overriding procedure Set_Expansion_Library
+     (This    : in out Instance;
+      Library : Raven.Target.Library_Id);
 
    --  What Show needs of a vector, which the memory holds.
 
@@ -878,6 +907,7 @@ package body Raven.Engine.SECD is
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
          Dynamic     => [others => Raven.Objects.Nil],
+         Expansion   => Raven.Target.No_Library,
          --  Named explicitly, because Symbols is an anonymous access
          --  parameter and Syms is a named access type.  Ada wants the
          --  conversion written; the GNAT this was developed against
@@ -1921,6 +1951,18 @@ package body Raven.Engine.SECD is
    begin
       This.Dynamic (Which) := Value;
    end Set_Dynamic_State;
+
+   ---------------------------
+   -- Set_Expansion_Library --
+   ---------------------------
+
+   overriding procedure Set_Expansion_Library
+     (This    : in out Instance;
+      Library : Raven.Target.Library_Id)
+   is
+   begin
+      This.Expansion := Library;
+   end Set_Expansion_Library;
 
    ---------------------
    -- Set_Export_List --

@@ -317,6 +317,34 @@ package body Raven.Engine.SECD.Translator is
       procedure Append_Reference
         (Sym : Object);
 
+      --  The library a name is held in and the name it is held under,
+      --  appended, for a name to be read in Where.
+
+      procedure Append_Reference_In
+        (Where : Raven.Target.Real_Library_Id;
+         Sym   : Object);
+
+      --  Aliases (#24).  An alias is the symbol syntax-rules writes for
+      --  a name its template wrote and did not bind: generated, so that
+      --  nothing the caller writes is it, and knowing the name it
+      --  stands for and the library the macro was written in.  Plain is
+      --  that name, however many aliases deep, and anything that is not
+      --  an alias as it is; Alias_Home is the library of the innermost.
+
+      function Is_Alias (Sym : Object) return Boolean;
+
+      function Plain (Sym : Object) return Object;
+
+      function Alias_Home
+        (Sym : Object)
+         return Raven.Target.Real_Library_Id
+        with Pre => Is_Alias (Sym);
+
+      --  Whether a lexical binding holds Name, and its address appended
+      --  when one does.
+
+      function Try_Lexical (Name : String) return Boolean;
+
       procedure Bind_Macro
         (Name : String;
          Id   : Raven.Target.Real_Macro_Id);
@@ -354,6 +382,8 @@ package body Raven.Engine.SECD.Translator is
         (F : Object)
          return Raven.Target.Macro_Id;
 
+      function Head_Name (F : Object) return Object;
+
       procedure Locate (Sym : Object);
 
       procedure Nested
@@ -388,6 +418,25 @@ package body Raven.Engine.SECD.Translator is
                               Target.To_Symbol ("unquote-splicing");
       Indent   : Natural := 0;
 
+      ----------------
+      -- Alias_Home --
+      ----------------
+
+      function Alias_Home
+        (Sym : Object)
+         return Raven.Target.Real_Library_Id
+      is
+         Id   : Objects.Symbol_Id := Objects.To_Symbol (Sym);
+         Home : Natural := Target.Alias_Library (Id);
+      begin
+         loop
+            Id := Target.Alias_Original (Id);
+            exit when Target.Alias_Library (Id) = 0;
+            Home := Target.Alias_Library (Id);
+         end loop;
+         return Raven.Target.Real_Library_Id (Home);
+      end Alias_Home;
+
       -----------------------
       -- Append_Definition --
       -----------------------
@@ -395,8 +444,13 @@ package body Raven.Engine.SECD.Translator is
       procedure Append_Definition
         (Sym : Object)
       is
-         Name : constant String :=
-                  Target.To_String (Objects.To_Symbol (Sym));
+         --  A name a template defines at top level is defined as the
+         --  name it wrote (#24), which is what it was before aliases,
+         --  and what a macro that defines a name of its own expects.
+
+         Defined : constant Object := Plain (Sym);
+         Name    : constant String :=
+                     Target.To_String (Objects.To_Symbol (Defined));
       begin
          --  A definition binds where it was written, whatever the name
          --  meant before: a library defines its own names and no one
@@ -404,7 +458,7 @@ package body Raven.Engine.SECD.Translator is
 
          Target.Define_Name (Written_In, Name);
          This.Append (Objects.To_Object (Integer (Written_In)));
-         This.Append (Sym);
+         This.Append (Defined);
       end Append_Definition;
 
       ----------------------
@@ -416,7 +470,6 @@ package body Raven.Engine.SECD.Translator is
       is
          Name  : constant String :=
                    Target.To_String (Objects.To_Symbol (Sym));
-         Found : Raven.Target.Real_Library_Id;
          Where : Raven.Target.Real_Library_Id;
       begin
          --  Which library holds the name is settled here, so that the
@@ -434,14 +487,13 @@ package body Raven.Engine.SECD.Translator is
          --  caller wrote; then in the macro's library, for a name the
          --  use site cannot account for.
          --
-         --  What that second rule cannot do is tell the two apart.
-         --  Once a template has been instantiated the expansion is one
-         --  form, and a name the caller passed in looks exactly like a
-         --  name the template wrote.  So a caller's reference to a
+         --  A name a syntax-rules template wrote is not one of these:
+         --  it is an alias (#24), which Locate reads where the template
+         --  was written.  What comes here from an expansion is a name
+         --  the caller passed in, or one a define-macro wrote, and the
+         --  two cannot be told apart.  So a caller's reference to a
          --  name it has not defined yet, which the macro's library
-         --  defines, goes to that library instead, silently.  An
-         --  identifier that carried where it was written would settle
-         --  it; that is #24.
+         --  defines, still goes to that library instead.
          --
          --  A name neither library accounts for is the use site's
          --  (#168).  It went to the macro's library, where nothing
@@ -461,19 +513,31 @@ package body Raven.Engine.SECD.Translator is
             Where := Home;
          end if;
 
-         Found := Target.Resolve (Where, Name);
+         Append_Reference_In (Where, Sym);
+      end Append_Reference;
+
+      -------------------------
+      -- Append_Reference_In --
+      -------------------------
+
+      procedure Append_Reference_In
+        (Where : Raven.Target.Real_Library_Id;
+         Sym   : Object)
+      is
+         Name  : constant String :=
+                   Target.To_String (Objects.To_Symbol (Sym));
+         Found : constant Raven.Target.Real_Library_Id :=
+                   Target.Resolve (Where, Name);
 
          --  And by the name that library holds it under, which is not
          --  the name written when it was imported through a rename.
 
-         declare
-            Held : constant String := Target.Resolved_Name (Where, Name);
-         begin
-            This.Append (Objects.To_Object (Integer (Found)));
-            This.Append
-              (if Held = Name then Sym else Target.To_Symbol (Held));
-         end;
-      end Append_Reference;
+         Held  : constant String := Target.Resolved_Name (Where, Name);
+      begin
+         This.Append (Objects.To_Object (Integer (Found)));
+         This.Append
+           (if Held = Name then Sym else Target.To_Symbol (Held));
+      end Append_Reference_In;
 
       ----------------
       -- Bind_Macro --
@@ -576,8 +640,12 @@ package body Raven.Engine.SECD.Translator is
          T : constant Root := Hold (Table, Template);
       begin
          if Is_Atom (Get (T)) then
+
+            --  Data, so a name a template wrote is the name it wrote
+            --  (#24), as in a quote.
+
             This.Append (LDC);
-            This.Append (Get (T));
+            This.Append (Plain (Get (T)));
          else
             declare
                Head : constant Root :=
@@ -585,8 +653,8 @@ package body Raven.Engine.SECD.Translator is
                Tail : constant Root :=
                         Hold (Table, Target.Cdr (Get (T)));
             begin
-               if Get (Head) = S_Unquote
-                 or else Get (Head) = S_Unquote_Splicing
+               if Plain (Get (Head)) = S_Unquote
+                 or else Plain (Get (Head)) = S_Unquote_Splicing
                then
                   --  An unquote belongs to the innermost quasiquote
                   --  around it.  At the level this one is building it
@@ -598,13 +666,13 @@ package body Raven.Engine.SECD.Translator is
                      Compile_QQ (Get (Tail), Level - 1);
                      Compile_QQ (Get (Head), Level - 1);
                      This.Append (CONS);
-                  elsif Get (Head) = S_Unquote then
+                  elsif Plain (Get (Head)) = S_Unquote then
                      Go (Target.Car (Get (Tail)));
                   else
                      raise Raven.Target.Translation_Error with
                        "unquote-splicing: nothing to splice it into";
                   end if;
-               elsif Get (Head) = S_Quasiquote then
+               elsif Plain (Get (Head)) = S_Quasiquote then
                   --  A quasiquote inside a quasiquote is data, and
                   --  everything within it is one level further in.
 
@@ -613,7 +681,7 @@ package body Raven.Engine.SECD.Translator is
                   This.Append (CONS);
                elsif Level = 1
                  and then Is_Pair (Get (Head))
-                 and then Target.Car (Get (Head)) = S_Unquote_Splicing
+                 and then Plain (Target.Car (Get (Head))) = S_Unquote_Splicing
                then
                   --  The rest of the list first and the spliced value
                   --  on top, as the CONS below takes its head from the
@@ -721,7 +789,14 @@ package body Raven.Engine.SECD.Translator is
       is
          X : constant Root := Hold (Table, Form);
 
-         procedure Load_Constant (K : Object);
+         --  Strip is whether a name a template wrote is loaded as the
+         --  name it wrote (#24).  A quote's datum is; what a macro is
+         --  handed is not, because the macro's own expansion is code in
+         --  which each alias still has to mean what it meant.
+
+         procedure Load_Constant
+           (K     : Object;
+            Strip : Boolean := True);
 
          procedure Load_Macro_Args (Args : Object);
 
@@ -729,15 +804,18 @@ package body Raven.Engine.SECD.Translator is
          -- Load_Constant --
          -------------------
 
-         procedure Load_Constant (K : Object) is
+         procedure Load_Constant
+           (K     : Object;
+            Strip : Boolean := True)
+         is
             use Raven.Objects;
          begin
             if Is_Atom (K) then
                This.Append (LDC);
-               This.Append (K);
+               This.Append (if Strip then Plain (K) else K);
             elsif Is_Pair (K) then
-               Load_Constant (Target.Cdr (K));
-               Load_Constant (Target.Car (K));
+               Load_Constant (Target.Cdr (K), Strip);
+               Load_Constant (Target.Car (K), Strip);
                This.Append (CONS);
             else
                raise Constraint_Error with
@@ -756,7 +834,7 @@ package body Raven.Engine.SECD.Translator is
                This.Append (Objects.Nil);
             else
                Load_Macro_Args (Target.Cdr (Args));
-               Load_Constant (Target.Car (Args));
+               Load_Constant (Target.Car (Args), Strip => False);
                This.Append (CONS);
             end if;
          end Load_Macro_Args;
@@ -778,6 +856,12 @@ package body Raven.Engine.SECD.Translator is
                          Hold (Table, Target.Cdr (Get (X)));
                Macro : constant Raven.Target.Macro_Id :=
                          Head_Macro (Get (F));
+
+               --  What the head is as a special form.  A template's
+               --  begin or define is an alias (#24), and is still begin
+               --  or define unless something here binds the alias.
+
+               H     : constant Object := Head_Name (Get (F));
 
                --  What follows a special form has to be the shape the
                --  form is about to take apart, and every one of these
@@ -819,10 +903,10 @@ package body Raven.Engine.SECD.Translator is
                end Expect;
 
             begin
-               if Get (F) = Raven.Objects.Quote then
+               if H = Raven.Objects.Quote then
                   Expect (1, 1, "quote takes one datum: (quote x)");
                   Load_Constant (Target.Cadr (Get (X)));
-               elsif Get (F) = Raven.Objects.If_Obj then
+               elsif H = Raven.Objects.If_Obj then
                   Expect (2, 3,
                           "if takes a test, what to do, and what to do "
                           & "otherwise: (if test then else)");
@@ -856,7 +940,7 @@ package body Raven.Engine.SECD.Translator is
                         Nested (Objects.Nil, Ends, Tail);
                      end if;
                   end;
-               elsif Get (F) = S_Begin then
+               elsif H = S_Begin then
                   declare
                      use Raven.Objects;
                      Arg : constant Root := Hold (Table, Get (A));
@@ -878,7 +962,7 @@ package body Raven.Engine.SECD.Translator is
                         end if;
                      end loop;
                   end;
-               elsif Get (F) = Raven.Objects.Lambda then
+               elsif H = Raven.Objects.Lambda then
                   Expect (2, Natural'Last,
                           "lambda takes a parameter list and a body: "
                           & "(lambda (x ...) body ...)");
@@ -886,7 +970,7 @@ package body Raven.Engine.SECD.Translator is
                   This.Append (LDF);
                   Nested_Sequence (Target.Cdr (Get (A)), RTN, Tail => True);
                   Close_Scope;
-               elsif Get (F) = S_Set then
+               elsif H = S_Set then
                   Expect (2, 2,
                           "set! takes a name and a value: (set! x v)");
                   if not Raven.Objects.Is_Symbol (Target.Car (Get (A)))
@@ -897,26 +981,26 @@ package body Raven.Engine.SECD.Translator is
                   Go (Target.Cadr (Get (A)));
                   This.Append (ST);
                   Locate (Target.Car (Get (A)));
-               elsif Get (F) = S_Eq then
+               elsif H = S_Eq then
                   Expect (2, 2,
                           "raven-eq? takes two forms: (raven-eq? a b)");
                   Go (Target.Car (Get (A)));
                   Go (Target.Cadr (Get (A)));
                   This.Append (EQ);
-               elsif Get (F) = S_Car then
+               elsif H = S_Car then
                   Expect (1, 1, "car takes one form: (car x)");
                   Go (Target.Car (Get (A)));
                   This.Append (CAR);
-               elsif Get (F) = S_Cdr then
+               elsif H = S_Cdr then
                   Expect (1, 1, "cdr takes one form: (cdr x)");
                   Go (Target.Car (Get (A)));
                   This.Append (CDR);
-               elsif Get (F) = S_Cons then
+               elsif H = S_Cons then
                   Expect (2, 2, "cons takes two forms: (cons a b)");
                   Go (Target.Cadr (Get (A)));
                   Go (Target.Car (Get (A)));
                   This.Append (CONS);
-               elsif Get (F) = S_Apply then
+               elsif H = S_Apply then
 
                   --  apply needs nothing of the machine that a call
                   --  does not already need.  A call builds a list of
@@ -960,14 +1044,14 @@ package body Raven.Engine.SECD.Translator is
                      Go (Target.Car (Get (A)));
                      This.Append (if Tail then TAP else AP);
                   end;
-               elsif Get (F) = S_Pair then
+               elsif H = S_Pair then
                   Expect (1, 1, "pair? takes one form: (pair? x)");
                   Go (Target.Car (Get (A)));
                   This.Append (PAIR);
-               elsif Get (F) = S_Quasiquote then
+               elsif H = S_Quasiquote then
                   Expect (1, 1, "quasiquote takes one datum: (quasiquote x)");
                   Compile_QQ (Target.Car (Get (A)), 1);
-               elsif Get (F) = S_Define then
+               elsif H = S_Define then
                   Expect (2, Natural'Last,
                           "define takes a name and a value, or a header "
                           & "and a body: (define x v), (define (f x) body)");
@@ -992,7 +1076,7 @@ package body Raven.Engine.SECD.Translator is
                        "define takes a name or a header, not "
                        & Target.Show (Target.Car (Get (A)));
                   end if;
-               elsif Get (F) = S_Define_Macro then
+               elsif H = S_Define_Macro then
                   Expect (2, Natural'Last,
                           "define-macro takes a header and a body: "
                           & "(define-macro (name params ...) body ...)");
@@ -1009,6 +1093,14 @@ package body Raven.Engine.SECD.Translator is
                      Name       : constant String :=
                                     Target.To_String
                                       (Raven.Objects.To_Symbol (Name_Sym));
+
+                     --  At top level a macro a template names is named as
+                     --  the template wrote it, as a definition is (#24).
+
+                     Global     : constant String :=
+                                    Target.To_String
+                                      (Raven.Objects.To_Symbol
+                                         (Plain (Name_Sym)));
                      Params     : constant Object := Target.Cdar (Get (A));
                      Macro_Body : constant Object := Target.Cdr (Get (A));
                      Id         : constant Raven.Target.Real_Macro_Id :=
@@ -1031,12 +1123,12 @@ package body Raven.Engine.SECD.Translator is
 
                      if Env.Is_Empty then
                         Undefine_Macro (Name_Sym);
-                        Target.Define_Macro (Written_In, Name, Id);
+                        Target.Define_Macro (Written_In, Global, Id);
                      else
                         Bind_Macro (Name, Id);
                      end if;
                      This.Append (LDC);
-                     This.Append (Name_Sym);
+                     This.Append (Plain (Name_Sym));
                   end;
                else
                   if Macro /= Raven.Target.No_Macro then
@@ -1079,7 +1171,25 @@ package body Raven.Engine.SECD.Translator is
                            This.Append (STOP);
                            This.Current := Old_Current;
                            Emit (Expansion_Level);
-                           Target.Execute;
+
+                           --  What the body makes aliases for stands in
+                           --  the library the macro was written in.
+
+                           declare
+                              Old_Expansion : constant
+                                Raven.Target.Library_Id :=
+                                  Target.Expansion_Library;
+                           begin
+                              Target.Set_Expansion_Library
+                                (Macro_Expansion);
+                              Target.Execute;
+                              Target.Set_Expansion_Library (Old_Expansion);
+                           exception
+                              when others =>
+                                 Target.Set_Expansion_Library
+                                   (Old_Expansion);
+                                 raise;
+                           end;
                         end;
 
                         --  What the body produced has the caller's
@@ -1151,8 +1261,37 @@ package body Raven.Engine.SECD.Translator is
             --  The innermost binding wins.  A lexical variable of this
             --  name is a procedure to call, and hides a macro of the
             --  same name bound further out.
+            --
+            --  A template's name for a macro (#24) is that macro where
+            --  the template was written; then, as a name is, one bound
+            --  here, which is where a macro a body defined is; then the
+            --  use site's.
 
-            if not Found then
+            if not Found and then Is_Alias (F) then
+               declare
+                  Written  : constant String :=
+                               Target.To_String
+                                 (Raven.Objects.To_Symbol (Plain (F)));
+                  Id       : constant Raven.Target.Macro_Id :=
+                               Target.Macro (Alias_Home (F), Written);
+                  Found_It : Boolean;
+                  Local    : Env_Entry;
+               begin
+                  if Id /= Raven.Target.No_Macro then
+                     return Id;
+                  end if;
+
+                  Find_Binding (Written, Found_It, Local);
+
+                  if Found_It then
+                     return (if Local.Kind = Macro_Binding
+                             then Local.Macro
+                             else Raven.Target.No_Macro);
+                  end if;
+
+                  return Target.Macro (Library, Written);
+               end;
+            elsif not Found then
                --  As a name that is not a macro is resolved: a
                --  macro's body means the macros of the library it was
                --  written in, and what the body produced means the
@@ -1181,6 +1320,31 @@ package body Raven.Engine.SECD.Translator is
          end;
       end Head_Macro;
 
+      ---------------
+      -- Head_Name --
+      ---------------
+
+      function Head_Name (F : Object) return Object is
+         Found : Boolean;
+         Ent   : Env_Entry;
+      begin
+         if not Is_Alias (F) then
+            return F;
+         end if;
+
+         Find_Binding
+           (Target.To_String (Raven.Objects.To_Symbol (F)), Found, Ent);
+         return (if Found then F else Plain (F));
+      end Head_Name;
+
+      --------------
+      -- Is_Alias --
+      --------------
+
+      function Is_Alias (Sym : Object) return Boolean
+      is (Raven.Objects.Is_Symbol (Sym)
+          and then Target.Alias_Library (Raven.Objects.To_Symbol (Sym)) /= 0);
+
       ------------
       -- Locate --
       ------------
@@ -1188,39 +1352,58 @@ package body Raven.Engine.SECD.Translator is
       procedure Locate (Sym : Object) is
          Name : constant String :=
                   Target.To_String (Objects.To_Symbol (Sym));
-         I : Natural := 0;
       begin
-         for Frame of reverse Env loop
-            declare
-               Position : constant Env_Maps.Cursor :=
-                            Frame.Bindings.Find (Name);
-            begin
-               if Env_Maps.Has_Element (Position) then
-                  declare
-                     Ent : constant Env_Entry := Env_Maps.Element (Position);
-                  begin
-                     if Ent.Kind = Macro_Binding then
-                        raise Raven.Target.Translation_Error with
-                          "macro used as a variable: " & Name;
-                     end if;
-                     This.Append (Objects.To_Object (I));
-                     if Ent.Is_List then
-                        This.Append (Objects.To_Object (-Ent.Offset - 1));
-                     else
-                        This.Append (Objects.To_Object (Ent.Offset));
-                     end if;
-                  end;
+         if Try_Lexical (Name) then
+            return;
+         end if;
+
+         if not Is_Alias (Sym) then
+
+            --  Nothing lexical holds the name, so a library does.
+
+            Append_Reference (Sym);
+            return;
+         end if;
+
+         --  A name a template wrote (#24), which means what it meant
+         --  where the template was written: a binding of the alias
+         --  itself, which is one the template made, and then a global
+         --  of the macro's library -- whatever the caller has bound the
+         --  name to.  After that, as it was before aliases, for what a
+         --  macro written in a body means by its body's names and for a
+         --  name the use site defines: bound here, then the use site's,
+         --  then the macro's library, where it may be defined later.
+
+         declare
+            Written : constant Object := Plain (Sym);
+            Text    : constant String :=
+                        Target.To_String (Objects.To_Symbol (Written));
+            Macro_Library : constant Raven.Target.Real_Library_Id :=
+                              Alias_Home (Sym);
+            Inner   : Objects.Symbol_Id :=
+                        Target.Alias_Original (Objects.To_Symbol (Sym));
+         begin
+            --  An alias of an alias is a name a macro written by a
+            --  template wrote, and a binding of any of them is the
+            --  templates'.
+
+            while Target.Alias_Library (Inner) /= 0 loop
+               if Try_Lexical (Target.To_String (Inner)) then
                   return;
                end if;
-            end;
-            if Frame.Kind = Run_Time_Frame then
-               I := @ + 1;
+               Inner := Target.Alias_Original (Inner);
+            end loop;
+
+            if Target.Binds (Macro_Library, Text) then
+               Append_Reference_In (Macro_Library, Written);
+            elsif Try_Lexical (Text) then
+               null;
+            elsif Target.Binds (Library, Text) then
+               Append_Reference_In (Library, Written);
+            else
+               Append_Reference_In (Macro_Library, Written);
             end if;
-         end loop;
-
-         --  Nothing lexical holds the name, so a library does.
-
-         Append_Reference (Sym);
+         end;
       end Locate;
 
       ------------
@@ -1298,6 +1481,62 @@ package body Raven.Engine.SECD.Translator is
          Env.Append (Env_Frame'(Scope_Frame, Env_Maps.Empty_Map));
       end Open_Scope;
 
+      -----------
+      -- Plain --
+      -----------
+
+      function Plain (Sym : Object) return Object is
+         Id : Objects.Symbol_Id;
+      begin
+         if not Is_Alias (Sym) then
+            return Sym;
+         end if;
+
+         Id := Objects.To_Symbol (Sym);
+         while Target.Alias_Library (Id) /= 0 loop
+            Id := Target.Alias_Original (Id);
+         end loop;
+         return Objects.To_Object (Id);
+      end Plain;
+
+      -----------------
+      -- Try_Lexical --
+      -----------------
+
+      function Try_Lexical (Name : String) return Boolean is
+         I : Natural := 0;
+      begin
+         for Frame of reverse Env loop
+            declare
+               Position : constant Env_Maps.Cursor :=
+                            Frame.Bindings.Find (Name);
+            begin
+               if Env_Maps.Has_Element (Position) then
+                  declare
+                     Ent : constant Env_Entry := Env_Maps.Element (Position);
+                  begin
+                     if Ent.Kind = Macro_Binding then
+                        raise Raven.Target.Translation_Error with
+                          "macro used as a variable: " & Name;
+                     end if;
+                     This.Append (Objects.To_Object (I));
+                     if Ent.Is_List then
+                        This.Append (Objects.To_Object (-Ent.Offset - 1));
+                     else
+                        This.Append (Objects.To_Object (Ent.Offset));
+                     end if;
+                  end;
+                  return True;
+               end if;
+            end;
+            if Frame.Kind = Run_Time_Frame then
+               I := @ + 1;
+            end if;
+         end loop;
+
+         return False;
+      end Try_Lexical;
+
       --------------------
       -- Undefine_Macro --
       --------------------
@@ -1320,7 +1559,8 @@ package body Raven.Engine.SECD.Translator is
          then
             declare
                Name : constant String :=
-                        Target.To_String (Raven.Objects.To_Symbol (Sym));
+                        Target.To_String
+                          (Raven.Objects.To_Symbol (Plain (Sym)));
                Old  : constant Raven.Target.Macro_Id :=
                         Target.Own_Macro (Written_In, Name);
             begin

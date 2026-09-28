@@ -18,6 +18,7 @@
 ;;  built from: append2, concatenate, all-left-assoc, apply-subtract,
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
 ;;  assoc-by, list-walk?, extreme, inexact-if-any, floor-adjust, gcd2, lcm2, num-eq?,
+;;  sr-is?, sr-aliases, sr-names-for, raven-strip-syntax,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
 ;;  values-rename, let-values-expand, raven-winders, raven-travel-to,
