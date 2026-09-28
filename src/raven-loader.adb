@@ -166,17 +166,22 @@ package body Raven.Loader is
       Name      : String;
       Source    : String;
       Directory : String;
-      Abandoned : in out Natural);
+      Abandoned : in out Natural;
+      Fold_Case : Boolean := False);
 
    procedure Read_Import
      (Target  : Raven.Target.Reference;
       Library : Raven.Target.Real_Library_Id);
 
+   --  Fold_Case is include-ci, which reads each file as though it
+   --  began with #!fold-case.
+
    procedure Read_Include
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
       Directory : String;
-      Abandoned : in out Natural);
+      Abandoned : in out Natural;
+      Fold_Case : Boolean);
 
    procedure Read_Library
      (Target    : Raven.Target.Reference;
@@ -844,12 +849,13 @@ package body Raven.Loader is
         or else Is_Head (Target, "include-ci")
       then
 
-         --  include-ci reads a file as though it began with #!fold-case,
-         --  and every file already is read that way: the reader folds
-         --  every identifier to lower case as it interns it.  So the two
-         --  are one declaration here, until the reader stops folding.
+         --  include-ci reads a file as though it began with #!fold-case.
+         --  The two were one declaration here while every name was
+         --  folded as it was interned (#160).
 
-         Read_Include (Target, Library, Directory, Abandoned);
+         Read_Include
+           (Target, Library, Directory, Abandoned,
+            Fold_Case => Is_Head (Target, "include-ci"));
       elsif Is_Head (Target, "cond-expand") then
          Read_Cond_Expand (Target, Library, Directory, Source, Abandoned);
       else
@@ -945,12 +951,13 @@ package body Raven.Loader is
       Name      : String;
       Source    : String;
       Directory : String;
-      Abandoned : in out Natural)
+      Abandoned : in out Natural;
+      Fold_Case : Boolean := False)
    is
       use Ada.Strings.Unbounded;
       Reader : Raven.Parser.Instance;
    begin
-      Reader.Open (Name, Source);
+      Reader.Open (Name, Source, Fold_Case);
 
       while not Reader.At_End loop
 
@@ -1083,7 +1090,8 @@ package body Raven.Loader is
      (Target    : Raven.Target.Reference;
       Library   : Raven.Target.Real_Library_Id;
       Directory : String;
-      Abandoned : in out Natural)
+      Abandoned : in out Natural;
+      Fold_Case : Boolean)
    is
       Files : String_Vectors.Vector;
       It    : Object := Target.Cdr (Target.Top);
@@ -1103,7 +1111,7 @@ package body Raven.Loader is
          Read_Forms
            (Target, Library, Directory & "/" & File,
             Read_File (Directory & "/" & File),
-            Directory, Abandoned);
+            Directory, Abandoned, Fold_Case);
       end loop;
    end Read_Include;
 

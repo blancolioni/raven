@@ -299,11 +299,14 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "renaming-plain-again", "again");
       Test_Name (VM, "renaming-alias", "again");
 
-      --  include-ci is include here, because every file is read with
-      --  its identifiers folded already.
+      --  include-ci reads a file as though it began with #!fold-case,
+      --  so the capitals it is written in are folded; a name is its
+      --  name as written everywhere else, so the capitals themselves
+      --  mean nothing here (#160).
 
       Evaluate (VM, "(import (probe folded))");
       Test_Name (VM, "folded-name", "folded");
+      Test_Undefined (VM, "Folded-Name");
 
       --  A declaration nothing knows counts against the library, as a
       --  form it cannot run does, and nothing imports it.
