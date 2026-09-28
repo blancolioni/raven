@@ -157,7 +157,8 @@
    error
 
    ;;  syntax
-   define-syntax let let* letrec letrec* let-syntax letrec-syntax
+   define-syntax syntax-error
+   let let* letrec letrec* let-syntax letrec-syntax
    when unless and or cond case do
 
    ;;  records
