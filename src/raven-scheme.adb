@@ -348,10 +348,12 @@ package body Raven.Scheme is
 
       --  Showing a symbol is writing its name, which is what the
       --  symbol table holds it under and what reading that name gives
-      --  the symbol back from.
+      --  the symbol back from.  Its name and not its written form,
+      --  which has bars round a name that needs them (#159).
 
       Raven.Strings.Write_String
-        (VM, 1, Encode (VM.Display (X)), Mutable => False);
+        (VM, 1, Encode (VM.Display (X, Readable => False)),
+         Mutable => False);
    end Symbol_To_String;
 
    -----------------

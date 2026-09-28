@@ -529,25 +529,127 @@ package body Raven.Parser.Lexical is
             end;
 
          when '"' =>
-            This.Next_Character;
+
+            --  A string may go over more than one line, and each line
+            --  ending in it is a newline (#159).  The reader holds a
+            --  source as its lines and steps from the end of one to the
+            --  start of the next, passing over any that are empty, so
+            --  what is between two characters is counted rather than
+            --  seen.  A carriage return before a line ending is part of
+            --  the ending.
+
             This.Start_Token;
 
             declare
                Result : Unbounded_Wide_Wide_String;
+
+               procedure Advance;
+
+               function Rest_Is_Blank return Boolean;
+
+               -------------
+               -- Advance --
+               -------------
+
+               procedure Advance is
+                  Line : constant Natural := Current_Stream.Line;
+               begin
+                  This.Next_Character;
+                  if not This.End_Of_Stream
+                    and then Current_Stream.Line > Line
+                  then
+                     for I in 1 .. Current_Stream.Line - Line loop
+                        Result := Result & Wide_Wide_Character'Val (10);
+                     end loop;
+                  end if;
+               end Advance;
+
+               -------------------
+               -- Rest_Is_Blank --
+               -------------------
+
+               --  Whether nothing but blanks follows the character the
+               --  reader is at, up to the end of its line.
+
+               function Rest_Is_Blank return Boolean is
+                  Text : constant Wide_Wide_String :=
+                           Current_Stream.Lines.Element (Current_Stream.Line);
+               begin
+                  for I in Current_Stream.Column + 1 .. Text'Last loop
+                     if Text (I) /= ' '
+                       and then Wide_Wide_Character'Pos (Text (I)) /= 9
+                       and then Wide_Wide_Character'Pos (Text (I)) /= 13
+                     then
+                        return False;
+                     end if;
+                  end loop;
+                  return True;
+               end Rest_Is_Blank;
+
             begin
+               Advance;
+
                while not This.End_Of_Stream
                  and then Current_Stream.Ch /= '"'
                loop
-                  if Current_Stream.Ch = '\' then
+                  if Current_Stream.Ch = '\' and then Rest_Is_Blank then
+
+                     --  A line continuation: the backslash, the blanks
+                     --  after it, the line ending and the blanks at the
+                     --  start of the next line are nothing.  Lines that
+                     --  were empty after it are line endings of their own.
+
+                     declare
+                        Line : constant Natural := Current_Stream.Line;
+                     begin
+                        loop
+                           This.Next_Character;
+                           exit when This.End_Of_Stream
+                             or else Current_Stream.Line /= Line;
+                        end loop;
+
+                        if not This.End_Of_Stream then
+                           for I in 2 .. Current_Stream.Line - Line loop
+                              Result := Result & Wide_Wide_Character'Val (10);
+                           end loop;
+                        end if;
+
+                        while not This.End_Of_Stream
+                          and then (Current_Stream.Ch = ' '
+                                    or else Wide_Wide_Character'Pos
+                                              (Current_Stream.Ch) = 9)
+                          and then not This.End_Of_Line
+                        loop
+                           This.Next_Character;
+                        end loop;
+                     end;
+                  elsif Current_Stream.Ch = '\' then
                      This.Next_Character;
-                     Result := Result
-                       & This.Read_Character (Long_Names => False);
-                  elsif This.End_Of_Line then
-                     This.Error ("unterminated string constant");
-                     exit;
+
+                     declare
+                        Line : constant Natural := Current_Stream.Line;
+                     begin
+                        Result := Result
+                          & This.Read_Character (Long_Names => False);
+
+                        --  An escape at the end of a line leaves the
+                        --  reader on the next one.
+
+                        if not This.End_Of_Stream
+                          and then Current_Stream.Line > Line
+                        then
+                           for I in 1 .. Current_Stream.Line - Line loop
+                              Result := Result & Wide_Wide_Character'Val (10);
+                           end loop;
+                        end if;
+                     end;
+                  elsif Wide_Wide_Character'Pos (Current_Stream.Ch) = 13
+                    and then This.End_Of_Line
+                  then
+                     Advance;
                   else
                      Result := Result & Current_Stream.Ch;
-                     This.Next_Character;
+                     Advance;
                   end if;
                end loop;
 

@@ -913,6 +913,71 @@ package body Raven.Numbers is
       end;
    end Read_Decimal;
 
+   -----------------
+   -- Read_Number --
+   -----------------
+
+   procedure Read_Number
+     (Text  : String;
+      Base  : Radix;
+      N     : out Number;
+      Valid : out Boolean)
+   is
+      Exactness : Character := ' ';
+      Radix_Set : Boolean := False;
+      In_Base   : Radix := Base;
+      First     : Positive := Text'First;
+   begin
+      N := (Kind => Fixnum, Value => 0);
+      Valid := False;
+
+      while First < Text'Last and then Text (First) = '#' loop
+         case Text (First + 1) is
+            when 'e' | 'E' | 'i' | 'I' =>
+               if Exactness /= ' ' then
+                  return;
+               end if;
+               Exactness := Text (First + 1);
+            when 'b' | 'B' | 'o' | 'O' | 'd' | 'D' | 'x' | 'X' =>
+               if Radix_Set then
+                  return;
+               end if;
+               Radix_Set := True;
+               In_Base :=
+                 (case Text (First + 1) is
+                     when 'b' | 'B' => 2,
+                     when 'o' | 'O' => 8,
+                     when 'x' | 'X' => 16,
+                     when others    => 10);
+            when others =>
+               return;
+         end case;
+         First := First + 2;
+      end loop;
+
+      if First > Text'Last then
+         return;
+      end if;
+
+      declare
+         Rest : constant String := Text (First .. Text'Last);
+      begin
+         Read (Rest, In_Base, N, Valid);
+
+         if not Valid and then In_Base = 10 then
+            Read_Decimal (Rest, N, Valid);
+         end if;
+      end;
+
+      if Valid then
+         case Exactness is
+            when 'e' | 'E' => N := To_Exact (N);
+            when 'i' | 'I' => N := To_Inexact (N);
+            when others    => null;
+         end case;
+      end if;
+   end Read_Number;
+
    -------------
    -- Rounded --
    -------------

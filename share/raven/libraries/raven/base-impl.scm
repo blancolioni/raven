@@ -39,12 +39,10 @@
 (define set-car! raven-set-car!)
 (define set-cdr! raven-set-cdr!)
 (define string->symbol raven-string->symbol)
-(define string->utf8 raven-string->utf8)
 (define string? raven-string?)
 (define symbol->string raven-symbol->string)
 (define symbol? raven-symbol?)
 (define textual-port? raven-textual-port?)
-(define utf8->string raven-utf8->string)
 (define vector-length raven-vector-length)
 (define vector-ref raven-vector-ref)
 (define vector-set! raven-vector-set!)
@@ -389,6 +387,21 @@
 ;;  string when it is not told where to start and stop.
 
 (define (substring string start end) (raven-substring string start end))
+
+;;  Between start and end, as R7RS has both take them (#159): the part
+;;  is taken first and the whole of it converted.
+
+(define (string->utf8 string start end)
+  (raven-string->utf8
+   (if (eq? start '())
+       string
+       (substring string start (optional end (string-length string))))))
+
+(define (utf8->string bytes start end)
+  (raven-utf8->string
+   (if (eq? start '())
+       bytes
+       (bytevector-copy bytes start (optional end (bytevector-length bytes))))))
 
 (define (string-copy string start end)
   (raven-substring string
@@ -1464,8 +1477,9 @@
       (begin (write-char (car chars) port)
 	     (write-char-list (cdr chars) port))))
 
-(define (write-string string port)
-  (write-char-list (string->list string)
+(define (write-string string port start end)
+  (write-char-list (string->list string (optional start 0)
+                                 (optional end (string-length string)))
 		   (optional port (current-output-port))))
 
 (define (newline port) (write-char #\newline port))

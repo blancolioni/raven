@@ -193,6 +193,18 @@ private package Raven.Numbers is
       N     : out Number;
       Valid : out Boolean);
 
+   --  A number as R7RS writes one (#159): at most one of #e and #i and at
+   --  most one of #b, #o, #d and #x, in either order and either case,
+   --  then an exact number in the base, or in base 10 a decimal.  #e
+   --  makes what follows exact and #i inexact, so #e0.5 is 1/2 and #i1/2
+   --  is 0.5.  Base is the base when there is no radix prefix.
+
+   procedure Read_Number
+     (Text  : String;
+      Base  : Radix;
+      N     : out Number;
+      Valid : out Boolean);
+
 private
 
    use Ada.Numerics.Big_Numbers.Big_Integers;

@@ -485,6 +485,12 @@ package body Raven.Engine.SECD is
       Text : String)
       return Object;
 
+   overriding function Read_Number
+     (This  : in out Instance;
+      Text  : String;
+      Valid : out Boolean)
+      return Object;
+
    overriding function Create_String
      (This : in out Instance;
       Text : Wide_Wide_String)
@@ -1805,6 +1811,24 @@ package body Raven.Engine.SECD is
 
       return Raven.Numbers.Encode (This.VM, N);
    end Read_Integer;
+
+   -----------------
+   -- Read_Number --
+   -----------------
+
+   overriding function Read_Number
+     (This  : in out Instance;
+      Text  : String;
+      Valid : out Boolean)
+      return Object
+   is
+      N : Raven.Numbers.Number;
+   begin
+      Raven.Numbers.Read_Number (Text, 10, N, Valid);
+      return (if Valid
+              then Raven.Numbers.Encode (This.VM, N)
+              else Raven.Objects.Nil);
+   end Read_Number;
 
    -------------------
    -- Release_Macro --
