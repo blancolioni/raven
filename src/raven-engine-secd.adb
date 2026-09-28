@@ -125,6 +125,22 @@ package body Raven.Engine.SECD is
       Library  : Raven.Target.Real_Library_Id;
       Imported : Raven.Target.Real_Library_Id);
 
+   overriding procedure Begin_Mapped_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id);
+
+   overriding procedure Map_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Local    : String;
+      External : String);
+
+   overriding procedure Iterate_Exports
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Process : not null access procedure (Name : String));
+
    overriding procedure Set_Export_List
      (This    : in out Instance;
       Library : Raven.Target.Real_Library_Id);
@@ -689,6 +705,19 @@ package body Raven.Engine.SECD is
          end if;
          raise;
    end Apply;
+
+   -------------------------
+   -- Begin_Mapped_Import --
+   -------------------------
+
+   overriding procedure Begin_Mapped_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Imported : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Libraries.Begin_Mapped_Import (Library, Imported);
+   end Begin_Mapped_Import;
 
    ---------------------------
    -- Bind_Foreign_Function --
@@ -1489,6 +1518,19 @@ package body Raven.Engine.SECD is
       This.Held.Append (This.St (S));
    end Hold_Stack;
 
+   ---------------------
+   -- Iterate_Exports --
+   ---------------------
+
+   overriding procedure Iterate_Exports
+     (This    : Instance;
+      Library : Raven.Target.Real_Library_Id;
+      Process : not null access procedure (Name : String))
+   is
+   begin
+      This.Libraries.Iterate_Exports (Library, Process);
+   end Iterate_Exports;
+
    -------------------
    -- List_To_Block --
    -------------------
@@ -1550,6 +1592,20 @@ package body Raven.Engine.SECD is
    begin
       List_To_Block (This, Bytevector => False);
    end List_To_Vector;
+
+   ----------------
+   -- Map_Import --
+   ----------------
+
+   overriding procedure Map_Import
+     (This     : in out Instance;
+      Library  : Raven.Target.Real_Library_Id;
+      Local    : String;
+      External : String)
+   is
+   begin
+      This.Libraries.Map_Import (Library, Local, External);
+   end Map_Import;
 
    ----------
    -- Mark --

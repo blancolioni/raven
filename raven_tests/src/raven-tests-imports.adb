@@ -317,6 +317,70 @@ package body Raven.Tests.Imports is
       end;
 
       Test_Undefined (VM, "undeclared-name");
+
+      --  Import sets (#27).  (probe gamma) is imported only through
+      --  them, so what one leaves out is not here by another way.
+
+      Evaluate (VM, "(import (only (probe gamma) gamma-a))");
+      Test_Name (VM, "gamma-a", "a");
+      Test_Undefined (VM, "gamma-b");
+      Test_Undefined (VM, "(gamma-twice 1)");
+
+      Evaluate (VM, "(import (except (probe gamma) gamma-a gamma-b))");
+      Test_Name (VM, "gamma-c", "c");
+      Test_Undefined (VM, "gamma-b");
+
+      --  A macro taken under another name still reads its template in
+      --  the library it was written in.
+
+      Test_Number (VM, "(gamma-twice 4)", 8);
+
+      Evaluate (VM, "(import (prefix (probe gamma) g:))");
+      Test_Name (VM, "g:gamma-b", "b");
+      Test_Number (VM, "(g:gamma-twice 5)", 10);
+      Test_Undefined (VM, "g:gamma-helper");
+
+      Evaluate
+        (VM,
+         "(import (rename (probe gamma) (gamma-b bee) (gamma-twice double)))");
+      Test_Name (VM, "bee", "b");
+      Test_Number (VM, "(double 6)", 12);
+
+      --  However nested, innermost first: only, then rename, then
+      --  prefix.
+
+      Evaluate
+        (VM,
+         "(import (prefix (rename (only (probe gamma) gamma-c)"
+         & " (gamma-c sea)) p-))");
+      Test_Name (VM, "p-sea", "c");
+      Test_Undefined (VM, "p-gamma-c");
+      Test_Undefined (VM, "sea");
+
+      --  A rename is all at once, so two names can trade places.
+
+      Evaluate
+        (VM,
+         "(import (rename (prefix (only (probe gamma) gamma-a gamma-b) s-)"
+         & " (s-gamma-a s-gamma-b) (s-gamma-b s-gamma-a)))");
+      Test_Name (VM, "s-gamma-a", "b");
+      Test_Name (VM, "s-gamma-b", "a");
+
+      --  A name the library does not offer is reported, imports
+      --  nothing, and is not fatal.
+
+      Evaluate (VM, "(import (only (probe gamma) gamma-a gamma-nowhere))");
+      Evaluate (VM, "(import (rename (probe gamma) (gamma-nowhere x-a)))");
+      Test_Undefined (VM, "gamma-nowhere");
+      Test_Undefined (VM, "x-a");
+      Test_Name (VM, "gamma-a", "a");
+
+      --  And inside a library.
+
+      Evaluate (VM, "(import (probe sets))");
+      Test_Name (VM, "sets-name", "a");
+      Test_Number (VM, "(sets-twice 7)", 14);
+      Test_Undefined (VM, "in-gamma-a");
    end Run_Tests;
 
    ---------------
