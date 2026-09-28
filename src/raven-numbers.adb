@@ -566,6 +566,20 @@ package body Raven.Numbers is
       return X;
    end Integer_Root;
 
+   -------------------------
+   -- Integer_Square_Root --
+   -------------------------
+
+   function Integer_Square_Root (N : Number) return Number is
+   begin
+      if not Less_Or_Equal (Zero, N) then
+         raise Constraint_Error with
+           "exact-integer-sqrt: " & Image (N) & " is negative";
+      end if;
+
+      return Normal (Integer_Root (To_Big (N)));
+   end Integer_Square_Root;
+
    -------------------
    -- Is_Arithmetic --
    -------------------

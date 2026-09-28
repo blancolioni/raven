@@ -143,6 +143,21 @@ package body Raven.Target is
       elsif Is_Pair (X) then
          return "(" & This.Show (This.Car (X), Readable)
            & Show_List (This.Cdr (X)) & ")";
+      elsif Is_Values (X) then
+
+         --  Several values where one was wanted, which R7RS calls an
+         --  error and raven lets through: written so that it is plain
+         --  what it is.
+
+         declare
+            List : constant Object := This.Car (X);
+         begin
+            return "#<values"
+              & (if List = Nil then ""
+                 else " " & This.Show (This.Car (List), Readable)
+                      & Show_List (This.Cdr (List)))
+              & ">";
+         end;
       elsif Is_Vector (X) or else Is_Bytevector (X) then
 
          --  #(1 2 3) and #u8(1 2 3), which is how each is written and

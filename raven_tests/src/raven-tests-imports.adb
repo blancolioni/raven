@@ -188,11 +188,16 @@ package body Raven.Tests.Imports is
       Test_Undefined (VM, "(lcm2 4 6)");
       Test_Undefined (VM, "(floor-adjust 4 1 1)");
 
-      --  truncate/ and floor/ each answer two values, and there are
-      --  no multiple values yet, so neither is here.
+      --  truncate/ and floor/ each answer two values, which they could
+      --  not while there were no multiple values (#48); and the helpers
+      --  that let-values is written with stay the library's own.
 
-      Test_Undefined (VM, "(truncate/ 13 4)");
-      Test_Undefined (VM, "(floor/ 13 4)");
+      Test_Name (VM, "(call-with-values (lambda () (floor/ -13 4)) list)",
+                 "(-4 3)");
+      Test_Name
+        (VM, "(call-with-values (lambda () (truncate/ -13 4)) list)",
+         "(-3 -1)");
+      Test_Undefined (VM, "(values-rename '(a b))");
 
       --  What is here answers, and a negative number now reads.
 

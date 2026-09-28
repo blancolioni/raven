@@ -146,6 +146,13 @@ private package Raven.Numbers is
 
    function Square_Root (N : Number) return Number;
 
+   --  The largest exact integer whose square is no more than N, which is
+   --  half of what exact-integer-sqrt answers; the other half is what is
+   --  left over.
+
+   function Integer_Square_Root (N : Number) return Number
+     with Pre => Is_Exact (N) and then Is_Whole (N);
+
    --  Base to a power that is not an exact integer, which expt hands
    --  here and does the exact integer powers itself.
 

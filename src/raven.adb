@@ -637,6 +637,18 @@ package body Raven is
    end New_Symbol;
 
    ----------------
+   -- New_Values --
+   ----------------
+
+   function New_Values
+     (This : Raven_VM'Class;
+      List : Object)
+      return Object
+   is (Raven.Objects.To_Values
+         (Raven.Objects.Get_Address
+            (This.Data.Memory.Cons (List, Raven.Objects.Nil))));
+
+   ----------------
    -- New_Vector --
    ----------------
 
@@ -1262,6 +1274,16 @@ package body Raven is
       Index : Natural)
       return Object
    is (This.Data.Memory.Vector_Element (V, Index));
+
+   ---------------
+   -- Values_Of --
+   ---------------
+
+   function Values_Of
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object
+   is (This.Data.Memory.Get (Raven.Objects.Get_Address (X)).Car);
 
    -------------------
    -- Vector_Length --

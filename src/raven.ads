@@ -712,6 +712,19 @@ private
       X    : Object)
       return Object;
 
+   --  Several values, from the list of them.  A cons, which keeps the
+   --  list across the collection it may make.
+
+   function New_Values
+     (This : Raven_VM'Class;
+      List : Object)
+      return Object;
+
+   function Values_Of
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Object;
+
    function Ratnum_Denominator
      (This : Raven_VM'Class;
       X    : Object)

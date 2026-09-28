@@ -13,6 +13,13 @@ package body Raven.Scheme is
 
    procedure Generate_Symbol (VM : Raven_VM);
 
+   --  Several values, and taking them apart again (#48).  The list is
+   --  what call-with-values applies its consumer to.
+
+   procedure Make_Values (VM : Raven_VM);
+   procedure Is_Values (VM : Raven_VM);
+   procedure Values_List (VM : Raven_VM);
+
    procedure Integer_To_Character (VM : Raven_VM);
 
    procedure Is_Character (VM : Raven_VM);
@@ -190,6 +197,15 @@ package body Raven.Scheme is
       VM.Set_Slot (1, Raven.Objects.Is_Symbol (VM.Get_Slot (1)));
    end Is_Symbol;
 
+   ---------------
+   -- Is_Values --
+   ---------------
+
+   procedure Is_Values (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, Raven.Objects.Is_Values (VM.Get_Slot (1)));
+   end Is_Values;
+
    --------------------------
    -- Load_Base_Primitives --
    --------------------------
@@ -204,6 +220,13 @@ package body Raven.Scheme is
         ("symbol?", Is_Symbol'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("gensym", Generate_Symbol'Access, 1);
+
+      Evaluator.Bind_Foreign_Function
+        ("raven-make-values", Make_Values'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-values?", Is_Values'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-values-list", Values_List'Access, 1);
 
       Evaluator.Bind_Foreign_Function
         ("error", Raise_Error'Access, 1);
@@ -245,6 +268,16 @@ package body Raven.Scheme is
       Raven.Vectors.Load_Vector_Library (Evaluator);
       Raven.Ports.Load_Port_Library (Evaluator);
    end Load_Base_Primitives;
+
+   -----------------
+   -- Make_Values --
+   -----------------
+
+   procedure Make_Values (VM : Raven_VM) is
+      List : constant Object := VM.Get_Slot (1);
+   begin
+      VM.Set_Slot (1, VM.New_Values (List));
+   end Make_Values;
 
    -----------------
    -- Raise_Error --
@@ -324,5 +357,21 @@ package body Raven.Scheme is
 
       Raven.Strings.Write_String (VM, 1, Encode (VM.Display (X)));
    end Symbol_To_String;
+
+   -----------------
+   -- Values_List --
+   -----------------
+
+   procedure Values_List (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+   begin
+      if not Raven.Objects.Is_Values (X) then
+         raise Constraint_Error with
+           "raven-values-list: not several values: "
+           & Encode (VM.Display (X));
+      end if;
+
+      VM.Set_Slot (1, VM.Values_Of (X));
+   end Values_List;
 
 end Raven.Scheme;

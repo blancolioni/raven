@@ -91,6 +91,18 @@ private package Raven.Objects is
    --  collector copies it as it copies a pair and traces both halves, as
    --  it does a closure's.
 
+   --  Several values, as values answers them (#48): one cell whose car
+   --  is the list of them.  It is not a pair, so a program cannot take
+   --  it for a list, and call-with-values is what takes it apart.  One
+   --  value is never one of these; it is the value.
+
+   function Is_Values (X : Object) return Boolean;
+   function To_Values (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Values (To_Values'Result)
+     and then Has_Address (To_Values'Result)
+     and then Get_Address (To_Values'Result) = Address;
+
    function Is_Ratnum (X : Object) return Boolean;
    function To_Ratnum (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -353,6 +365,7 @@ private
    Bignum_Tag      : constant := Escape_Tag + 10 * Extended_Step;
    Flonum_Tag      : constant := Escape_Tag + 11 * Extended_Step;
    Ratnum_Tag      : constant := Escape_Tag + 12 * Extended_Step;
+   Values_Tag      : constant := Escape_Tag + 13 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -489,7 +502,8 @@ private
        or else Full_Tag (X) = Bytevector_Tag
        or else Full_Tag (X) = Bignum_Tag
        or else Full_Tag (X) = Flonum_Tag
-       or else Full_Tag (X) = Ratnum_Tag);
+       or else Full_Tag (X) = Ratnum_Tag
+       or else Full_Tag (X) = Values_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -525,6 +539,12 @@ private
 
    function Is_Ratnum (X : Object) return Boolean
    is (Full_Tag (X) = Ratnum_Tag);
+
+   function Is_Values (X : Object) return Boolean
+   is (Full_Tag (X) = Values_Tag);
+
+   function To_Values (Address : Address_Type) return Object
+   is (Extend (Object (Address), Values_Tag));
 
    function To_Ratnum (Address : Address_Type) return Object
    is (Extend (Object (Address), Ratnum_Tag));
