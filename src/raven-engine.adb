@@ -54,6 +54,25 @@ package body Raven.Engine is
       return String
    is (This.Syms.To_String (Id));
 
+   overriding function New_Alias_Id
+     (This     : in out Instance;
+      Original : Raven.Objects.Symbol_Id;
+      Library  : Positive)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.New_Alias_Id (Original, Library));
+
+   overriding function Alias_Original
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Raven.Objects.Symbol_Id
+   is (This.Syms.Alias_Original (Id));
+
+   overriding function Alias_Library
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
+   is (This.Syms.Alias_Library (Id));
+
    overriding function Is_Empty
      (This : Instance)
       return Boolean;

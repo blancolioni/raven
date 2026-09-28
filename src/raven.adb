@@ -61,6 +61,15 @@ package body Raven is
 
    procedure Refuse_Syntax (VM : Raven_VM);
 
+   --  Aliases (#24).  raven-make-alias is what syntax-rules names a free
+   --  name of its template with: an alias of it in the library whose
+   --  macro is being expanded, or the name itself outside an expansion.
+   --  raven-syntax-name is the name an alias stands for, however many
+   --  aliases deep, and anything else as it is.
+
+   procedure Make_Alias (VM : Raven_VM);
+   procedure Syntax_Name (VM : Raven_VM);
+
    procedure Check_Kind
      (This     : Raven_VM;
       Index    : Slot_Index;
@@ -623,6 +632,27 @@ package body Raven is
       end if;
    end Kind;
 
+   ----------------
+   -- Make_Alias --
+   ----------------
+
+   procedure Make_Alias (VM : Raven_VM) is
+      use type Raven.Target.Library_Id;
+      X       : constant Object := VM.Get_Slot (1);
+      Library : constant Raven.Target.Library_Id :=
+                  VM.Data.Target.Expansion_Library;
+   begin
+      if Raven.Objects.Is_Symbol (X)
+        and then Library /= Raven.Target.No_Library
+      then
+         VM.Set_Slot
+           (1,
+            Raven.Objects.To_Object
+              (VM.Data.Target.New_Alias_Id
+                 (Raven.Objects.To_Symbol (X), Positive (Library))));
+      end if;
+   end Make_Alias;
+
    --------------------
    -- New_Bytevector --
    --------------------
@@ -751,6 +781,10 @@ package body Raven is
         ("raven-uncaught", Uncaught'Access, 2);
       This.Bind_Foreign_Function
         ("raven-syntax-error", Refuse_Syntax'Access, 1);
+      This.Bind_Foreign_Function
+        ("raven-make-alias", Make_Alias'Access, 1);
+      This.Bind_Foreign_Function
+        ("raven-syntax-name", Syntax_Name'Access, 1);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
@@ -1325,6 +1359,25 @@ package body Raven is
       return This.Data.Target.To_String
         (Raven.Objects.To_Symbol (This.Get_Slot (Index)));
    end Symbol_Name;
+
+   -----------------
+   -- Syntax_Name --
+   -----------------
+
+   procedure Syntax_Name (VM : Raven_VM) is
+      X : constant Object := VM.Get_Slot (1);
+   begin
+      if Raven.Objects.Is_Symbol (X) then
+         declare
+            Id : Raven.Objects.Symbol_Id := Raven.Objects.To_Symbol (X);
+         begin
+            while VM.Data.Target.Alias_Library (Id) /= 0 loop
+               Id := VM.Data.Target.Alias_Original (Id);
+            end loop;
+            VM.Set_Slot (1, Raven.Objects.To_Object (Id));
+         end;
+      end if;
+   end Syntax_Name;
 
    ----------------------
    -- To_Foreign_Value --
