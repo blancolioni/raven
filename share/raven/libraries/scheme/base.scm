@@ -11,6 +11,7 @@
 ;;  assoc-by, list-walk?, extreme, inexact-if-any, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
+;;  values-rename, let-values-expand,
 ;;  simplest-between, simplest-positive,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
 ;;  vector-tail, fill-range, list->bytevector, fill-bytevector,
@@ -57,14 +58,18 @@
    = < > <= >= + - * / sum
    number? integer? exact-integer?
    exact? inexact? exact inexact
+
+   ;;  multiple values
+   values call-with-values let-values let*-values define-values
    rational? real? complex? numerator denominator rationalize
    zero? positive? negative? even? odd?
    abs min max gcd lcm expt square
    number->string string->number
    ;;
-   ;;  truncate/ and floor/ belong with these four and are not here:
-   ;;  each answers two values, and there are no multiple values yet.
+   ;;  and truncate/ and floor/, which answer the quotient and the
+   ;;  remainder as two values
    quotient remainder modulo
+   truncate/ floor/ exact-integer-sqrt
    truncate-quotient truncate-remainder
    floor-quotient floor-remainder
    floor ceiling truncate round

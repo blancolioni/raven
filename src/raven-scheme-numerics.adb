@@ -54,6 +54,7 @@ package body Raven.Scheme.Numerics is
    --  a number to a power that is not an exact integer.
 
    procedure Square_Root (VM : Raven_VM);
+   procedure Integer_Square_Root (VM : Raven_VM);
    procedure Elementary (VM : Raven_VM);
    procedure Arctangent (VM : Raven_VM);
    procedure Power (VM : Raven_VM);
@@ -148,6 +149,26 @@ package body Raven.Scheme.Numerics is
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Apply (How, N)));
    end Elementary;
 
+   -------------------------
+   -- Integer_Square_Root --
+   -------------------------
+
+   procedure Integer_Square_Root (VM : Raven_VM) is
+      N : constant Raven.Numbers.Number :=
+            Operand (VM, "exact-integer-sqrt", 1);
+   begin
+      if not (Raven.Numbers.Is_Exact (N) and then Raven.Numbers.Is_Whole (N))
+      then
+         raise Constraint_Error with
+           "exact-integer-sqrt: not an exact integer: "
+           & Raven.Numbers.Image (N);
+      end if;
+
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode (VM, Raven.Numbers.Integer_Square_Root (N)));
+   end Integer_Square_Root;
+
    --------------
    -- Is_Exact --
    --------------
@@ -211,6 +232,8 @@ package body Raven.Scheme.Numerics is
         ("raven-denominator", Denominator'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-sqrt", Square_Root'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-exact-integer-sqrt", Integer_Square_Root'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-elementary", Elementary'Access, 2);
       Evaluator.Bind_Foreign_Function

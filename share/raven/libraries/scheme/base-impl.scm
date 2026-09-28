@@ -203,10 +203,8 @@
 (define (modulo x y) (floor-remainder x y))
 
 ;;  truncate/ and floor/ are the other half of each of these: one call
-;;  answering both the quotient and the remainder, so that the
-;;  division is done once.  Each answers two values, and there are no
-;;  multiple values here to answer with, so neither is written.  A
-;;  caller that wants both asks for both, and pays for two divisions.
+;;  answering both the quotient and the remainder, as two values.  They
+;;  are written with values, at the end of this file.
 
 ;;  gcd and lcm are chains over any number of arguments, and the
 ;;  answer of each is never negative.  gcd of nothing is 0 and lcm of
@@ -1315,3 +1313,94 @@
 
 (define-macro (cond-expand . clauses)
   (cond-expand-choose clauses))
+
+;;  Multiple values (#48).  Several values are one object of their own,
+;;  which is not a pair, so a program cannot take them for a list; and
+;;  one value is the value itself, so a procedure that answers one never
+;;  makes one of these.  call-with-values is what takes them apart.
+;;
+;;  R7RS calls handing several values to a continuation that wants one
+;;  an error.  Raven lets it through, and the object is written as
+;;  #<values 1 2> where it turns up, which is the shape most
+;;  implementations start from.
+
+(define (values . xs)
+  (if (if (pair? xs) (null? (cdr xs)) #f)
+      (car xs)
+      (raven-make-values xs)))
+
+(define (call-with-values producer consumer)
+  (let ((v (producer)))
+    (if (raven-values? v)
+        (apply consumer (raven-values-list v))
+        (consumer v))))
+
+;;  let*-values binds each set of formals in turn, so each expression
+;;  sees the ones before it: a call-with-values inside the last.
+
+(define-macro (let*-values bindings . body)
+  (if (null? bindings)
+      `(let () ,@body)
+      `(call-with-values (lambda () ,(cadr (car bindings)))
+         (lambda ,(car (car bindings))
+           (let*-values ,(cdr bindings) ,@body)))))
+
+;;  let-values evaluates every expression where the let-values is, so
+;;  none of them sees the others' formals.  Each set is bound first to
+;;  names made fresh with gensym, which nothing can have written, and
+;;  the formals are bound to those only around the body.  Formals are a
+;;  list, a name for all of them, or a list with a name for the rest.
+
+(define (values-rename formals)
+  (if (null? formals)
+      (cons '() '())
+      (if (symbol? formals)
+          (let ((fresh (gensym formals)))
+            (cons fresh (list (list formals fresh))))
+          (let ((fresh (gensym (car formals)))
+                (rest (values-rename (cdr formals))))
+            (cons (cons fresh (car rest))
+                  (cons (list (car formals) fresh) (cdr rest)))))))
+
+(define (let-values-expand bindings renamings body)
+  (if (null? bindings)
+      `(let ,renamings ,@body)
+      (let ((renamed (values-rename (car (car bindings)))))
+        `(call-with-values (lambda () ,(cadr (car bindings)))
+           (lambda ,(car renamed)
+             ,(let-values-expand (cdr bindings)
+                                 (append renamings (cdr renamed))
+                                 body))))))
+
+(define-macro (let-values bindings . body)
+  (let-values-expand bindings '() body))
+
+;;  define-values defines every name its formals have, and then sets
+;;  them from the values, so they are defined where the define-values is
+;;  whether it is at the top of a library or inside a body.
+
+(define-macro (define-values formals expr)
+  (let ((renamed (values-rename formals)))
+    `(begin
+       ,@(map (lambda (pair) `(define ,(car pair) #f)) (cdr renamed))
+       (call-with-values (lambda () ,expr)
+         (lambda ,(car renamed)
+           ,@(map (lambda (pair) `(set! ,(car pair) ,(cadr pair)))
+                  (cdr renamed))
+           #f)))))
+
+;;  The procedures that answer two values, which were left out while
+;;  there were no multiple values to answer with.
+
+(define (floor/ n d)
+  (values (floor-quotient n d) (floor-remainder n d)))
+
+(define (truncate/ n d)
+  (values (truncate-quotient n d) (truncate-remainder n d)))
+
+;;  The largest exact integer whose square is no more than k, and what
+;;  is left over, so that k is the first squared and the second added.
+
+(define (exact-integer-sqrt k)
+  (let ((root (raven-exact-integer-sqrt k)))
+    (values root (- k (* root root)))))

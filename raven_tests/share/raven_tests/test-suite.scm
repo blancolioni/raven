@@ -765,6 +765,52 @@
 (test "and so does one of bignums" "1267650600228229401496703205376/3"
       (number->string probe-big-ratio))
 
+;;  Multiple values (#48).  One value is the value; several are taken
+;;  apart by call-with-values, and are not a list a program could walk.
+
+(test "values of one is the value" 5 (values 5))
+(test "call-with-values" 3 (call-with-values (lambda () (values 1 2)) +))
+(test "of none" '() (call-with-values (lambda () (values)) list))
+(test "of one" '(7) (call-with-values (lambda () 7) list))
+(test "of three" '(1 2 3) (call-with-values (lambda () (values 1 2 3)) list))
+(test "several values are not a pair" #f (pair? (values 1 2)))
+(test "and are written as what they are" "#<values 1 2>"
+      (raven-write-text (values 1 2)))
+
+(test "let-values" 3 (let-values (((a b) (values 1 2))) (+ a b)))
+(test "let-values of several" '(1 2 3 4)
+      (let-values (((a b) (values 1 2)) ((c d) (values 3 4))) (list a b c d)))
+(test "let-values with a rest" '(1 (2 3))
+      (let-values (((a . rest) (values 1 2 3))) (list a rest)))
+(test "let-values of a name for all" '(1 2)
+      (let-values ((all (values 1 2))) all))
+(test "let-values does not let one see another" 1
+      (let ((a 1))
+        (let-values (((a) (values 10)) ((b) (values a))) b)))
+(test "let*-values does" 10
+      (let ((a 1))
+        (let*-values (((a) (values 10)) ((b) (values a))) b)))
+(test "let-values with a body of several" 2
+      (let-values (((a) (values 1))) (set! a 2) a))
+
+(define-values (probe-q probe-r) (floor/ 17 5))
+(test "define-values" '(3 2) (list probe-q probe-r))
+(define-values (probe-first . probe-others) (values 1 2 3))
+(test "define-values with a rest" '(1 (2 3)) (list probe-first probe-others))
+(test "define-values inside a body" 7
+      ((lambda () (define-values (x y) (values 3 4)) (+ x y))))
+
+(test "floor/" '(-4 3) (call-with-values (lambda () (floor/ -13 4)) list))
+(test "truncate/" '(-3 -1)
+      (call-with-values (lambda () (truncate/ -13 4)) list))
+(test "exact-integer-sqrt" '(4 1)
+      (call-with-values (lambda () (exact-integer-sqrt 17)) list))
+(test "of a square" '(5 0)
+      (call-with-values (lambda () (exact-integer-sqrt 25)) list))
+(test "of a bignum" #t
+      (let-values (((s r) (exact-integer-sqrt (+ (expt 10 40) 7))))
+        (and (= s (expt 10 20)) (= r 7))))
+
 ;;  (scheme inexact) (#105).  A square root is exact when the number is
 ;;  and its root is; everything else here is inexact.
 
