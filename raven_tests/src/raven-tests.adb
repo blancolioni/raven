@@ -101,8 +101,18 @@ package body Raven.Tests is
       Raven.Tests.Objects.Run_Tests;
       Raven.Tests.Memory.Run_Tests;
 
+      --  Twice the default heap, because this one VM carries the whole
+      --  scheme suite -- every test it defines stays live -- beside
+      --  what every suite after it builds.  At the default it ran out
+      --  in the foreign suite's collection tests once the scheme suite
+      --  passed thirteen hundred tests (#157).  That the standard
+      --  library fits the default heap is asked of the fresh VMs the
+      --  library, foreign and heap-size tests make, which start at it.
+
       declare
-         VM : Raven_VM := New_VM (Library_Path => Library_Path);
+         VM : Raven_VM :=
+                New_VM (Library_Path => Library_Path,
+                        Heap_Size    => Default_Heap_Size * 2);
       begin
          --  The harness's own libraries, which a program asks for by
          --  name.  The standard library's directory is on the path

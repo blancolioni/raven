@@ -1109,6 +1109,41 @@
 
 (define (boolean? x) (or (eq? x #t) (eq? x #f)))
 
+;;  The comparisons of booleans, symbols and characters (#157), each
+;;  taking any number of arguments as = does.  Each says what it was
+;;  given when that is not what it compares, rather than answering #f
+;;  for a question that was never about the same kind of thing.  A
+;;  character is compared by its code point.
+
+(define (bool=? a b)
+  (if (and (boolean? a) (boolean? b))
+      (eq? a b)
+      (error "boolean=?: expected booleans" a b)))
+
+(define (sym=? a b)
+  (if (and (symbol? a) (symbol? b))
+      (eq? a b)
+      (error "symbol=?: expected symbols" a b)))
+
+(define (char-code c)
+  (if (char? c)
+      (char->integer c)
+      (error "expected a character" c)))
+
+(define (boolean=? . bs) (all-left-assoc bool=? #t bs))
+(define (symbol=? . ss) (all-left-assoc sym=? #t ss))
+
+(define (char=? . cs)
+  (all-left-assoc (lambda (a b) (= (char-code a) (char-code b))) #t cs))
+(define (char<? . cs)
+  (all-left-assoc (lambda (a b) (< (char-code a) (char-code b))) #t cs))
+(define (char>? . cs)
+  (all-left-assoc (lambda (a b) (> (char-code a) (char-code b))) #t cs))
+(define (char<=? . cs)
+  (all-left-assoc (lambda (a b) (<= (char-code a) (char-code b))) #t cs))
+(define (char>=? . cs)
+  (all-left-assoc (lambda (a b) (>= (char-code a) (char-code b))) #t cs))
+
 ;;  Ports.  Everything raven could write went to one place through
 ;;  one foreign function, and nothing could read at all.
 ;;

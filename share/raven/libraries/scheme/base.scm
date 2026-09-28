@@ -36,7 +36,7 @@
   (export
 
    ;;  equivalence and booleans
-   eq? eqv? equal? boolean? not xor null?
+   eq? eqv? equal? boolean? boolean=? not xor null?
 
    ;;  pairs and lists.  Two deep is as far as R7RS takes the base
    ;;  library; caddr and everything deeper is (scheme cxr).
@@ -88,10 +88,11 @@
 
    ;;  symbols.  A symbol and the name it reads as, both ways round:
    ;;  string->symbol of symbol->string is the symbol it started as.
-   symbol? gensym symbol->string string->symbol
+   symbol? symbol=? gensym symbol->string string->symbol
 
    ;;  characters, which are immediates holding their own code point
    char? char->integer integer->char
+   char=? char<? char>? char<=? char>=?
 
    ;;  vectors.  A vector's elements are in the cells after its
    ;;  length, so an index is arithmetic and not a walk -- which is
