@@ -220,7 +220,7 @@ package body Raven.Scheme is
       Evaluator.Bind_Foreign_Function
         ("symbol?", Is_Symbol'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("gensym", Generate_Symbol'Access, 1);
+        ("raven-gensym", Generate_Symbol'Access, 1);
 
       --  The machine's own procedure, which call/cc is written on: a
       --  name for an object rather than a foreign function, because
