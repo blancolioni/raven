@@ -1574,6 +1574,18 @@
 (define-macro (cond-expand . clauses)
   (cond-expand-choose clauses))
 
+;;  syntax-error (#156), which R7RS gives for a syntax-rules template
+;;  to refuse a use of its macro with: the form is refused where it is
+;;  expanded, before any of it runs, with the message and the rest of
+;;  the form written after it.
+
+(define-macro (syntax-error message . args)
+  (raven-syntax-error
+   (apply string-append
+          (raven-display-text message)
+          (map (lambda (arg) (string-append " " (raven-write-text arg)))
+               args))))
+
 ;;  Multiple values (#48).  Several values are one object of their own,
 ;;  which is not a pair, so a program cannot take them for a list; and
 ;;  one value is the value itself, so a procedure that answers one never

@@ -172,6 +172,32 @@ package body Raven.Tests.Forms is
 
       Allowed (VM, "(set! probe-x 2)");
 
+      --  syntax-error (#156) refuses the form it is in as the forms
+      --  above are refused, with its message and the rest of the form
+      --  written after it -- which is how a syntax-rules template
+      --  refuses a use of its macro.
+
+      Refused (VM, "(syntax-error ""not like that"")",
+               "syntax-error: not like that");
+      Refused (VM, "(syntax-error ""not like that"" 1 x ""y"")",
+               "syntax-error: not like that 1 x ""y""");
+
+      Allowed
+        (VM,
+         "(define-syntax probe-two"
+         & " (syntax-rules ()"
+         & " ((_ a b) (list a b))"
+         & " ((_ . other) (syntax-error ""probe-two takes two"" other))))");
+      Allowed (VM, "(probe-two 1 2)");
+      Refused (VM, "(probe-two 1)", "syntax-error: probe-two takes two (1)");
+
+      --  Refused where it is expanded, so nothing of the form has run:
+      --  the set! in front of it has not happened.
+
+      Refused (VM, "(begin (set! probe-x 3) (syntax-error ""stop""))",
+               "syntax-error: stop");
+      Allowed (VM, "(if (= probe-x 2) 1 (car 1))");
+
       --  The ones the machine has an instruction for.
 
       Refused (VM, "(raven-eq?)", "raven-eq? takes two forms");

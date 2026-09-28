@@ -54,6 +54,13 @@ package body Raven is
    procedure Set_Dynamic (VM : Raven_VM);
    procedure Uncaught (VM : Raven_VM);
 
+   --  syntax-error (#156): the form being expanded is refused, with the
+   --  text in slot 1, as the translator refuses a form it cannot read.
+   --  It is raised while the form is expanded, before anything of it
+   --  has run, so it reaches whoever asked for the form to be read.
+
+   procedure Refuse_Syntax (VM : Raven_VM);
+
    procedure Check_Kind
      (This     : Raven_VM;
       Index    : Slot_Index;
@@ -742,6 +749,8 @@ package body Raven is
         ("raven-run-depth", Run_Depth_Of'Access, 0);
       This.Bind_Foreign_Function
         ("raven-uncaught", Uncaught'Access, 2);
+      This.Bind_Foreign_Function
+        ("raven-syntax-error", Refuse_Syntax'Access, 1);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
@@ -795,6 +804,16 @@ package body Raven is
    begin
       This.Data.IO.Get (Ch, Available);
    end Read_Character;
+
+   -------------------
+   -- Refuse_Syntax --
+   -------------------
+
+   procedure Refuse_Syntax (VM : Raven_VM) is
+   begin
+      raise Raven.Target.Translation_Error with
+        "syntax-error: " & Raven.Strings.Get_String (VM, 1);
+   end Refuse_Syntax;
 
    -------------
    -- Release --
