@@ -262,6 +262,19 @@ package body Raven.Tests.Foreign is
         (VM, "(list 1 (probe-try (lambda (x) (car x)) 5) 3)", "(1 failed 3)");
       Test_Value (VM, "(list 1 (probe-try (lambda (x) x) 2) 3)", "(1 2 3)");
 
+      --  A continuation inside a callback is a continuation like any
+      --  other; one made outside it is refused inside it, because the
+      --  callback is a run of its own (#47) and the outer run's
+      --  registers are no place for it to go on from.
+
+      Test_Value
+        (VM, "(probe-apply (lambda (x) (call/cc (lambda (k) (+ 1 (k x))))) 5)",
+         "5");
+      Test_Value
+        (VM, "(list 1 (probe-try (lambda (x) (x 2))"
+         & " (call/cc (lambda (k) k))) 3)",
+         "(1 failed 3)");
+
       --  And from outside the machine, where a host holds a procedure it
       --  kept and has nothing running.  Every slot but the answer's is
       --  as the host left it.

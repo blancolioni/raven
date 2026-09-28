@@ -87,6 +87,10 @@ package body Raven.Target is
          return "#f";
       elsif X = Lambda then
          return "lambda";
+      elsif X = Call_CC then
+         return "#<procedure call/cc>";
+      elsif Is_Continuation (X) then
+         return "#<continuation>";
       elsif X = Quote then
          return "quote";
       elsif X = Pending then

@@ -849,6 +849,9 @@ package body Raven.Engine.Memory is
          elsif Raven.Objects.Is_Values (Item) then
             return Raven.Objects.To_Values
               (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Continuation (Item) then
+            return Raven.Objects.To_Continuation
+              (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
          end if;

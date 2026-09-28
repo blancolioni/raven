@@ -1404,3 +1404,47 @@
 (define (exact-integer-sqrt k)
   (let ((root (raven-exact-integer-sqrt k)))
     (values root (- k (* root root)))))
+;;  Continuations (#47).  The machine's registers are objects on the
+;;  heap and its dump is a list, so a continuation is the registers
+;;  consed up and invoking one is putting them back.  raven-call/cc is
+;;  the machine's own procedure that does it; call/cc wraps what it
+;;  captures so that the dynamic-wind extent is right on the way.
+;;
+;;  dynamic-wind keeps a list of the before and after thunks of every
+;;  extent the program is inside, innermost first.  A continuation
+;;  remembers the list it was captured under, and invoking one travels
+;;  from where the program is to where it was: out of every extent it is
+;;  leaving, running each after, and into every extent it is entering,
+;;  running each before, outermost first.
+
+(define raven-winders '())
+
+(define (raven-travel-to here there)
+  (cond ((eq? here there) #t)
+        ((< (length here) (length there))
+         (raven-travel-to here (cdr there))
+         ((car (car there)))
+         (set! raven-winders there))
+        (else
+         (set! raven-winders (cdr here))
+         ((cdr (car here)))
+         (raven-travel-to (cdr here) there))))
+
+(define (call-with-current-continuation f)
+  (raven-call/cc
+   (lambda (k)
+     (let ((saved raven-winders))
+       (f (lambda answers
+            (raven-travel-to raven-winders saved)
+            (apply k answers)))))))
+
+(define call/cc call-with-current-continuation)
+
+(define (dynamic-wind before thunk after)
+  (before)
+  (set! raven-winders (cons (cons before after) raven-winders))
+  (call-with-values thunk
+    (lambda answers
+      (set! raven-winders (cdr raven-winders))
+      (after)
+      (apply values answers))))

@@ -179,6 +179,30 @@ package body Raven.Engine.SECD is
       Index : Slot_Index;
       Count : Natural);
 
+   --  Continuations (#47).  The registers are objects on the heap and the
+   --  dump is a list, so a continuation is the four registers consed up,
+   --  and invoking one is putting them back: there is no host stack to
+   --  copy and nothing to unwind.
+   --
+   --  Capture is what applying call/cc does, with the call/cc and its one
+   --  argument on the stack: the continuation of the call is made, and
+   --  the argument is applied to it by the same AP or TAP, put back on
+   --  the code.  In a tail call the continuation is the caller's, which
+   --  is on the dump, because that is where the call's answer goes.
+   --
+   --  Resume is what applying a continuation does: its registers become
+   --  the machine's, and what it was given is the answer -- one value as
+   --  itself, several as values.  A continuation remembers how deep in
+   --  runs of the machine it was made, and is refused in another: a run
+   --  inside a host's callback (#120) is a separate Execute, and the
+   --  registers of one are no place for the other to go on from.
+
+   procedure Capture_Continuation
+     (This : in out Instance'Class;
+      Tail : Boolean);
+
+   procedure Resume_Continuation (This : in out Instance'Class);
+
    overriding function Append_Lists
      (This  : in out Instance;
       List1 : Object;
@@ -666,6 +690,83 @@ package body Raven.Engine.SECD is
          & Id'Image);
    end Bind_Foreign_Function;
 
+   --------------------------
+   -- Capture_Continuation --
+   --------------------------
+
+   procedure Capture_Continuation
+     (This : in out Instance'Class;
+      Tail : Boolean)
+   is
+      use Raven.Objects;
+      Depth : constant Object :=
+                To_Object (Integer (This.Suspended.Length));
+
+      --  The register the continuation keeps for one of the machine's:
+      --  the machine's own after an AP, and the caller's frame on the
+      --  dump after a TAP.  Read afresh each time, because each cons
+      --  below may collect and move what the registers hold.
+
+      function Kept (Name : Stack_Name) return Object;
+
+      ----------
+      -- Kept --
+      ----------
+
+      function Kept (Name : Stack_Name) return Object is
+         Frame : constant Object := This.St (D);
+      begin
+         if not Tail then
+            return This.St (Name);
+         end if;
+
+         --  The dump holds the caller's S, E and C, in that order, and
+         --  the rest of the dump after them.
+
+         return
+           (case Name is
+               when S => This.Car (Frame),
+               when E => This.Car (This.Cdr (Frame)),
+               when C => This.Car (This.Cdr (This.Cdr (Frame))),
+               when D => This.Cdr (This.Cdr (This.Cdr (Frame))));
+      end Kept;
+
+   begin
+      This.Rs (1) := This.Pop (S);
+      This.Rs (2) := This.Pop (S);
+
+      if This.Rs (2) = Nil or else This.Cdr (This.Rs (2)) /= Nil then
+         raise Constraint_Error with
+           "call/cc: takes one procedure, not " & This.Show (This.Rs (2));
+      end if;
+
+      --  The registers are roots, and so are the scratch ones, so the
+      --  list is built in Rs (4) and every cons finds what it needs where
+      --  the collector keeps it up to date.
+
+      This.Rs (4) := This.Memory.Cons (Depth, Nil);
+      This.Rs (4) := This.Memory.Cons (Kept (D), This.Rs (4));
+      This.Rs (4) := This.Memory.Cons (Kept (C), This.Rs (4));
+      This.Rs (4) := This.Memory.Cons (Kept (E), This.Rs (4));
+      This.Rs (4) := This.Memory.Cons (Kept (S), This.Rs (4));
+      This.Rs (4) :=
+        To_Continuation
+          (Get_Address (This.Memory.Cons (This.Rs (4), Nil)));
+
+      --  The procedure applied to the continuation, by the call that was
+      --  applying call/cc.
+
+      This.Rs (3) := This.Memory.Cons (This.Rs (4), Nil);
+      This.Push (S, This.Rs (3));
+      This.Push (S, This.Car (This.Rs (2)));
+      This.Push
+        (C, To_Object
+              (if Tail then Raven.Instructions.TAP
+               else Raven.Instructions.AP));
+
+      This.Rs := [others => Nil];
+   end Capture_Continuation;
+
    ----------
    -- Cons --
    ----------
@@ -898,7 +999,11 @@ package body Raven.Engine.SECD is
 
             case Next is
                when AP =>
-                  if Is_Foreign_Function (This.Top) then
+                  if This.Top = Objects.Call_CC then
+                     Capture_Continuation (This, Tail => False);
+                  elsif Is_Continuation (This.Top) then
+                     Resume_Continuation (This);
+                  elsif Is_Foreign_Function (This.Top) then
                      declare
                         FF_Id : constant Foreign_Function_Id :=
                                   To_Foreign_Function_Id
@@ -952,7 +1057,11 @@ package body Raven.Engine.SECD is
                   --  returns to it.  The dump stops growing, which is
                   --  the whole of what a tail call is for.
 
-                  if Is_Foreign_Function (This.Top) then
+                  if This.Top = Objects.Call_CC then
+                     Capture_Continuation (This, Tail => True);
+                  elsif Is_Continuation (This.Top) then
+                     Resume_Continuation (This);
+                  elsif Is_Foreign_Function (This.Top) then
 
                      --  There is nothing to transfer control to: a
                      --  foreign function answers where it stands.  So
@@ -1544,6 +1653,50 @@ package body Raven.Engine.SECD is
    begin
       Raven.Write_Error (This.VM, Message);
    end Report_Error;
+
+   -------------------------
+   -- Resume_Continuation --
+   -------------------------
+
+   procedure Resume_Continuation (This : in out Instance'Class) is
+      use Raven.Objects;
+   begin
+      This.Rs (1) := This.Pop (S);
+      This.Rs (2) := This.Pop (S);
+
+      declare
+         Kept  : constant Object := This.Car (This.Rs (1));
+         Depth : constant Object :=
+                   This.Car (This.Cdr (This.Cdr (This.Cdr (This.Cdr (Kept)))));
+      begin
+         if To_Integer (Depth) /= Integer (This.Suspended.Length) then
+            raise Constraint_Error with
+              "a continuation cannot be invoked in a run of the machine"
+              & " other than the one it was made in";
+         end if;
+      end;
+
+      --  One value is itself; any other number of them is values.
+
+      if This.Rs (2) /= Nil and then This.Cdr (This.Rs (2)) = Nil then
+         This.Rs (3) := This.Car (This.Rs (2));
+      else
+         This.Rs (3) :=
+           To_Values (Get_Address (This.Memory.Cons (This.Rs (2), Nil)));
+      end if;
+
+      declare
+         Kept : constant Object := This.Car (This.Rs (1));
+      begin
+         This.St (S) := This.Car (Kept);
+         This.St (E) := This.Car (This.Cdr (Kept));
+         This.St (C) := This.Car (This.Cdr (This.Cdr (Kept)));
+         This.St (D) := This.Car (This.Cdr (This.Cdr (This.Cdr (Kept))));
+      end;
+
+      This.Push (S, This.Rs (3));
+      This.Rs := [others => Nil];
+   end Resume_Continuation;
 
    ------------
    -- Rplaca --
