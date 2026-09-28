@@ -6,6 +6,7 @@ with Ada.Text_IO;
 with Raven.Engine.Libraries;
 with Raven.Engine.SECD.Translator;
 with Raven.Instructions;
+with Raven.Numbers;
 with Raven.Objects;
 with Raven.Strings;
 with Raven.Translator;
@@ -364,6 +365,17 @@ package body Raven.Engine.SECD is
       Value : Object)
       return Foreign_Value_Instance'Class
    is (This.Memory.To_Foreign_Value (Value));
+
+   overriding function Show_Bignum
+     (This : Instance;
+      X    : Object)
+      return String
+   is (Raven.Numbers.Image (Raven.Numbers.Decode (This.VM, X)));
+
+   overriding function Read_Integer
+     (This : in out Instance;
+      Text : String)
+      return Object;
 
    overriding function Create_String
      (This : in out Instance;
@@ -1460,6 +1472,27 @@ package body Raven.Engine.SECD is
    begin
       This.Push (S, Value);
    end Push;
+
+   ------------------
+   -- Read_Integer --
+   ------------------
+
+   overriding function Read_Integer
+     (This : in out Instance;
+      Text : String)
+      return Object
+   is
+      N     : Raven.Numbers.Number;
+      Valid : Boolean;
+   begin
+      Raven.Numbers.Read (Text, 10, N, Valid);
+
+      if not Valid then
+         raise Constraint_Error with "not an integer: " & Text;
+      end if;
+
+      return Raven.Numbers.Encode (This.VM, N);
+   end Read_Integer;
 
    -------------------
    -- Release_Macro --

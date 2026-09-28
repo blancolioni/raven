@@ -128,7 +128,10 @@ package body Raven.Scheme is
 
    procedure Is_Exact_Integer (VM : Raven_VM) is
    begin
-      VM.Set_Slot (1, Raven.Objects.Is_Integer (VM.Get_Slot (1)));
+      VM.Set_Slot
+        (1,
+         Raven.Objects.Is_Integer (VM.Get_Slot (1))
+           or else Raven.Objects.Is_Bignum (VM.Get_Slot (1)));
    end Is_Exact_Integer;
 
    ----------------
@@ -147,6 +150,7 @@ package body Raven.Scheme is
       VM.Set_Slot
         (1,
          Is_Integer (X)
+           or else Is_Bignum (X)
            or else (Is_Float (X)
              and then To_Float (X) = Float'Truncation (To_Float (X))));
    end Is_Integer;

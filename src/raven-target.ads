@@ -288,6 +288,25 @@ private package Raven.Target is
                   Readable : Boolean := True)
                   return String;
 
+   --  A bignum as it is written, which is the machine's to work out:
+   --  its digits are in the heap, and reading them is Raven.Numbers'.
+
+   function Show_Bignum
+     (This : Abstraction;
+      X    : Object)
+      return String
+   is abstract;
+
+   --  The exact integer this literal is, when it is too large to be a
+   --  fixnum: a bignum, made where the machine can make one.  The text is
+   --  the literal as the reader found it, sign and radix prefix and all.
+
+   function Read_Integer
+     (This : in out Abstraction;
+      Text : String)
+      return Object
+   is abstract;
+
    procedure Set_Parameter
      (This  : in out Abstraction;
       Name  : String;

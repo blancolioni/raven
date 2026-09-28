@@ -21,6 +21,13 @@ package body Raven.Tests.Numbers is
       Expression : String;
       Expected   : Integer);
 
+   --  What the answer shows as, for one that is not a fixnum.
+
+   procedure Test_Shown
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String);
+
    ---------------
    -- Run_Tests --
    ---------------
@@ -77,40 +84,61 @@ package body Raven.Tests.Numbers is
       Test_Number (VM, "(length '(1 2 3 4 5))", 5);
       Test_Number (VM, "(length (append '(1 2 3) '(4 5 6)))", 6);
 
-      --  An integer is 29 bits and a sign.  Up to the edge is fine,
-      --  and past it is refused and says so, where it used to be an
-      --  assertion out of the machine with contracts on and a number
-      --  with its top bits lost with them off.
+      --  A fixnum is 29 bits and a sign.  Up to the edge it is what it
+      --  was.  Past it the answer is a bignum and is exact, where it was
+      --  refused (#99), and before that an assertion out of the machine
+      --  with contracts on and a number with its top bits lost with them
+      --  off.
 
       Test_Number (VM, "(+ 536870910 1)", 536_870_911);
       Test_Number (VM, "(- -536870911 1)", -536_870_912);
       Test_Number (VM, "(* 23170 23170)", 536_848_900);
       Test_Number (VM, "(- 0 536870911)", -536_870_911);
 
-      Test_Error (VM, "(+ 536870911 1)");
-      Test_Error (VM, "(- -536870912 1)");
-      Test_Error (VM, "(* 23171 23171)");
-      Test_Error (VM, "(- -536870912)");
+      Test_Shown (VM, "(+ 536870911 1)", "536870912");
+      Test_Shown (VM, "(- -536870912 1)", "-536870913");
+      Test_Shown (VM, "(* 23171 23171)", "536895241");
+      Test_Shown (VM, "(- -536870912)", "536870912");
 
-      --  A product too large for Ada's own Integer as well, which is
-      --  the case where computing it narrow was not even a wrong
-      --  answer but an overflow in the arithmetic.
+      --  A product too large for Ada's own Integer as well, and one far
+      --  past anything Long_Long_Integer holds.
 
-      Test_Error (VM, "(* 65536 65536)");
+      Test_Shown (VM, "(* 65536 65536)", "4294967296");
+      Test_Shown
+        (VM, "(* 4294967296 4294967296 4294967296)",
+         "79228162514264337593543950336");
+      Test_Shown (VM, "(expt 2 100)", "1267650600228229401496703205376");
+      Test_Shown (VM, "(- (expt 2 100))", "-1267650600228229401496703205376");
 
-      --  And the one division that overflows.
+      --  The division that did not fit, and division of bignums, which
+      --  truncates as a fixnum's does.
 
-      Test_Error (VM, "(/ -536870912 -1)");
+      Test_Shown (VM, "(/ -536870912 -1)", "536870912");
       Test_Number (VM, "(/ -536870912 1)", -536_870_912);
+      Test_Shown
+        (VM, "(/ (expt 2 100) (expt 2 98))", "4");
+      Test_Shown
+        (VM, "(quotient (expt 10 30) 7)", "142857142857142857142857142857");
+      Test_Shown (VM, "(remainder (expt 10 30) 7)", "1");
+      Test_Shown (VM, "(modulo (- (expt 10 30)) 7)", "6");
 
-      Test_Message
-        (VM, "(+ 536870911 1)",
-         "integer overflow: 536870911 + 1 is past the largest integer"
-         & " raven holds, 536870911");
-      Test_Message
-        (VM, "(* -536870912 2)",
-         "integer overflow: -536870912 * 2 is past the smallest integer"
-         & " raven holds, -536870912");
+      --  And normal: an answer that fits is a fixnum again however large
+      --  what it was worked out from.
+
+      Test_Number (VM, "(- (expt 2 40) (expt 2 40))", 0);
+      Test_Number (VM, "(- (+ 536870911 1) 1)", 536_870_911);
+      Test_Number (VM, "(/ (expt 2 40) (expt 2 20))", 1_048_576);
+
+      --  Literals past a fixnum read as the bignums they are, where they
+      --  were refused.
+
+      Test_Shown (VM, "536870912", "536870912");
+      Test_Shown (VM, "-536870913", "-536870913");
+      Test_Shown (VM, "#x20000000", "536870912");
+      Test_Shown (VM, "123456789012345678901234567890",
+                  "123456789012345678901234567890");
+      Test_Shown (VM, "#x-ffffffffffffffffffff",
+                  "-1208925819614629174706175");
 
       --  What arithmetic is given that it cannot take is refused by the
       --  primitive that was asked, and a float is said to be a number,
@@ -138,22 +166,45 @@ package body Raven.Tests.Numbers is
          Smallest : constant Object :=
                       Raven.Objects.To_Object
                         (Integer'(Raven.Objects.Min_Integer));
+         L        : constant Number := Decode (VM, Largest);
+         S        : constant Number := Decode (VM, Smallest);
+         One      : constant Number :=
+                      Decode (VM, Raven.Objects.To_Object (Integer'(1)));
       begin
          Test ("a number decoded and encoded is itself",
-               Encode (Decode (Largest)) = Largest
-                 and then Encode (Decode (Smallest)) = Smallest);
+               Encode (VM, L) = Largest and then Encode (VM, S) = Smallest);
          Test ("an answer is normal",
-               Encode (Subtract (Decode (Largest), Decode (Largest)))
+               Encode (VM, Subtract (L, L))
                  = Raven.Objects.To_Object (Integer'(0)));
          Test ("and compares as the number it is",
-               Less_Or_Equal (Decode (Smallest), Decode (Largest))
-                 and then not Less_Or_Equal
-                                (Decode (Largest), Decode (Smallest)));
+               Less_Or_Equal (S, L) and then not Less_Or_Equal (L, S));
          Test ("= and eqv? are the machine's",
-               Equal (Decode (Largest), Decode (Largest))
-                 and then Eqv (Decode (Smallest), Decode (Smallest))
-                 and then not Equal (Decode (Largest), Decode (Smallest))
-                 and then not Eqv (Decode (Largest), Decode (Smallest)));
+               Equal (L, L) and then Eqv (S, S)
+                 and then not Equal (L, S) and then not Eqv (L, S));
+
+         --  One past a fixnum is a bignum, a block in the heap, and one
+         --  back from it is the fixnum it was, the same word as before:
+         --  normal both ways.  And two bignums that are the same number
+         --  are two objects, which is what = and eqv? were made the
+         --  machine's for (#101).
+
+         declare
+            Past  : constant Number := Add (L, One);
+            Big   : constant Object := Encode (VM, Past);
+            Again : constant Object := Encode (VM, Past);
+         begin
+            Test ("one past a fixnum is a bignum",
+                  Raven.Objects.Is_Bignum (Big));
+            Test ("and decodes as the number it is",
+                  Equal (Decode (VM, Big), Past)
+                    and then Image (Decode (VM, Big)) = "536870912");
+            Test ("and one back from it is the fixnum it was",
+                  Encode (VM, Subtract (Decode (VM, Big), One)) = Largest);
+            Test ("two equal bignums are two objects",
+                  Big /= Again
+                    and then Equal (Decode (VM, Big), Decode (VM, Again))
+                    and then Eqv (Decode (VM, Big), Decode (VM, Again)));
+         end;
       end;
    end Run_Tests;
 
@@ -214,5 +265,26 @@ package body Raven.Tests.Numbers is
          Ada.Text_IO.New_Line;
          raise;
    end Test_Number;
+
+   ----------------
+   -- Test_Shown --
+   ----------------
+
+   procedure Test_Shown
+     (VM         : Raven_VM;
+      Expression : String;
+      Expected   : String)
+   is
+   begin
+      VM.Evaluate (Expression);
+      Test ("evaluate: " & Expression, Expected, VM.Show_Slot (1));
+   exception
+      when E : others =>
+         Ada.Text_IO.Put (Expression);
+         Ada.Text_IO.Set_Col (74);
+         Ada.Text_IO.Put (Ada.Exceptions.Exception_Message (E));
+         Ada.Text_IO.New_Line;
+         Test ("evaluate: " & Expression, False);
+   end Test_Shown;
 
 end Raven.Tests.Numbers;

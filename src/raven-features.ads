@@ -7,9 +7,9 @@
 --  without bignums or without rationals is a legal R7RS implementation,
 --  and exact-closed, ratios, exact-complex and ieee-float are how a
 --  program tells one from another and adapts, rather than failing
---  somewhere far from the cause.  None of those four is here yet,
---  because none of them is true yet; each is added by the change that
---  makes it true.
+--  somewhere far from the cause.  Each is added by the change that
+--  makes it true: exact-closed came with bignums (#102), and ratios,
+--  exact-complex and ieee-float are not here because they are not.
 --
 --  r7rs is not here either.  Every R7RS implementation has it, and it
 --  is a claim that the whole of the small language is present, which

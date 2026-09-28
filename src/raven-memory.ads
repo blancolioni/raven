@@ -59,6 +59,23 @@ private package Raven.Memory is
       return Natural
    is abstract;
 
+   --  A bignum's block: Length bytes of magnitude, nought, and the
+   --  sign.  Its bytes are read and written as a bytevector's are, and
+   --  its length is a vector's length.
+
+   function New_Bignum
+     (This     : in out Abstraction;
+      Length   : Natural;
+      Negative : Boolean)
+      return Object
+   is abstract;
+
+   function Is_Negative
+     (This : Abstraction;
+      X    : Object)
+      return Boolean
+   is abstract;
+
    function Vector_Element
      (This  : Abstraction;
       V     : Object;

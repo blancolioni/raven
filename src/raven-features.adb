@@ -56,6 +56,12 @@ package body Raven.Features is
 
          Result.Append ("full-unicode");
 
+         --  +, -, * and expt to a whole power give exact answers for
+         --  exact arguments, however large: an integer past a fixnum is
+         --  a bignum (#102) rather than an overflow.
+
+         Result.Append ("exact-closed");
+
          Result.Append_Vector (OS_Features);
          Result.Append_Vector (Arch_Features);
       end return;
