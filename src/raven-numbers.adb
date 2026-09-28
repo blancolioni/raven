@@ -1,4 +1,5 @@
 with Ada.Long_Float_Text_IO;
+with Ada.Numerics.Long_Elementary_Functions;
 with Ada.Strings.Fixed;
 
 package body Raven.Numbers is
@@ -71,6 +72,16 @@ package body Raven.Numbers is
 
    function Double_Image (Value : Long_Float) return String;
 
+   --  The largest integer whose square is no more than N, by Newton's
+   --  method from above.
+
+   function Integer_Root (N : Big_Integer) return Big_Integer
+     with Pre => N >= To_Big_Integer (0);
+
+   --  Nought as a Number, for the comparisons that ask about a sign.
+
+   Zero : constant Number := (Kind => Fixnum, Value => 0);
+
    ---------
    -- Add --
    ---------
@@ -83,6 +94,68 @@ package body Raven.Numbers is
        elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) + Widened (Right))
        else Normal (To_Big (Left) + To_Big (Right)));
+
+   -----------
+   -- Apply --
+   -----------
+
+   function Apply (How : Elementary; N : Number) return Number is
+      package F renames Ada.Numerics.Long_Elementary_Functions;
+
+      X    : constant Long_Float := To_Double (N);
+      Name : constant String :=
+               (case How is
+                   when Exp  => "exp",  when Log  => "log",
+                   when Sin  => "sin",  when Cos  => "cos",
+                   when Tan  => "tan",  when Asin => "asin",
+                   when Acos => "acos", when Atan => "atan");
+   begin
+      if How = Log and then X <= 0.0 then
+         raise Constraint_Error with
+           "log: " & Image (N) & " has no real logarithm, and raven has"
+           & (if X = 0.0 then " no infinities" else " no complex numbers");
+      elsif How in Asin | Acos and then abs X > 1.0 then
+         raise Constraint_Error with
+           Name & ": " & Image (N) & " is outside -1 .. 1, and raven has"
+           & " no complex numbers";
+      end if;
+
+      --  What goes wrong from here on is the answer, not the argument:
+      --  exp of a thousand is past what a double holds.
+
+      begin
+         return Checked_Inexact
+           (case How is
+               when Exp  => F.Exp (X),
+               when Log  => F.Log (X),
+               when Sin  => F.Sin (X),
+               when Cos  => F.Cos (X),
+               when Tan  => F.Tan (X),
+               when Asin => F.Arcsin (X),
+               when Acos => F.Arccos (X),
+               when Atan => F.Arctan (X));
+      exception
+         when Constraint_Error | Ada.Numerics.Argument_Error =>
+            raise Constraint_Error with
+              Name & ": " & Image (N) & " has no answer a double holds";
+      end;
+   end Apply;
+
+   ----------------
+   -- Arctangent --
+   ----------------
+
+   function Arctangent (Y, X : Number) return Number is
+      Yd : constant Long_Float := To_Double (Y);
+      Xd : constant Long_Float := To_Double (X);
+   begin
+      if Yd = 0.0 and then Xd = 0.0 then
+         raise Constraint_Error with "atan: the point (0, 0) has no angle";
+      end if;
+
+      return Checked_Inexact
+        (Ada.Numerics.Long_Elementary_Functions.Arctan (Yd, Xd));
+   end Arctangent;
 
    ---------------------
    -- Checked_Inexact --
@@ -466,6 +539,33 @@ package body Raven.Numbers is
    function Inexact_Of (Value : Long_Float) return Number
    is (Checked_Inexact (Value));
 
+   ------------------
+   -- Integer_Root --
+   ------------------
+
+   function Integer_Root (N : Big_Integer) return Big_Integer is
+      Text : constant String := To_String (N);
+      X    : Big_Integer;
+      Y    : Big_Integer;
+   begin
+      if N < To_Big_Integer (2) then
+         return N;
+      end if;
+
+      --  Ten to half as many digits as N has, rounded up, is at least
+      --  its root, and Newton's method comes down from above to it.
+
+      X := To_Big_Integer (10) ** Natural ((Text'Length + 1) / 2);
+
+      loop
+         Y := (X + N / X) / To_Big_Integer (2);
+         exit when Y >= X;
+         X := Y;
+      end loop;
+
+      return X;
+   end Integer_Root;
+
    -------------------
    -- Is_Arithmetic --
    -------------------
@@ -556,6 +656,33 @@ package body Raven.Numbers is
           when Fixnum | Bignum => N,
           when Ratnum          => Normal (Numerator (N.Ratio)),
           when Flonum          => To_Inexact (Numerator (To_Exact (N))));
+
+   -----------
+   -- Power --
+   -----------
+
+   function Power (Base, Exponent : Number) return Number is
+      B : constant Long_Float := To_Double (Base);
+      E : constant Long_Float := To_Double (Exponent);
+   begin
+      if B < 0.0 and then E /= Long_Float'Truncation (E) then
+         raise Constraint_Error with
+           "expt: " & Image (Base) & " to the power " & Image (Exponent)
+           & " is a complex number, and raven has none";
+      elsif B = 0.0 then
+         return (if E = 0.0 then Checked_Inexact (1.0)
+                 elsif E > 0.0 then Checked_Inexact (0.0)
+                 else raise Constraint_Error with "expt: divide by zero");
+      end if;
+
+      return Checked_Inexact
+        (Ada.Numerics.Long_Elementary_Functions."**" (B, E));
+   exception
+      when Ada.Numerics.Argument_Error =>
+         raise Constraint_Error with
+           "expt: " & Image (Base) & " to the power " & Image (Exponent)
+           & " has no answer a double holds";
+   end Power;
 
    --------------
    -- Quotient --
@@ -820,6 +947,70 @@ package body Raven.Numbers is
                     when Round    =>
                       Long_Float'Unbiased_Rounding (N.Inexact)));
    end Rounded;
+
+   -----------------
+   -- Square_Root --
+   -----------------
+
+   function Square_Root (N : Number) return Number is
+
+      --  The exact root of an exact integer that has one.
+
+      function Exact_Root
+        (Of_This : Big_Integer;
+         Root    : out Big_Integer)
+         return Boolean;
+
+      ----------------
+      -- Exact_Root --
+      ----------------
+
+      function Exact_Root
+        (Of_This : Big_Integer;
+         Root    : out Big_Integer)
+         return Boolean
+      is
+      begin
+         Root := Integer_Root (Of_This);
+         return Root * Root = Of_This;
+      end Exact_Root;
+
+   begin
+      if not Less_Or_Equal (Zero, N) then
+         raise Constraint_Error with
+           "sqrt: " & Image (N) & " has no real square root, and raven has"
+           & " no complex numbers";
+      end if;
+
+      case N.Kind is
+         when Fixnum | Bignum =>
+            declare
+               Root : Big_Integer;
+            begin
+               if Exact_Root (To_Big (N), Root) then
+                  return Normal (Root);
+               end if;
+            end;
+
+         when Ratnum =>
+            declare
+               Upper : Big_Integer;
+               Lower : Big_Integer;
+            begin
+               if Exact_Root (Numerator (N.Ratio), Upper)
+                 and then Exact_Root (Denominator (N.Ratio), Lower)
+               then
+                  return Normal (Big_Real'(Upper / Lower));
+               end if;
+            end;
+
+         when Flonum =>
+            null;
+      end case;
+
+      return Checked_Inexact
+        (Ada.Numerics.Long_Elementary_Functions.Sqrt (To_Double (N)));
+   end Square_Root;
 
    --------------
    -- Subtract --

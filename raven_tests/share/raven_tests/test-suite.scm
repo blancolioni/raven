@@ -1,4 +1,4 @@
-(import (scheme base) (scheme cxr))
+(import (scheme base) (scheme cxr) (scheme inexact))
 
 (define num-tests 0)
 (define passed-tests 0)
@@ -764,6 +764,35 @@
 (test "a rational survives a collection" 22/7 probe-kept-ratio)
 (test "and so does one of bignums" "1267650600228229401496703205376/3"
       (number->string probe-big-ratio))
+
+;;  (scheme inexact) (#105).  A square root is exact when the number is
+;;  and its root is; everything else here is inexact.
+
+(test "sqrt of a square" 3 (sqrt 9))
+(test "and it is exact" #t (exact? (sqrt 9)))
+(test "sqrt of a bignum square" (expt 10 20) (sqrt (expt 10 40)))
+(test "sqrt of a rational square" 2/3 (sqrt 4/9))
+(test "sqrt of what is not a square" 1.4142135623730951 (sqrt 2))
+(test "and that is inexact" #f (exact? (sqrt 2)))
+(test "sqrt of a double" 1.5 (sqrt 2.25))
+(test "sqrt of nought" 0 (sqrt 0))
+(test "exp of nought" 1.0 (exp 0))
+(test "exp of one" 2.718281828459045 (exp 1))
+(test "log of e" 1.0 (log (exp 1)))
+(test "log to a base" 3.0 (log 8 2))
+(test "sin of nought" 0.0 (sin 0))
+(test "cos of nought" 1.0 (cos 0))
+(test "tan of nought" 0.0 (tan 0))
+(test "asin of one" 1.5707963267948966 (asin 1))
+(test "acos of one" 0.0 (acos 1))
+(test "atan of one" 0.7853981633974483 (atan 1))
+(test "atan of two, in the second quadrant" 2.356194490192345 (atan 1 -1))
+(test "and in the third" -2.356194490192345 (atan -1 -1))
+(test "expt to a fractional power" 1.4142135623730951 (expt 2 0.5))
+(test "expt of a rational to one" 2.0 (expt 4 1/2))
+(test "finite?" #t (finite? 1.5))
+(test "infinite?" #f (infinite? 1e300))
+(test "nan?" #f (nan? 0.0))
 
 ;;  A boxed double is the heap's, and is the same number after a
 ;;  collection has moved it.

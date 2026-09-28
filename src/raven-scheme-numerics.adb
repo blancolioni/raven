@@ -48,6 +48,16 @@ package body Raven.Scheme.Numerics is
    procedure Numerator (VM : Raven_VM);
    procedure Denominator (VM : Raven_VM);
 
+   --  What (scheme inexact) is written on (#105), and a real power for
+   --  expt: the square root, the elementary function whose position in
+   --  Raven.Numbers.Elementary is in slot 2, atan of two arguments, and
+   --  a number to a power that is not an exact integer.
+
+   procedure Square_Root (VM : Raven_VM);
+   procedure Elementary (VM : Raven_VM);
+   procedure Arctangent (VM : Raven_VM);
+   procedure Power (VM : Raven_VM);
+
    --  A number written out and read back, in radix 2, 8, 10 or 16.
 
    procedure Number_To_String (VM : Raven_VM);
@@ -83,6 +93,18 @@ package body Raven.Scheme.Numerics is
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Add (Left, Right)));
    end Add;
 
+   ----------------
+   -- Arctangent --
+   ----------------
+
+   procedure Arctangent (VM : Raven_VM) is
+      Y : constant Raven.Numbers.Number := Operand (VM, "atan", 1);
+      X : constant Raven.Numbers.Number := Operand (VM, "atan", 2);
+   begin
+      VM.Set_Slot
+        (1, Raven.Numbers.Encode (VM, Raven.Numbers.Arctangent (Y, X)));
+   end Arctangent;
+
    -----------------
    -- Denominator --
    -----------------
@@ -111,6 +133,20 @@ package body Raven.Scheme.Numerics is
       VM.Set_Slot
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Divide (Left, Right)));
    end Divide;
+
+   ----------------
+   -- Elementary --
+   ----------------
+
+   procedure Elementary (VM : Raven_VM) is
+      How : constant Raven.Numbers.Elementary :=
+              Raven.Numbers.Elementary'Val (Integer'(VM.Get_Slot (2)));
+      N   : constant Raven.Numbers.Number :=
+              Operand (VM, Raven.Numbers.Elementary'Image (How), 1);
+   begin
+      VM.Set_Slot
+        (1, Raven.Numbers.Encode (VM, Raven.Numbers.Apply (How, N)));
+   end Elementary;
 
    --------------
    -- Is_Exact --
@@ -173,6 +209,14 @@ package body Raven.Scheme.Numerics is
         ("raven-numerator", Numerator'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-denominator", Denominator'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-sqrt", Square_Root'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-elementary", Elementary'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-atan2", Arctangent'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-power", Power'Access, 2);
    end Load_Numeric_Library;
 
    --------------
@@ -265,6 +309,19 @@ package body Raven.Scheme.Numerics is
       return Raven.Numbers.Decode (VM, X);
    end Operand;
 
+   -----------
+   -- Power --
+   -----------
+
+   procedure Power (VM : Raven_VM) is
+      Base     : constant Raven.Numbers.Number := Operand (VM, "expt", 1);
+      Exponent : constant Raven.Numbers.Number := Operand (VM, "expt", 2);
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode (VM, Raven.Numbers.Power (Base, Exponent)));
+   end Power;
+
    --------------
    -- Quotient --
    --------------
@@ -327,6 +384,18 @@ package body Raven.Scheme.Numerics is
            (VM,
             Raven.Numbers.Rounded (N, Raven.Numbers.Rounding'Val (How))));
    end Round;
+
+   -----------------
+   -- Square_Root --
+   -----------------
+
+   procedure Square_Root (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM, Raven.Numbers.Square_Root (Operand (VM, "sqrt", 1))));
+   end Square_Root;
 
    ----------------------
    -- String_To_Number --

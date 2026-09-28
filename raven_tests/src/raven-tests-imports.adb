@@ -263,6 +263,13 @@ package body Raven.Tests.Imports is
       Test_Number (VM, "(caddr '(1 2 3))", 3);
       Test_Number (VM, "(cadddr '(1 2 3 4))", 4);
 
+      --  And (scheme inexact), where R7RS puts sqrt and the rest, so that
+      --  a program that wants no floating point does not get it.
+
+      Test_Undefined (VM, "(sqrt 4)");
+      Evaluate (VM, "(import (scheme inexact))");
+      Test_Number (VM, "(sqrt 4)", 2);
+
       --  A library that chooses its declarations by feature.  Every
       --  name it exports is chosen by a cond-expand, so if the choosing
       --  went wrong the import would find names undefined.
