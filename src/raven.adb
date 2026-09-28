@@ -838,6 +838,19 @@ package body Raven is
       return This.Data.Target.Pop;
    end Release_Object;
 
+   ---------------------------
+   -- Replace_Foreign_Value --
+   ---------------------------
+
+   procedure Replace_Foreign_Value
+     (This      : Raven_VM'Class;
+      Value     : Object;
+      New_Value : Foreign_Value_Instance'Class)
+   is
+   begin
+      This.Data.Memory.Replace_Foreign_Value (Value, New_Value);
+   end Replace_Foreign_Value;
+
    ------------------
    -- Report_State --
    ------------------
@@ -1349,6 +1362,20 @@ package body Raven is
       VM.Data.Target.Set_Dynamic_State (Raven.Target.Pending_Raise, Raised);
       raise Constraint_Error with Raven.Strings.Get_String (VM, 2);
    end Uncaught;
+
+   --------------------------
+   -- Update_Foreign_Value --
+   --------------------------
+
+   procedure Update_Foreign_Value
+     (This    : Raven_VM'Class;
+      Value   : Object;
+      Process : not null access
+        procedure (Item : in out Foreign_Value_Instance'Class))
+   is
+   begin
+      This.Data.Memory.Update_Foreign_Value (Value, Process);
+   end Update_Foreign_Value;
 
    ---------------
    -- User_Data --

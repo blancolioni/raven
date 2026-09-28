@@ -395,6 +395,21 @@
 		   (optional start 0)
 		   (optional end (string-length string))))
 
+;;  Changing a string (#158).  A string a procedure made may be
+;;  changed; a literal, and the name symbol->string answers with, may
+;;  not.  string-copy! is right when the two parts are of one string and
+;;  overlap.
+
+(define (string-set! string k char) (raven-string-set! string k char))
+
+(define (string-fill! string char start end)
+  (raven-string-fill! string char (optional start 0)
+                      (optional end (string-length string))))
+
+(define (string-copy! to at from start end)
+  (raven-string-copy! to at from (optional start 0)
+                      (optional end (string-length from))))
+
 ;;  Comparison.  A string is compared by its characters and a shorter
 ;;  string that matches as far as it goes comes first.
 

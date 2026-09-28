@@ -1827,6 +1827,98 @@
       (guard (e ((error-object? e) (error-object-message e)))
         (parameterize ((current-output-port 5)) 1)))
 
+;;  Changing a string (#158).  A string a procedure made can be
+;;  changed; a literal, and the name symbol->string answers with,
+;;  cannot, because a literal is one object however often it is read.
+
+(define (message-of thunk)
+  (guard (e ((error-object? e) (error-object-message e))) (thunk)))
+
+(test "string-set!" "aba"
+      (let ((s (make-string 3 #\a))) (string-set! s 1 #\b) s))
+(test "string-set! of a string made by string" "xb"
+      (let ((s (string #\a #\b))) (string-set! s 0 #\x) s))
+(test "string-set! of a copy of a literal" "xbc"
+      (let ((s (string-copy "abc"))) (string-set! s 0 #\x) s))
+(test "string-set! of what string-append made" "abx"
+      (let ((s (string-append "a" "bc"))) (string-set! s 2 #\x) s))
+(test "string-set! of a literal is an error"
+      "string-set!: a literal string cannot be changed: \"abc\""
+      (message-of (lambda () (string-set! "abc" 0 #\x))))
+(test "and of a symbol's name"
+      "string-set!: a literal string cannot be changed: \"abc\""
+      (message-of (lambda () (string-set! (symbol->string 'abc) 0 #\x))))
+(test "string-set! past the end is an error"
+      "string-set!: 5 is not an index of a string of 2"
+      (message-of (lambda () (string-set! (make-string 2 #\a) 5 #\b))))
+(test "string-set! of what is not a character is an error"
+      "string-set!: not a character: 1"
+      (message-of (lambda () (string-set! (make-string 2 #\a) 0 1))))
+
+;;  A character that does not fit a byte, into a string held a byte to
+;;  a character, makes it wide; every name for the string sees that,
+;;  and it compares by its characters whichever way it is held.
+
+(test "a wide character into a narrow string" "\x3BB;a"
+      (let ((s (make-string 2 #\a))) (string-set! s 0 #\x3BB) s))
+(test "is seen by every name for the string" #\x3BB
+      (let* ((s (make-string 2 #\a)) (t s))
+        (string-set! s 0 #\x3BB)
+        (string-ref t 0)))
+(test "and compares by its characters after" '(#t #t #t)
+      (let ((s (make-string 2 #\a)))
+        (string-set! s 0 #\x3BB)
+        (string-set! s 0 #\b)
+        (list (equal? s "ba") (string=? s "ba") (string<? s "bb"))))
+
+;;  A string made wide is put in the place of the one it was, and the
+;;  table's own note of it went with the old one: the next collection
+;;  swept a value it could not name.
+
+(define (string-churn n)
+  (if (= n 0)
+      'done
+      (begin (make-string 4 #\a) (list 1 2 3) (string-churn (- n 1)))))
+(test "a string made wide survives a collection" '(#\x3BB #\a)
+      (let ((s (make-string 2 #\a)))
+        (string-set! s 0 #\x3BB)
+        (string-churn 4000)
+        (list (string-ref s 0) (string-ref s 1))))
+
+(test "string-fill!" "zzzz"
+      (let ((s (make-string 4 #\a))) (string-fill! s #\z) s))
+(test "string-fill! of a part" "ayya"
+      (let ((s (make-string 4 #\a))) (string-fill! s #\y 1 3) s))
+(test "string-fill! of a literal is an error"
+      "string-fill!: a literal string cannot be changed: \"ab\""
+      (message-of (lambda () (string-fill! "ab" #\x))))
+
+(test "string-copy!" "-abc-"
+      (let ((to (make-string 5 #\-))) (string-copy! to 1 "abc") to))
+(test "string-copy! of a part" "el---"
+      (let ((to (make-string 5 #\-))) (string-copy! to 0 "hello" 1 3) to))
+(test "string-copy! within a string, forwards" "aabce"
+      (let ((s (string-copy "abcde"))) (string-copy! s 1 s 0 3) s))
+(test "string-copy! within a string, backwards" "cdede"
+      (let ((s (string-copy "abcde"))) (string-copy! s 0 s 2 5) s))
+(test "string-copy! of wide characters" "a\x3BB;\x3BC;"
+      (let ((to (make-string 3 #\a))) (string-copy! to 1 "\x3BB;\x3BC;") to))
+(test "string-copy! past the end is an error"
+      "string-copy!: 2 and 3 characters are not within a string of 3"
+      (message-of (lambda () (string-copy! (make-string 3 #\a) 2 "abc"))))
+(test "string-copy! into a literal is an error"
+      "string-copy!: a literal string cannot be changed: \"abc\""
+      (message-of (lambda () (string-copy! "abc" 0 "x"))))
+
+;;  R7RS's own example.
+
+(define (made-string) (make-string 3 #\*))
+(define (literal-string) "***")
+(test "a made string can be changed" "?**"
+      (let ((s (made-string))) (string-set! s 0 #\?) s))
+(test "a literal cannot" #t
+      (string? (message-of (lambda () (string-set! (literal-string) 0 #\?)))))
+
 ;;  A name under two ellipses holds a list of lists, and repeats twice
 ;;  over on the way out.
 

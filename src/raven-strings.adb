@@ -23,6 +23,27 @@ package body Raven.Strings is
    procedure String_Ref (VM : Raven_VM);
    procedure Substring (VM : Raven_VM);
 
+   --  Changing a string (#158): string-set!, string-fill! and
+   --  string-copy!, each of which writes characters into a string from
+   --  an index.  Put_Characters is that writing, for all three.
+
+   procedure String_Set (VM : Raven_VM);
+   procedure String_Fill (VM : Raven_VM);
+   procedure String_Copy (VM : Raven_VM);
+
+   --  Characters written into the string in Slot from index Offset, which
+   --  is from zero, having checked that the string may be changed and
+   --  has room for them.  Where they fit how the string is held they
+   --  are written where it is; a character that does not fit a narrow
+   --  string makes it wide, once.
+
+   procedure Put_Characters
+     (VM     : Raven_VM;
+      Name   : String;
+      Slot   : Slot_Index;
+      Offset : Natural;
+      Chars  : Wide_Wide_String);
+
    --  The length of the string in this slot, or an error naming the
    --  procedure that was given something else.  It looks at the string
    --  where it is rather than copying it out to ask.
@@ -102,7 +123,7 @@ package body Raven.Strings is
    --  A string that matches another as far as it goes comes first,
    --  which is what "<" on two arrays says.  Two strings held the same
    --  way are compared as they are; one of each is compared a
-   --  character at a time, and cannot be the same.
+   --  character at a time.
 
    function Compare (A, B : Instance'Class) return Integer is
    begin
@@ -195,6 +216,25 @@ package body Raven.Strings is
          VM.Set_Parameter ("trace-execution", "false");
       end if;
    end Enable_Trace;
+
+   -----------
+   -- Equal --
+   -----------
+
+   --  By characters and not by how they are held, because a string
+   --  that has been changed may be held wide with only narrow ones in
+   --  it (#158).
+
+   overriding function Equal
+     (This         : Instance;
+      To           : Instance;
+      Equal_Object : not null access function (X, Y : Object) return Boolean)
+      return Boolean
+   is
+      pragma Unreferenced (Equal_Object);
+   begin
+      return This.Length = To.Length and then Compare (This, To) = 0;
+   end Equal;
 
    ----------------
    -- Get_String --
@@ -342,6 +382,12 @@ package body Raven.Strings is
         ("raven-substring", Substring'Access, 3);
       Evaluator.Bind_Foreign_Function
         ("raven-string-compare", String_Compare'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-string-set!", String_Set'Access, 3);
+      Evaluator.Bind_Foreign_Function
+        ("raven-string-fill!", String_Fill'Access, 4);
+      Evaluator.Bind_Foreign_Function
+        ("raven-string-copy!", String_Copy'Access, 5);
    end Load_String_Library;
 
    -----------------
@@ -372,19 +418,131 @@ package body Raven.Strings is
          V  : constant Instance :=
                 (if Wide_Wide_Character'Pos (Ch) < 256
                  then (Foreign_Value_Instance with
-                       Wide   => False,
-                       Length => Length,
-                       Narrow =>
+                       Wide    => False,
+                       Length  => Length,
+                       Mutable => True,
+                       Narrow  =>
                          [1 .. Length =>
                             Character'Val (Wide_Wide_Character'Pos (Ch))])
                  else (Foreign_Value_Instance with
-                       Wide   => True,
-                       Length => Length,
-                       Value  => [1 .. Length => Ch]));
+                       Wide    => True,
+                       Length  => Length,
+                       Mutable => True,
+                       Value   => [1 .. Length => Ch]));
       begin
          VM.Set_Slot (1, VM.Create_Foreign_Value (V));
       end;
    end Make_String;
+
+   --------------------
+   -- Put_Characters --
+   --------------------
+
+   procedure Put_Characters
+     (VM     : Raven_VM;
+      Name   : String;
+      Slot   : Slot_Index;
+      Offset : Natural;
+      Chars  : Wide_Wide_String)
+   is
+      X       : constant Object := VM.Get_Slot (Slot);
+      Length  : constant Natural := Checked_Length (VM, Name, Slot);
+      Mutable : Boolean := False;
+      Wide    : Boolean := False;
+      Fits    : Boolean := True;
+
+      procedure Ask (Item : Foreign_Value_Instance'Class);
+      procedure Write (Item : in out Foreign_Value_Instance'Class);
+
+      ---------
+      -- Ask --
+      ---------
+
+      procedure Ask (Item : Foreign_Value_Instance'Class) is
+      begin
+         Mutable := Instance'Class (Item).Mutable;
+         Wide := Instance'Class (Item).Wide;
+      end Ask;
+
+      -----------
+      -- Write --
+      -----------
+
+      procedure Write (Item : in out Foreign_Value_Instance'Class) is
+         S : Instance'Class renames Instance'Class (Item);
+      begin
+         for I in Chars'Range loop
+            declare
+               Index : constant Positive := Offset + I - Chars'First + 1;
+            begin
+               if S.Wide then
+                  S.Value (Index) := Chars (I);
+               else
+                  S.Narrow (Index) :=
+                    Character'Val (Wide_Wide_Character'Pos (Chars (I)));
+               end if;
+            end;
+         end loop;
+      end Write;
+
+   begin
+      VM.Query_Foreign_Value (X, Ask'Access);
+
+      if not Mutable then
+         raise Constraint_Error with
+           Name & ": a literal string cannot be changed: "
+           & Encode (VM.Display (X));
+      end if;
+
+      if Offset + Chars'Length > Length then
+         raise Constraint_Error with
+           Name & ":" & Offset'Image & " and" & Chars'Length'Image
+           & " characters are not within a string of" & Length'Image;
+      end if;
+
+      if not Wide then
+         for Ch of Chars loop
+            if Wide_Wide_Character'Pos (Ch) > 255 then
+               Fits := False;
+            end if;
+         end loop;
+      end if;
+
+      if Fits then
+         VM.Update_Foreign_Value (X, Write'Access);
+      else
+
+         --  Held wide from here on: the whole of it, with the new
+         --  characters in, in its place.  Every object that is this
+         --  string is the one value, so every one of them sees it.
+
+         declare
+            Full : Wide_Wide_String (1 .. Length);
+
+            procedure Take (Item : Foreign_Value_Instance'Class);
+
+            ----------
+            -- Take --
+            ----------
+
+            procedure Take (Item : Foreign_Value_Instance'Class) is
+            begin
+               Full := Characters (Instance'Class (Item));
+            end Take;
+
+         begin
+            VM.Query_Foreign_Value (X, Take'Access);
+            Full (Offset + 1 .. Offset + Chars'Length) := Chars;
+            VM.Replace_Foreign_Value
+              (X,
+               Instance'(Foreign_Value_Instance with
+                         Wide    => True,
+                         Length  => Length,
+                         Mutable => True,
+                         Value   => Full));
+         end;
+      end if;
+   end Put_Characters;
 
    ----------
    -- Show --
@@ -507,6 +665,78 @@ package body Raven.Strings is
       VM.Set_Slot (1, Answer);
    end String_Compare;
 
+   -----------------
+   -- String_Copy --
+   -----------------
+
+   --  string-copy!: the characters of From between Start and End, into
+   --  To from Offset.  They are taken out of From before any is written, so
+   --  a copy within one string is right whichever way the two parts
+   --  overlap.
+
+   procedure String_Copy (VM : Raven_VM) is
+      From_Length : constant Natural :=
+                      Checked_Length (VM, "string-copy!", 3);
+      Offset      : constant Integer := VM.Get_Slot (2);
+      First       : constant Integer := VM.Get_Slot (4);
+      Last        : constant Integer := VM.Get_Slot (5);
+   begin
+      if First < 0 or else Last > From_Length or else First > Last then
+         raise Constraint_Error with
+           "string-copy!:" & First'Image & Last'Image
+           & " is not within a string of" & From_Length'Image;
+      elsif Offset < 0 then
+         raise Constraint_Error with
+           "string-copy!:" & Offset'Image & " is not an index";
+      end if;
+
+      declare
+         Part : Wide_Wide_String (1 .. Last - First);
+
+         procedure Take (Item : Foreign_Value_Instance'Class);
+
+         ----------
+         -- Take --
+         ----------
+
+         procedure Take (Item : Foreign_Value_Instance'Class) is
+         begin
+            Part := Slice (Instance'Class (Item), First + 1, Last);
+         end Take;
+
+      begin
+         VM.Query_Foreign_Value (VM.Get_Slot (3), Take'Access);
+         Put_Characters (VM, "string-copy!", 1, Offset, Part);
+      end;
+   end String_Copy;
+
+   -----------------
+   -- String_Fill --
+   -----------------
+
+   --  string-fill!: every character between Start and End made Fill.
+
+   procedure String_Fill (VM : Raven_VM) is
+      use Raven.Objects;
+      Length : constant Natural := Checked_Length (VM, "string-fill!", 1);
+      Fill   : constant Object := VM.Get_Slot (2);
+      First  : constant Integer := VM.Get_Slot (3);
+      Last   : constant Integer := VM.Get_Slot (4);
+   begin
+      if not Is_Character (Fill) then
+         raise Constraint_Error with
+           "string-fill!: not a character: " & Encode (VM.Display (Fill));
+      elsif First < 0 or else Last > Length or else First > Last then
+         raise Constraint_Error with
+           "string-fill!:" & First'Image & Last'Image
+           & " is not within a string of" & Length'Image;
+      end if;
+
+      Put_Characters
+        (VM, "string-fill!", 1, First,
+         [1 .. Last - First => To_Character (Fill)]);
+   end String_Fill;
+
    -------------------
    -- String_Length --
    -------------------
@@ -550,6 +780,28 @@ package body Raven.Strings is
       VM.Query_Foreign_Value (VM.Get_Slot (1), Look'Access);
       VM.Set_Slot (1, Raven.Objects.To_Object (Answer));
    end String_Ref;
+
+   ----------------
+   -- String_Set --
+   ----------------
+
+   procedure String_Set (VM : Raven_VM) is
+      use Raven.Objects;
+      Length : constant Natural := Checked_Length (VM, "string-set!", 1);
+      Index  : constant Integer := VM.Get_Slot (2);
+      Ch     : constant Object := VM.Get_Slot (3);
+   begin
+      if not Is_Character (Ch) then
+         raise Constraint_Error with
+           "string-set!: not a character: " & Encode (VM.Display (Ch));
+      elsif Index not in 0 .. Length - 1 then
+         raise Constraint_Error with
+           "string-set!:" & Index'Image & " is not an index of a string of"
+           & Length'Image;
+      end if;
+
+      Put_Characters (VM, "string-set!", 1, Index, [To_Character (Ch)]);
+   end String_Set;
 
    --------------------
    -- String_To_List --
@@ -663,6 +915,17 @@ package body Raven.Strings is
       end if;
    end Text;
 
+   ----------------
+   -- To_Literal --
+   ----------------
+
+   function To_Literal (Text : Wide_Wide_String) return Instance is
+   begin
+      return Result : Instance := To_Value (Text) do
+         Result.Mutable := False;
+      end return;
+   end To_Literal;
+
    --------------
    -- To_Value --
    --------------
@@ -672,7 +935,10 @@ package body Raven.Strings is
       for Ch of Text loop
          if Wide_Wide_Character'Pos (Ch) > 255 then
             return (Foreign_Value_Instance with
-                    Wide => True, Length => Text'Length, Value => Text);
+                    Wide    => True,
+                    Length  => Text'Length,
+                    Mutable => True,
+                    Value   => Text);
          end if;
       end loop;
 
@@ -690,11 +956,14 @@ package body Raven.Strings is
    ------------------
 
    procedure Write_String
-     (VM   : Raven_VM;
-      Slot : Slot_Index;
-      S    : String)
+     (VM      : Raven_VM;
+      Slot    : Slot_Index;
+      S       : String;
+      Mutable : Boolean := True)
    is
-      V : constant Instance := To_Value (Decode (S));
+      V : constant Instance :=
+            (if Mutable then To_Value (Decode (S))
+             else To_Literal (Decode (S)));
    begin
       VM.Set_Slot (Slot, VM.Create_Foreign_Value (V));
    end Write_String;

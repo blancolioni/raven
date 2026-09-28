@@ -350,7 +350,8 @@ package body Raven.Scheme is
       --  symbol table holds it under and what reading that name gives
       --  the symbol back from.
 
-      Raven.Strings.Write_String (VM, 1, Encode (VM.Display (X)));
+      Raven.Strings.Write_String
+        (VM, 1, Encode (VM.Display (X)), Mutable => False);
    end Symbol_To_String;
 
    -----------------

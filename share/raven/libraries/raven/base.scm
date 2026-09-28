@@ -124,10 +124,11 @@
    bytevector-copy bytevector-copy! bytevector-append
    utf8->string string->utf8
 
-   ;;  strings.  What is not here is string-set!, string-fill! and
-   ;;  string-copy!, which want a string that can be written to.
+   ;;  strings.  One a procedure made can be changed; a literal
+   ;;  cannot.
    string? string-length string-append list->string string->list
    string make-string string-ref substring string-copy
+   string-set! string-fill! string-copy!
    string=? string<? string>? string<=? string>=?
    string-map string-for-each
 
