@@ -34,8 +34,6 @@ package body Raven.Scheme is
 
    procedure Is_Symbol (VM : Raven_VM);
 
-   procedure Raise_Error (VM : Raven_VM);
-
    procedure Set_Car (VM : Raven_VM);
 
    procedure Set_Cdr (VM : Raven_VM);
@@ -238,9 +236,6 @@ package body Raven.Scheme is
       Evaluator.Bind_Foreign_Function
         ("raven-values-list", Values_List'Access, 1);
 
-      Evaluator.Bind_Foreign_Function
-        ("error", Raise_Error'Access, 1);
-
       --  Things the machine could already do and offered no name for.
       --  None of them is a new idea: writing a cell is what RAP has
       --  always done, the symbol table already reads a name both ways,
@@ -288,16 +283,6 @@ package body Raven.Scheme is
    begin
       VM.Set_Slot (1, VM.New_Values (List));
    end Make_Values;
-
-   -----------------
-   -- Raise_Error --
-   -----------------
-
-   procedure Raise_Error (VM : Raven_VM) is
-   begin
-      raise Constraint_Error with
-        Encode (VM.Display (VM.Get_Slot (1)));
-   end Raise_Error;
 
    -------------
    -- Set_Car --

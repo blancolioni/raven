@@ -1,5 +1,6 @@
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Vectors;
+with Ada.Exceptions;
 with Ada.Strings.Equal_Case_Insensitive;
 with Ada.Text_IO;
 
@@ -70,6 +71,9 @@ package body Raven.Engine.SECD is
    package Translator_Vectors is
      new Ada.Containers.Vectors (Positive, Translator_Reference);
 
+   type Dynamic_Registers is
+     array (Raven.Target.Dynamic_Register) of Object;
+
    type Instance is
      new Raven.Target.Abstraction with
       record
@@ -90,6 +94,7 @@ package body Raven.Engine.SECD is
                          Raven.Target.No_Library;
          Translators : Translator_Vectors.Vector;
          Trace       : Boolean := False;
+         Dynamic     : Dynamic_Registers := [others => Objects.Nil];
       end record;
 
    type Instance_Reference is access all Instance'Class;
@@ -178,6 +183,34 @@ package body Raven.Engine.SECD is
      (This  : in out Instance;
       Index : Slot_Index;
       Count : Natural);
+
+   overriding function Dynamic_State
+     (This  : Instance;
+      Which : Raven.Target.Dynamic_Register)
+      return Object
+   is (This.Dynamic (Which));
+
+   overriding procedure Set_Dynamic_State
+     (This  : in out Instance;
+      Which : Raven.Target.Dynamic_Register;
+      Value : Object);
+
+   overriding function Run_Depth (This : Instance) return Natural;
+
+   overriding procedure Reset_Dynamic_State (This : in out Instance);
+
+   --  An error the machine found -- an Ada exception out of an
+   --  instruction, a foreign function or a run inside one -- made a raise
+   --  in scheme, if the innermost handler was installed in this run.  The
+   --  raiser is applied where the error was, to what was raised if it
+   --  came from a run with no handler for it and to the message if it
+   --  came from the machine, and False is the answer when there is no
+   --  handler here to go to, so that the Ada exception goes on out.
+
+   function Raise_In_Scheme
+     (This    : in out Instance'Class;
+      Message : String)
+      return Boolean;
 
    --  Continuations (#47).  The registers are objects on the heap and the
    --  dump is a list, so a continuation is the four registers consed up,
@@ -592,6 +625,9 @@ package body Raven.Engine.SECD is
             Next := Next + 1;
          end loop;
 
+         This.Dynamic (Raven.Target.Handler_Stack) := This.Suspended (Next);
+         This.Dynamic (Raven.Target.Wind_List) := This.Suspended (Next + 1);
+
          This.Suspended.Set_Length (Ada.Containers.Count_Type (Base));
       end Restore;
 
@@ -609,6 +645,12 @@ package body Raven.Engine.SECD is
       for Slot in Slot_Index loop
          This.Suspended.Append (Object'(This.VM.Get_Slot (Slot)));
       end loop;
+
+      --  And the handlers and extents, which the procedure may change
+      --  and not change back if what it does ends in an error.
+
+      This.Suspended.Append (This.Dynamic (Raven.Target.Handler_Stack));
+      This.Suspended.Append (This.Dynamic (Raven.Target.Wind_List));
 
       --  The call, built on the stack so that every part of it is
       --  somewhere the collector looks while the rest is made: the
@@ -806,6 +848,7 @@ package body Raven.Engine.SECD is
          Incomplete  => Library_Id_Vectors.Empty_Vector,
          St          => [others => Raven.Objects.Nil],
          Rs          => [others => Raven.Objects.Nil],
+         Dynamic     => [others => Raven.Objects.Nil],
          --  Named explicitly, because Symbols is an anonymous access
          --  parameter and Syms is a named access type.  Ada wants the
          --  conversion written; the GNAT this was developed against
@@ -1387,6 +1430,27 @@ package body Raven.Engine.SECD is
                   raise Constraint_Error with
                     "unimplemented: " & Next'Image;
             end case;
+
+         exception
+            when E : Constraint_Error | Raven.Target.Undefined_Symbol =>
+
+               --  An error the machine found, which a handler in scheme
+               --  can catch when there is one in this run; otherwise it
+               --  goes on out as it always has, to the loader and the
+               --  host, which say where it happened and count it.
+
+               declare
+                  use Ada.Exceptions;
+                  Text : constant String :=
+                           (if Exception_Identity (E)
+                              = Raven.Target.Undefined_Symbol'Identity
+                            then "undefined: " & Exception_Message (E)
+                            else Exception_Message (E));
+               begin
+                  if not Raise_In_Scheme (This, Text) then
+                     raise;
+                  end if;
+               end;
          end;
       end loop;
    end Execute;
@@ -1502,6 +1566,9 @@ package body Raven.Engine.SECD is
       for R of This.Rs loop
          Process (R);
       end loop;
+      for R of This.Dynamic loop
+         Process (R);
+      end loop;
       for Position in This.Held.Iterate loop
          declare
             Stack : Object := Object_Vectors.Element (Position);
@@ -1588,6 +1655,50 @@ package body Raven.Engine.SECD is
       This.Push (S, Value);
    end Push;
 
+   ---------------------
+   -- Raise_In_Scheme --
+   ---------------------
+
+   function Raise_In_Scheme
+     (This    : in out Instance'Class;
+      Message : String)
+      return Boolean
+   is
+      use Raven.Objects;
+      use Raven.Target;
+      Handlers : constant Object := This.Dynamic (Handler_Stack);
+   begin
+      if Handlers = Nil or else This.Dynamic (Raiser) = Nil then
+         return False;
+      end if;
+
+      if To_Integer (This.Cdr (This.Car (Handlers)))
+        /= Integer (This.Suspended.Length)
+      then
+         return False;
+      end if;
+
+      --  The raiser's two arguments: whether what follows is what was
+      --  raised or the machine's message, and that.
+
+      if This.Dynamic (Pending_Raise) /= Nil then
+         This.Rs (1) := This.Dynamic (Pending_Raise);
+         This.Dynamic (Pending_Raise) := Nil;
+         This.Rs (2) := To_Object (True);
+      else
+         This.Rs (1) := This.Create_String (Decode (Message));
+         This.Rs (2) := To_Object (False);
+      end if;
+
+      This.Rs (3) := This.Memory.Cons (This.Rs (1), Nil);
+      This.Rs (3) := This.Memory.Cons (This.Rs (2), This.Rs (3));
+      This.Push (S, This.Rs (3));
+      This.Push (S, This.Dynamic (Raiser));
+      This.Push (C, To_Object (Raven.Instructions.AP));
+      This.Rs := [others => Nil];
+      return True;
+   end Raise_In_Scheme;
+
    ------------------
    -- Read_Integer --
    ------------------
@@ -1653,6 +1764,17 @@ package body Raven.Engine.SECD is
    begin
       Raven.Write_Error (This.VM, Message);
    end Report_Error;
+
+   -------------------------
+   -- Reset_Dynamic_State --
+   -------------------------
+
+   overriding procedure Reset_Dynamic_State (This : in out Instance) is
+   begin
+      This.Dynamic (Raven.Target.Handler_Stack) := Objects.Nil;
+      This.Dynamic (Raven.Target.Wind_List) := Objects.Nil;
+      This.Dynamic (Raven.Target.Pending_Raise) := Objects.Nil;
+   end Reset_Dynamic_State;
 
    -------------------------
    -- Resume_Continuation --
@@ -1723,6 +1845,26 @@ package body Raven.Engine.SECD is
       This.Memory.Set (Address, Cell);
       return X;
    end Rplaca;
+
+   ---------------
+   -- Run_Depth --
+   ---------------
+
+   overriding function Run_Depth (This : Instance) return Natural
+   is (Natural (This.Suspended.Length));
+
+   -----------------------
+   -- Set_Dynamic_State --
+   -----------------------
+
+   overriding procedure Set_Dynamic_State
+     (This  : in out Instance;
+      Which : Raven.Target.Dynamic_Register;
+      Value : Object)
+   is
+   begin
+      This.Dynamic (Which) := Value;
+   end Set_Dynamic_State;
 
    ---------------------
    -- Set_Export_List --

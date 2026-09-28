@@ -275,6 +275,59 @@ package body Raven.Tests.Foreign is
          & " (call/cc (lambda (k) k))) 3)",
          "(1 failed 3)");
 
+      --  A raise inside a callback, with the guard outside it (#46): the
+      --  callback is a run of its own with no handler, so it goes out of
+      --  it as an Ada exception, and the object with it; the run outside
+      --  has the guard, and it is raised there.  The same for an error
+      --  the machine finds inside.
+
+      Test_Value
+        (VM, "(guard (e (#t (list 'caught e)))"
+         & " (probe-apply (lambda (x) (raise 'from-inside)) 1))",
+         "(caught from-inside)");
+      Test_Value
+        (VM, "(guard (e (#t (error-object? e)))"
+         & " (probe-apply (lambda (x) (car x)) 1))",
+         "#t");
+
+      --  And what reaches the host is still an Ada exception saying
+      --  what it was, and leaves no handler behind it: the error after
+      --  it is the host's again, and not the old handler's.
+
+      declare
+         Said : Boolean := False;
+      begin
+         begin
+            VM.Evaluate
+              ("(with-exception-handler (lambda (c) 'stale)"
+               & " (lambda () (raise 'x)))");
+         exception
+            when Constraint_Error =>
+               Said := True;
+         end;
+         Test ("a handler that returns from raise reaches the host", Said);
+
+         Said := False;
+         begin
+            VM.Evaluate ("(car 1)");
+         exception
+            when E : Constraint_Error =>
+               Said :=
+                 Ada.Strings.Fixed.Index
+                   (Ada.Exceptions.Exception_Message (E), "car") > 0;
+         end;
+         Test ("and the error after it is not given to that handler", Said);
+
+         Said := False;
+         begin
+            VM.Evaluate ("(error ""boom"" 1 'two)");
+         exception
+            when E : Constraint_Error =>
+               Said := Ada.Exceptions.Exception_Message (E) = "boom 1 two";
+         end;
+         Test ("an uncaught error says its message and irritants", Said);
+      end;
+
       --  And from outside the machine, where a host holds a procedure it
       --  kept and has nothing running.  Every slot but the answer's is
       --  as the host left it.
