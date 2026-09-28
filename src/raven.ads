@@ -687,6 +687,16 @@ private
       X    : Object)
       return Boolean;
 
+   function New_Flonum
+     (This  : Raven_VM'Class;
+      Value : Long_Float)
+      return Object;
+
+   function Flonum_Value
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Long_Float;
+
    function Vector_Length
      (This : Raven_VM'Class;
       V    : Object)

@@ -2,6 +2,8 @@ with Ada.Calendar;
 with Ada.Containers.Indefinite_Doubly_Linked_Lists;
 with Ada.Containers.Vectors;
 with Ada.Text_IO;
+with Ada.Unchecked_Conversion;
+with Interfaces;
 
 with Raven.Containers;
 with Raven.Objects;
@@ -114,11 +116,31 @@ package body Raven.Engine.Memory is
       X    : Object)
       return Boolean;
 
+   overriding function New_Flonum
+     (This  : in out Instance;
+      Value : Long_Float)
+      return Object;
+
+   overriding function Flonum_Value
+     (This : Instance;
+      X    : Object)
+      return Long_Float;
+
    --  What keeps its elements as packed bytes: a bytevector, and a
    --  bignum's magnitude.
 
    function Holds_Bytes (V : Object) return Boolean
-   is (Raven.Objects.Is_Bytevector (V) or else Raven.Objects.Is_Bignum (V));
+   is (Raven.Objects.Is_Bytevector (V)
+       or else Raven.Objects.Is_Bignum (V)
+       or else Raven.Objects.Is_Flonum (V));
+
+   --  A double's bits, which are what a boxed one keeps.
+
+   function To_Bits is
+     new Ada.Unchecked_Conversion (Long_Float, Interfaces.Unsigned_64);
+
+   function From_Bits is
+     new Ada.Unchecked_Conversion (Interfaces.Unsigned_64, Long_Float);
 
    overriding function Vector_Length
      (This : Instance;
@@ -484,6 +506,28 @@ package body Raven.Engine.Memory is
       This.Scan := This.To_Space;
    end Flip;
 
+   ------------------
+   -- Flonum_Value --
+   ------------------
+
+   overriding function Flonum_Value
+     (This : Instance;
+      X    : Object)
+      return Long_Float
+   is
+      use type Interfaces.Unsigned_64;
+      Bits : Interfaces.Unsigned_64 := 0;
+   begin
+      for Index in reverse 0 .. 7 loop
+         Bits :=
+           Interfaces.Shift_Left (Bits, 8)
+           or Interfaces.Unsigned_64
+                (Raven.Objects.To_Integer (This.Vector_Element (X, Index)));
+      end loop;
+
+      return From_Bits (Bits);
+   end Flonum_Value;
+
    -----------------------
    -- Free_And_Allocate --
    -----------------------
@@ -796,6 +840,9 @@ package body Raven.Engine.Memory is
          elsif Raven.Objects.Is_Bignum (Item) then
             return Raven.Objects.To_Bignum
               (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Flonum (Item) then
+            return Raven.Objects.To_Flonum
+              (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
          end if;
@@ -851,6 +898,31 @@ package body Raven.Engine.Memory is
 
       return Raven.Objects.To_Bytevector (Base);
    end New_Bytevector;
+
+   ----------------
+   -- New_Flonum --
+   ----------------
+
+   overriding function New_Flonum
+     (This  : in out Instance;
+      Value : Long_Float)
+      return Object
+   is
+      use type Interfaces.Unsigned_64;
+      Bytes : constant Object := This.New_Bytevector (8);
+      Bits  : Interfaces.Unsigned_64 := To_Bits (Value);
+   begin
+      --  Least significant byte first, as a bignum keeps its magnitude.
+
+      for Index in 0 .. 7 loop
+         This.Set_Vector_Element
+           (Bytes, Index,
+            Raven.Objects.To_Object (Integer (Bits and 16#FF#)));
+         Bits := Interfaces.Shift_Right (Bits, 8);
+      end loop;
+
+      return Raven.Objects.To_Flonum (Raven.Objects.Get_Address (Bytes));
+   end New_Flonum;
 
    ----------------
    -- New_Vector --

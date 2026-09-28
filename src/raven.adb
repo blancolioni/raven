@@ -348,6 +348,16 @@ package body Raven is
       end loop;
    end Features_Of;
 
+   ------------------
+   -- Flonum_Value --
+   ------------------
+
+   function Flonum_Value
+     (This : Raven_VM'Class;
+      X    : Object)
+      return Long_Float
+   is (This.Data.Memory.Flonum_Value (X));
+
    ---------------------
    -- Forms_Abandoned --
    ---------------------
@@ -577,6 +587,16 @@ package body Raven is
       Negative : Boolean)
       return Object
    is (This.Data.Memory.New_Bignum (Length, Negative));
+
+   ----------------
+   -- New_Flonum --
+   ----------------
+
+   function New_Flonum
+     (This  : Raven_VM'Class;
+      Value : Long_Float)
+      return Object
+   is (This.Data.Memory.New_Flonum (Value));
 
    ----------------
    -- New_Symbol --

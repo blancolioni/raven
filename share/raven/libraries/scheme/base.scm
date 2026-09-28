@@ -8,7 +8,7 @@
 ;;  take the name of.  Nor are the helpers the exported procedures are
 ;;  built from: append2, concatenate, all-left-assoc, apply-subtract,
 ;;  apply-divide, write-char-list, sum-list, reverse-onto, member-by,
-;;  assoc-by, list-walk?, extreme, floor-adjust, gcd2, lcm2, num-eq?,
+;;  assoc-by, list-walk?, extreme, inexact-if-any, floor-adjust, gcd2, lcm2, num-eq?,
 ;;  map1, map-lists, for-each1, for-each-lists, any-null?, heads,
 ;;  rests, str=?, str<?, do-next, cond-expand-choose,
 ;;  make-promise-of, fill-vector, fill-vector-at, vector-onto,
@@ -49,13 +49,13 @@
    ;;  asked
    procedure?
 
-   ;;  numbers.  Integer arithmetic, which is the only arithmetic
-   ;;  raven has: exactness, rationals, sqrt and numerator want the
-   ;;  numeric tower and are not this.  floor, ceiling, truncate and
-   ;;  round are the identity here, and are exported so that a program
-   ;;  which says where it expects a fraction still runs.
+   ;;  numbers.  Exact integers of any size, and inexact numbers that
+   ;;  are doubles; what is not here is the exact fractions, numerator
+   ;;  and denominator (#104), and sqrt and the rest of (scheme inexact)
+   ;;  (#105).
    = < > <= >= + - * / sum
    number? integer? exact-integer?
+   exact? inexact? exact inexact
    zero? positive? negative? even? odd?
    abs min max gcd lcm expt square
    number->string string->number

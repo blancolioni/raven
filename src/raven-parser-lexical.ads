@@ -30,8 +30,10 @@ private package Raven.Parser.Lexical is
 
    function Tok_Integer_Value (This : in out Instance'Class)
                                return Long_Long_Integer;
+   --  A double, which is what an inexact number is (#103).
+
    function Tok_Float_Value (This : in out Instance'Class)
-                             return Float;
+                             return Long_Float;
 
    --  Where what the lexer has to say goes.  It wrote to the terminal
    --  whatever the host asked for, because it had no way of reaching

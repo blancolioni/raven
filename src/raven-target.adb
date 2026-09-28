@@ -97,8 +97,8 @@ package body Raven.Target is
          return "#eof";
       elsif Is_Instruction (X) then
          return To_Instruction (X)'Image;
-      elsif Is_Bignum (X) then
-         return This.Show_Bignum (X);
+      elsif Is_Bignum (X) or else Is_Float (X) or else Is_Flonum (X) then
+         return This.Show_Number (X);
       elsif Is_Integer (X) then
          declare
             I   : constant Integer := To_Integer (X);
@@ -126,14 +126,6 @@ package body Raven.Target is
             else
                return "#\" & Bare;
             end if;
-         end;
-      elsif Is_Float (X) then
-         declare
-            Img : constant String := To_Float (X)'Image;
-         begin
-            return (if Img (Img'First) = ' '
-                    then Img (Img'First + 1 .. Img'Last)
-                    else Img);
          end;
       elsif Is_Symbol (X) then
          return This.To_String (Raven.Objects.To_Symbol (X));

@@ -1,3 +1,4 @@
+with Raven.Numbers;
 with Raven.Objects;
 with Raven.Strings;
 with Raven.Scheme.Numerics;
@@ -139,20 +140,16 @@ package body Raven.Scheme is
    ----------------
 
    procedure Is_Integer (VM : Raven_VM) is
-      use Raven.Objects;
       X : constant Object := VM.Get_Slot (1);
    begin
       --  R7RS asks integer? of the number and not of how it is held,
-      --  so a float that is a whole number is one.  Nothing here makes
-      --  such a float -- there is no float arithmetic -- but the
-      --  reader reads one, so the question can be asked.
+      --  so an inexact number that is a whole number is one: 2.0 is an
+      --  integer, and is not an exact one.
 
       VM.Set_Slot
         (1,
-         Is_Integer (X)
-           or else Is_Bignum (X)
-           or else (Is_Float (X)
-             and then To_Float (X) = Float'Truncation (To_Float (X))));
+         Raven.Numbers.Is_Arithmetic (X)
+           and then Raven.Numbers.Is_Whole (Raven.Numbers.Decode (VM, X)));
    end Is_Integer;
 
    ---------------

@@ -4,7 +4,7 @@ with Raven.Strings;
 
 package body Raven.Scheme.Numerics is
 
-   --  The five arithmetic primitives, and everything the library's
+   --  The arithmetic primitives, and everything the library's
    --  arithmetic is written on.  Each does three things and nothing
    --  else: decode its operands, ask Raven.Numbers for the answer, and
    --  encode it.  What a number is and what an operation does with one
@@ -14,50 +14,51 @@ package body Raven.Scheme.Numerics is
    procedure Add (VM : Raven_VM);
    procedure Divide (VM : Raven_VM);
    procedure Leq (VM : Raven_VM);
+   procedure Multiply (VM : Raven_VM);
+   procedure Sub (VM : Raven_VM);
 
    --  = and the number half of eqv?, which were identity.  They are the
-   --  machine's now, because identity stops being equality as soon as a
+   --  machine's, because identity stops being equality as soon as a
    --  number can be boxed: two equal bignums are two objects.
 
    procedure Num_Eq (VM : Raven_VM);
    procedure Num_Eqv (VM : Raven_VM);
 
+   --  Exactness (#103): whether a number is exact, and the number as
+   --  the other kind.
+
+   procedure Is_Exact (VM : Raven_VM);
+   procedure To_Exact (VM : Raven_VM);
+   procedure To_Inexact (VM : Raven_VM);
+
+   --  floor, ceiling, truncate and round, by the Rounding in slot 2's
+   --  position.  They were the identity, which is right for an integer
+   --  and wrong for a float.
+
+   procedure Round (VM : Raven_VM);
+
    --  A number written out and read back, in radix 2, 8, 10 or 16.
-   --  There were neither, so a bignum -- or any number -- could not be
-   --  turned into text a program could hold.
 
    procedure Number_To_String (VM : Raven_VM);
    procedure String_To_Number (VM : Raven_VM);
 
-   --  The radix in this slot: 10 when none was given, and an error
-   --  naming the procedure for one R7RS does not have.
-
-   function Radix_In
-     (VM   : Raven_VM;
-      Name : String;
-      Slot : Slot_Index)
-      return Raven.Numbers.Radix;
-
-   --  A decimal with a point or an exponent, as a float, or False in
-   --  Valid.  Ada's own reading of one wants a digit either side of the
-   --  point and a point before the exponent, which R7RS does not.
-
-   procedure Read_Float
-     (Text  : String;
-      Value : out Float;
-      Valid : out Boolean);
-   procedure Multiply (VM : Raven_VM);
-   procedure Sub (VM : Raven_VM);
-
    --  The number in this slot, or an error naming the procedure and
-   --  what it was given.  It was a precondition on Get_Slot, so a
-   --  float or a symbol handed to + was an assertion out of the machine.
+   --  what it was given.
 
    function Operand
      (VM   : Raven_VM;
       Name : String;
       Slot : Slot_Index)
       return Raven.Numbers.Number;
+
+   --  The radix in this slot, or an error naming the procedure for one
+   --  R7RS does not have.
+
+   function Radix_In
+     (VM   : Raven_VM;
+      Name : String;
+      Slot : Slot_Index)
+      return Raven.Numbers.Radix;
 
    ---------
    -- Add --
@@ -75,11 +76,10 @@ package body Raven.Scheme.Numerics is
    -- Divide --
    ------------
 
-   --  Every number here is an integer, and R7RS asks for an exact
-   --  rational: (/ 7 2) is 7/2 and not 3.  Until there is a tower to
-   --  answer with, this divides and throws the remainder away, which is
-   --  the answer a reader of (/ 6 2) expects and not the one a reader of
-   --  (/ 7 2) does.
+   --  An exact division throws the remainder away, because R7RS asks
+   --  for 7/2 and there is no exact fraction to answer with (#104).  A
+   --  division with an inexact operand is the double it comes to:
+   --  (/ 7 2.0) is 3.5.
 
    procedure Divide (VM : Raven_VM) is
       Left  : constant Raven.Numbers.Number := Operand (VM, "/", 1);
@@ -88,6 +88,16 @@ package body Raven.Scheme.Numerics is
       VM.Set_Slot
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Divide (Left, Right)));
    end Divide;
+
+   --------------
+   -- Is_Exact --
+   --------------
+
+   procedure Is_Exact (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1, Raven.Numbers.Is_Exact (Operand (VM, "exact?", 1)));
+   end Is_Exact;
 
    ---------
    -- Leq --
@@ -126,6 +136,14 @@ package body Raven.Scheme.Numerics is
         ("raven-number->string", Number_To_String'Access, 2);
       Evaluator.Bind_Foreign_Function
         ("raven-string->number", String_To_Number'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-exact?", Is_Exact'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-exact", To_Exact'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-inexact", To_Inexact'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-round", Round'Access, 2);
    end Load_Numeric_Library;
 
    --------------
@@ -145,34 +163,10 @@ package body Raven.Scheme.Numerics is
    ------------
 
    procedure Num_Eq (VM : Raven_VM) is
-      X : constant Object := VM.Get_Slot (1);
-      Y : constant Object := VM.Get_Slot (2);
+      Left  : constant Raven.Numbers.Number := Operand (VM, "=", 1);
+      Right : constant Raven.Numbers.Number := Operand (VM, "=", 2);
    begin
-      --  A float is a number that arithmetic cannot take yet (#103), and
-      --  = on two of them was identity, which for an immediate float is
-      --  right within the type and wrong across it: (= 1.5 1.5) is #t
-      --  and (= 2.0 2) is #f.  That much is kept as it was until floats
-      --  go through the seam and = can say #t to the second.
-
-      if Raven.Objects.Is_Float (X) or else Raven.Objects.Is_Float (Y) then
-         if not Raven.Objects.Is_Number (X) then
-            raise Constraint_Error with
-              "=: not a number: " & Encode (VM.Display (X));
-         elsif not Raven.Objects.Is_Number (Y) then
-            raise Constraint_Error with
-              "=: not a number: " & Encode (VM.Display (Y));
-         end if;
-
-         VM.Set_Slot (1, Boolean'(X = Y));
-         return;
-      end if;
-
-      declare
-         Left  : constant Raven.Numbers.Number := Operand (VM, "=", 1);
-         Right : constant Raven.Numbers.Number := Operand (VM, "=", 2);
-      begin
-         VM.Set_Slot (1, Raven.Numbers.Equal (Left, Right));
-      end;
+      VM.Set_Slot (1, Raven.Numbers.Equal (Left, Right));
    end Num_Eq;
 
    -------------
@@ -180,24 +174,16 @@ package body Raven.Scheme.Numerics is
    -------------
 
    --  Two numbers, as eqv? asks about them.  Anything else is eq?'s
-   --  question, and the library asks it there; this is only reached with
-   --  two numbers.  A float is compared as the word it is, which for an
-   --  immediate float is what eqv? means.
+   --  question, and the library asks it there; this is only reached
+   --  with two numbers.
 
    procedure Num_Eqv (VM : Raven_VM) is
-      X : constant Object := VM.Get_Slot (1);
-      Y : constant Object := VM.Get_Slot (2);
    begin
-      if Raven.Numbers.Is_Arithmetic (X)
-        and then Raven.Numbers.Is_Arithmetic (Y)
-      then
-         VM.Set_Slot
-           (1,
-            Raven.Numbers.Eqv
-              (Raven.Numbers.Decode (VM, X), Raven.Numbers.Decode (VM, Y)));
-      else
-         VM.Set_Slot (1, Boolean'(X = Y));
-      end if;
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Eqv
+           (Raven.Numbers.Decode (VM, VM.Get_Slot (1)),
+            Raven.Numbers.Decode (VM, VM.Get_Slot (2))));
    end Num_Eqv;
 
    ----------------------
@@ -205,23 +191,17 @@ package body Raven.Scheme.Numerics is
    ----------------------
 
    procedure Number_To_String (VM : Raven_VM) is
-      X    : constant Object := VM.Get_Slot (1);
+      N    : constant Raven.Numbers.Number :=
+               Operand (VM, "number->string", 1);
       Base : constant Raven.Numbers.Radix :=
                Radix_In (VM, "number->string", 2);
    begin
-      if Raven.Numbers.Is_Arithmetic (X) then
-         Raven.Strings.Write_String
-           (VM, 1, Raven.Numbers.Image (Raven.Numbers.Decode (VM, X), Base));
-      elsif Raven.Objects.Is_Float (X) then
-         if Base /= 10 then
-            raise Constraint_Error with
-              "number->string: a float is written in radix 10 only";
-         end if;
-         Raven.Strings.Write_String (VM, 1, Encode (VM.Display (X)));
-      else
+      if Base /= 10 and then not Raven.Numbers.Is_Exact (N) then
          raise Constraint_Error with
-           "number->string: not a number: " & Encode (VM.Display (X));
+           "number->string: an inexact number is written in radix 10 only";
       end if;
+
+      Raven.Strings.Write_String (VM, 1, Raven.Numbers.Image (N, Base));
    end Number_To_String;
 
    -------------
@@ -236,14 +216,7 @@ package body Raven.Scheme.Numerics is
    is
       X : constant Object := VM.Get_Slot (Slot);
    begin
-      --  A float is a number, and saying otherwise would be wrong; it
-      --  is one arithmetic cannot take yet (#103).
-
-      if Raven.Objects.Is_Float (X) then
-         raise Constraint_Error with
-           Name & ": raven has no arithmetic on floats yet: "
-           & Encode (VM.Display (X));
-      elsif not Raven.Numbers.Is_Arithmetic (X) then
+      if not Raven.Numbers.Is_Arithmetic (X) then
          raise Constraint_Error with
            Name & ": not a number: " & Encode (VM.Display (X));
       end if;
@@ -279,88 +252,20 @@ package body Raven.Scheme.Numerics is
       end;
    end Radix_In;
 
-   ----------------
-   -- Read_Float --
-   ----------------
+   -----------
+   -- Round --
+   -----------
 
-   procedure Read_Float
-     (Text  : String;
-      Value : out Float;
-      Valid : out Boolean)
-   is
-      Sign     : constant String :=
-                   (if Text'Length > 0
-                      and then (Text (Text'First) = '-'
-                                or else Text (Text'First) = '+')
-                    then Text (Text'First .. Text'First)
-                    else "");
-      Rest     : constant String :=
-                   Text (Text'First + Sign'Length .. Text'Last);
-      Exponent   : Natural := 0;
-      Seen_Digit : Boolean := False;
-      Point      : Boolean := False;
+   procedure Round (VM : Raven_VM) is
+      N   : constant Raven.Numbers.Number := Operand (VM, "rounding", 1);
+      How : constant Integer := VM.Get_Slot (2);
    begin
-      Value := 0.0;
-      Valid := False;
-
-      --  Digits, at most one point, and an exponent after them; nothing
-      --  else.  Which is decided before Ada is asked, so that what it
-      --  would take and R7RS would not is not taken either.
-
-      for I in Rest'Range loop
-         case Rest (I) is
-            when '0' .. '9' =>
-               Seen_Digit := True;
-            when '.' =>
-               if Point or else Exponent /= 0 then
-                  return;
-               end if;
-               Point := True;
-            when 'e' | 'E' =>
-               if Exponent /= 0
-                 or else not Seen_Digit
-                 or else I = Rest'Last
-               then
-                  return;
-               end if;
-               Exponent := I;
-            when '+' | '-' =>
-               if Exponent = 0 or else I /= Exponent + 1 then
-                  return;
-               end if;
-            when others =>
-               return;
-         end case;
-      end loop;
-
-      if not Seen_Digit or else not (Point or else Exponent /= 0) then
-         return;
-      end if;
-
-      declare
-         Last     : constant Natural :=
-                      (if Exponent = 0 then Rest'Last else Exponent - 1);
-         Mantissa : constant String := Rest (Rest'First .. Last);
-         Whole    : constant String :=
-                      (if Mantissa'Length = 0
-                         or else Mantissa (Mantissa'First) = '.'
-                       then "0" & Mantissa
-                       else Mantissa);
-         Pointed  : constant String :=
-                      (if not Point then Whole & ".0"
-                       elsif Whole (Whole'Last) = '.' then Whole & "0"
-                       else Whole);
-         Power    : constant String :=
-                      (if Exponent = 0 then ""
-                       else "E" & Rest (Exponent + 1 .. Rest'Last));
-      begin
-         Value := Float'Value (Sign & Pointed & Power);
-         Valid := Raven.Objects.Is_Representable (Value);
-      exception
-         when Constraint_Error =>
-            Valid := False;
-      end;
-   end Read_Float;
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM,
+            Raven.Numbers.Rounded (N, Raven.Numbers.Rounding'Val (How))));
+   end Round;
 
    ----------------------
    -- String_To_Number --
@@ -386,24 +291,15 @@ package body Raven.Scheme.Numerics is
       begin
          Raven.Numbers.Read (Text, Base, N, Valid);
 
+         if not Valid and then Base = 10 then
+            Raven.Numbers.Read_Decimal (Text, N, Valid);
+         end if;
+
          if Valid then
             VM.Set_Slot (1, Raven.Numbers.Encode (VM, N));
-            return;
+         else
+            VM.Set_Slot (1, False);
          end if;
-
-         if Base = 10 then
-            declare
-               Value : Float;
-            begin
-               Read_Float (Text, Value, Valid);
-               if Valid then
-                  VM.Set_Slot (1, Raven.Objects.To_Object (Value));
-                  return;
-               end if;
-            end;
-         end if;
-
-         VM.Set_Slot (1, False);
       end;
    end String_To_Number;
 
@@ -418,5 +314,29 @@ package body Raven.Scheme.Numerics is
       VM.Set_Slot
         (1, Raven.Numbers.Encode (VM, Raven.Numbers.Subtract (Left, Right)));
    end Sub;
+
+   --------------
+   -- To_Exact --
+   --------------
+
+   procedure To_Exact (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM, Raven.Numbers.To_Exact (Operand (VM, "exact", 1))));
+   end To_Exact;
+
+   ----------------
+   -- To_Inexact --
+   ----------------
+
+   procedure To_Inexact (VM : Raven_VM) is
+   begin
+      VM.Set_Slot
+        (1,
+         Raven.Numbers.Encode
+           (VM, Raven.Numbers.To_Inexact (Operand (VM, "inexact", 1))));
+   end To_Inexact;
 
 end Raven.Scheme.Numerics;

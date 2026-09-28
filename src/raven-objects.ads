@@ -72,6 +72,24 @@ private package Raven.Objects is
      Post => Is_Float (To_Object'Result)
      and then To_Float (To_Object'Result) = F;
 
+   --  An inexact number is a double (#103): arithmetic on one is done in
+   --  Long_Float, and the answer is kept as the immediate float above
+   --  when that holds it exactly -- 1.5, 0.25, 1000.0 -- and otherwise
+   --  as a boxed double in the heap.  Which is #100's rule for numbers,
+   --  applied to these: the smallest representation that holds it.
+   --
+   --  A boxed double is a block laid out as a bignum's is, a header and
+   --  then the eight bytes of the double, packed.
+
+   function Fits_Immediate (X : Long_Float) return Boolean;
+
+   function Is_Flonum (X : Object) return Boolean;
+   function To_Flonum (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Flonum (To_Flonum'Result)
+     and then Has_Address (To_Flonum'Result)
+     and then Get_Address (To_Flonum'Result) = Address;
+
    --  A character is a code point, and Unicode's last one is
    --  16#10FFFF#, which wants twenty one bits and has twenty four.
    --  Ada's Wide_Wide_Character goes to 2**31 - 1, which is not a code
@@ -318,6 +336,7 @@ private
    Bytevector_Tag  : constant := Escape_Tag + 8 * Extended_Step;
    Bytes_Tag       : constant := Escape_Tag + 9 * Extended_Step;
    Bignum_Tag      : constant := Escape_Tag + 10 * Extended_Step;
+   Flonum_Tag      : constant := Escape_Tag + 11 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -391,7 +410,9 @@ private
    --  both and set for the pair tag and the escape.
 
    function Is_Number (X : Object) return Boolean
-   is ((X and 2#10#) = 0 or else Full_Tag (X) = Bignum_Tag);
+   is ((X and 2#10#) = 0
+       or else Full_Tag (X) = Bignum_Tag
+       or else Full_Tag (X) = Flonum_Tag);
 
    function Is_Integer (X : Object) return Boolean
    is (Tag (X) = Integer_Tag);
@@ -449,7 +470,8 @@ private
        or else Full_Tag (X) = Closure_Tag
        or else Full_Tag (X) = Vector_Tag
        or else Full_Tag (X) = Bytevector_Tag
-       or else Full_Tag (X) = Bignum_Tag);
+       or else Full_Tag (X) = Bignum_Tag
+       or else Full_Tag (X) = Flonum_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -479,6 +501,12 @@ private
 
    function Is_Bignum (X : Object) return Boolean
    is (Full_Tag (X) = Bignum_Tag);
+
+   function Is_Flonum (X : Object) return Boolean
+   is (Full_Tag (X) = Flonum_Tag);
+
+   function To_Flonum (Address : Address_Type) return Object
+   is (Extend (Object (Address), Flonum_Tag));
 
    function To_Bignum (Address : Address_Type) return Object
    is (Extend (Object (Address), Bignum_Tag));

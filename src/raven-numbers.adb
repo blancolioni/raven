@@ -1,3 +1,6 @@
+with Ada.Long_Float_Text_IO;
+with Ada.Strings.Fixed;
+
 package body Raven.Numbers is
 
    package Wide_Conversions is
@@ -5,33 +8,76 @@ package body Raven.Numbers is
 
    Byte_Base : constant Big_Integer := To_Big_Integer (256);
 
-   --  The Number an integer is, made normal: a fixnum when it fits, and
-   --  a bignum when it does not.  Every operation's answer goes through
-   --  one of these two, which is where normalisation is kept.
+   --  The Number an exact integer is, made normal: a fixnum when it
+   --  fits, and a bignum when it does not.
 
    function Normal (Wide : Long_Long_Integer) return Number;
    function Normal (Big : Big_Integer) return Number;
 
-   --  Either kind as a Big_Integer, for an operation one of whose
-   --  operands is a bignum.
+   --  An inexact answer, refused if it is past what a double holds.
+   --  Ada gives an infinity or raises there depending on the checks it
+   --  was built with, and R7RS's +inf.0 is not something raven has.
 
-   function To_Big (N : Number) return Big_Integer;
+   function Checked_Inexact (Value : Long_Float) return Number;
+
+   --  Left Op Right as doubles.  The operands are made doubles before
+   --  anything is done with them, so a bignum too large for one says so
+   --  itself; what goes wrong after that is the answer overflowing.
+
+   function Double_Op
+     (Left  : Number;
+      Op    : Character;
+      Right : Number)
+      return Number;
+
+   --  An exact number as a Big_Integer, and any number as a double, for
+   --  an operation whose operands are not both fixnums.
+
+   function To_Big (N : Number) return Big_Integer
+     with Pre => N.Kind /= Flonum;
+
+   function To_Double (N : Number) return Long_Float;
 
    function Both_Fixnums (Left, Right : Number) return Boolean
    is (Left.Kind = Fixnum and then Right.Kind = Fixnum);
 
+   function Either_Inexact (Left, Right : Number) return Boolean
+   is (Left.Kind = Flonum or else Right.Kind = Flonum);
+
    function Widened (N : Number) return Long_Long_Integer
    is (Long_Long_Integer (N.Value))
      with Pre => N.Kind = Fixnum;
+
+   --  The shortest decimal that reads back as Value, written as R7RS
+   --  writes a number: a point always, and an exponent only when the
+   --  number is far from one.
+
+   function Double_Image (Value : Long_Float) return String;
 
    ---------
    -- Add --
    ---------
 
    function Add (Left, Right : Number) return Number
-   is (if Both_Fixnums (Left, Right)
+   is (if Either_Inexact (Left, Right)
+       then Double_Op (Left, '+', Right)
+       elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) + Widened (Right))
        else Normal (To_Big (Left) + To_Big (Right)));
+
+   ---------------------
+   -- Checked_Inexact --
+   ---------------------
+
+   function Checked_Inexact (Value : Long_Float) return Number is
+   begin
+      if not Value'Valid or else abs Value > Long_Float'Last then
+         raise Constraint_Error with
+           "inexact overflow: past what a double holds";
+      end if;
+
+      return (Kind => Flonum, Inexact => Value);
+   end Checked_Inexact;
 
    ------------
    -- Decode --
@@ -45,6 +91,11 @@ package body Raven.Numbers is
    begin
       if Raven.Objects.Is_Integer (X) then
          return (Kind => Fixnum, Value => Raven.Objects.To_Integer (X));
+      elsif Raven.Objects.Is_Float (X) then
+         return (Kind    => Flonum,
+                 Inexact => Long_Float (Raven.Objects.To_Float (X)));
+      elsif Raven.Objects.Is_Flonum (X) then
+         return (Kind => Flonum, Inexact => VM.Flonum_Value (X));
       end if;
 
       --  Most significant byte first, so each is one multiply and one
@@ -71,19 +122,125 @@ package body Raven.Numbers is
 
    function Divide (Left, Right : Number) return Number is
    begin
-      --  A bignum is never nought, so a zero divisor is a fixnum.
-
-      if Right.Kind = Fixnum and then Right.Value = 0 then
+      if Equal (Right, (Kind => Fixnum, Value => 0)) then
          raise Constraint_Error with "divide by zero";
       end if;
 
       --  The one fixnum division that does not fit, the smallest by -1,
       --  is one past the largest and is a bignum like any other.
 
-      return (if Both_Fixnums (Left, Right)
+      return (if Either_Inexact (Left, Right)
+              then Double_Op (Left, '/', Right)
+              elsif Both_Fixnums (Left, Right)
               then Normal (Widened (Left) / Widened (Right))
               else Normal (To_Big (Left) / To_Big (Right)));
    end Divide;
+
+   ------------------
+   -- Double_Image --
+   ------------------
+
+   function Double_Image (Value : Long_Float) return String is
+      use Ada.Strings.Fixed;
+
+      Buffer : String (1 .. 40);
+      Last   : Natural;
+   begin
+      if Value = 0.0 then
+         return (if Long_Float'Copy_Sign (1.0, Value) < 0.0
+                 then "-0.0" else "0.0");
+      end if;
+
+      --  The fewest significant digits that read back as the same
+      --  double.  Seventeen always do.
+
+      for Significant in 1 .. 17 loop
+         Ada.Long_Float_Text_IO.Put
+           (Buffer, Value, Aft => Significant - 1, Exp => 4);
+         exit when Long_Float'Value (Buffer) = Value;
+      end loop;
+
+      --  Buffer is now d.ddddE+eeee, with a sign.  Taken apart into the
+      --  sign, the digits without the point, and where the point is.
+
+      declare
+         Text     : constant String := Trim (Buffer, Ada.Strings.Both);
+         E        : constant Natural := Index (Text, "E");
+         Negative : constant Boolean := Text (Text'First) = '-';
+         Mantissa : constant String :=
+                      Text ((if Negative then Text'First + 1 else Text'First)
+                            .. E - 1);
+         Power    : constant Integer :=
+                      Integer'Value (Text (E + 1 .. Text'Last));
+         Figures  : String (1 .. Mantissa'Length);
+         Count    : Natural := 0;
+         Sign     : constant String := (if Negative then "-" else "");
+      begin
+         for Ch of Mantissa loop
+            if Ch /= '.' then
+               Count := Count + 1;
+               Figures (Count) := Ch;
+            end if;
+         end loop;
+
+         Last := Count;
+         while Last > 1 and then Figures (Last) = '0' loop
+            Last := Last - 1;
+         end loop;
+
+         declare
+            F : constant String := Figures (1 .. Last);
+         begin
+            --  Plain when it is near one, as a person writes 1500.0 and
+            --  0.001; with an exponent otherwise, as 1e+30 is.
+
+            if Power in 0 .. 20 then
+               if F'Length <= Power + 1 then
+                  return Sign & F & (Power + 1 - F'Length) * '0' & ".0";
+               else
+                  return Sign & F (1 .. Power + 1) & "."
+                    & F (Power + 2 .. F'Last);
+               end if;
+            elsif Power in -7 .. -1 then
+               return Sign & "0." & (-Power - 1) * '0' & F;
+            else
+               declare
+                  P : constant String :=
+                        Trim (Integer'Image (Power), Ada.Strings.Left);
+               begin
+                  return Sign & F (1 .. 1)
+                    & (if F'Length > 1 then "." & F (2 .. F'Last) else "")
+                    & "e" & (if Power > 0 then "+" & P else P);
+               end;
+            end if;
+         end;
+      end;
+   end Double_Image;
+
+   ---------------
+   -- Double_Op --
+   ---------------
+
+   function Double_Op
+     (Left  : Number;
+      Op    : Character;
+      Right : Number)
+      return Number
+   is
+      L : constant Long_Float := To_Double (Left);
+      R : constant Long_Float := To_Double (Right);
+   begin
+      return Checked_Inexact
+        (case Op is
+            when '+'    => L + R,
+            when '-'    => L - R,
+            when '*'    => L * R,
+            when others => L / R);
+   exception
+      when Constraint_Error =>
+         raise Constraint_Error with
+           "inexact overflow: past what a double holds";
+   end Double_Op;
 
    ------------
    -- Encode --
@@ -95,9 +252,25 @@ package body Raven.Numbers is
       return Object
    is
    begin
-      if N.Kind = Fixnum then
-         return Raven.Objects.To_Object (N.Value);
-      end if;
+      case N.Kind is
+         when Fixnum =>
+            return Raven.Objects.To_Object (N.Value);
+
+         when Flonum =>
+
+            --  The immediate when it holds the double exactly, which is
+            --  most of the doubles a program writes, and a box when it
+            --  does not.
+
+            if Raven.Objects.Fits_Immediate (N.Inexact) then
+               return Raven.Objects.To_Object (Float (N.Inexact));
+            else
+               return VM.New_Flonum (N.Inexact);
+            end if;
+
+         when Bignum =>
+            null;
+      end case;
 
       --  The magnitude a byte at a time, least significant first, which
       --  is the order the block keeps them in.
@@ -137,10 +310,14 @@ package body Raven.Numbers is
    -- Equal --
    -----------
 
-   --  Normal numbers, so a fixnum and a bignum are never equal.
+   --  An exact number and an inexact one are compared as doubles, which
+   --  is what (= 2 2.0) asks.  Otherwise normal numbers of different
+   --  representations are never equal.
 
    function Equal (Left, Right : Number) return Boolean
-   is (if Both_Fixnums (Left, Right)
+   is (if Either_Inexact (Left, Right)
+       then To_Double (Left) = To_Double (Right)
+       elsif Both_Fixnums (Left, Right)
        then Left.Value = Right.Value
        elsif Left.Kind = Right.Kind
        then Left.Big = Right.Big
@@ -150,11 +327,8 @@ package body Raven.Numbers is
    -- Eqv --
    ---------
 
-   --  Every integer is exact, so this is Equal until there is an
-   --  inexact number to tell it from.
-
    function Eqv (Left, Right : Number) return Boolean
-   is (Equal (Left, Right));
+   is (Is_Exact (Left) = Is_Exact (Right) and then Equal (Left, Right));
 
    -----------
    -- Image --
@@ -167,7 +341,7 @@ package body Raven.Numbers is
    is
       Digits_Of : constant String := "0123456789abcdef";
       Big_Base  : constant Big_Integer := To_Big_Integer (Base);
-      Magnitude : Big_Integer := abs To_Big (N);
+      Magnitude : Big_Integer;
 
       function Rest return String;
 
@@ -202,6 +376,12 @@ package body Raven.Numbers is
       end Rest;
 
    begin
+      if N.Kind = Flonum then
+         return Double_Image (N.Inexact);
+      end if;
+
+      Magnitude := abs To_Big (N);
+
       if Magnitude = To_Big_Integer (0) then
          return "0";
       end if;
@@ -209,22 +389,43 @@ package body Raven.Numbers is
       return (if To_Big (N) < To_Big_Integer (0) then "-" else "") & Rest;
    end Image;
 
+   ----------------
+   -- Inexact_Of --
+   ----------------
+
+   function Inexact_Of (Value : Long_Float) return Number
+   is (Checked_Inexact (Value));
+
    -------------------
    -- Is_Arithmetic --
    -------------------
 
-   --  A float is a number and not yet something arithmetic can do
-   --  anything with (#103), so it is not here.
-
    function Is_Arithmetic (X : Object) return Boolean
-   is (Raven.Objects.Is_Integer (X) or else Raven.Objects.Is_Bignum (X));
+   is (Raven.Objects.Is_Number (X));
+
+   --------------
+   -- Is_Exact --
+   --------------
+
+   function Is_Exact (N : Number) return Boolean
+   is (N.Kind /= Flonum);
+
+   --------------
+   -- Is_Whole --
+   --------------
+
+   function Is_Whole (N : Number) return Boolean
+   is (N.Kind /= Flonum
+       or else N.Inexact = Long_Float'Truncation (N.Inexact));
 
    -------------------
    -- Less_Or_Equal --
    -------------------
 
    function Less_Or_Equal (Left, Right : Number) return Boolean
-   is (if Both_Fixnums (Left, Right)
+   is (if Either_Inexact (Left, Right)
+       then To_Double (Left) <= To_Double (Right)
+       elsif Both_Fixnums (Left, Right)
        then Left.Value <= Right.Value
        else To_Big (Left) <= To_Big (Right));
 
@@ -233,7 +434,9 @@ package body Raven.Numbers is
    --------------
 
    function Multiply (Left, Right : Number) return Number
-   is (if Both_Fixnums (Left, Right)
+   is (if Either_Inexact (Left, Right)
+       then Double_Op (Left, '*', Right)
+       elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) * Widened (Right))
        else Normal (To_Big (Left) * To_Big (Right)));
 
@@ -344,12 +547,118 @@ package body Raven.Numbers is
       end if;
    end Read;
 
+   ------------------
+   -- Read_Decimal --
+   ------------------
+
+   procedure Read_Decimal
+     (Text  : String;
+      N     : out Number;
+      Valid : out Boolean)
+   is
+      Sign       : constant String :=
+                     (if Text'Length > 0
+                        and then (Text (Text'First) = '-'
+                                  or else Text (Text'First) = '+')
+                      then Text (Text'First .. Text'First)
+                      else "");
+      Rest       : constant String :=
+                     Text (Text'First + Sign'Length .. Text'Last);
+      Exponent   : Natural := 0;
+      Seen_Digit : Boolean := False;
+      Point      : Boolean := False;
+   begin
+      N := (Kind => Fixnum, Value => 0);
+      Valid := False;
+
+      --  Digits, at most one point, and an exponent after them; nothing
+      --  else.  Which is decided before Ada is asked, so that what it
+      --  would take and R7RS would not is not taken either.
+
+      for I in Rest'Range loop
+         case Rest (I) is
+            when '0' .. '9' =>
+               Seen_Digit := True;
+            when '.' =>
+               if Point or else Exponent /= 0 then
+                  return;
+               end if;
+               Point := True;
+            when 'e' | 'E' =>
+               if Exponent /= 0
+                 or else not Seen_Digit
+                 or else I = Rest'Last
+               then
+                  return;
+               end if;
+               Exponent := I;
+            when '+' | '-' =>
+               if Exponent = 0 or else I /= Exponent + 1 then
+                  return;
+               end if;
+            when others =>
+               return;
+         end case;
+      end loop;
+
+      if not Seen_Digit or else not (Point or else Exponent /= 0) then
+         return;
+      end if;
+
+      declare
+         Last     : constant Natural :=
+                      (if Exponent = 0 then Rest'Last else Exponent - 1);
+         Mantissa : constant String := Rest (Rest'First .. Last);
+         Whole    : constant String :=
+                      (if Mantissa'Length = 0
+                         or else Mantissa (Mantissa'First) = '.'
+                       then "0" & Mantissa
+                       else Mantissa);
+         Pointed  : constant String :=
+                      (if not Point then Whole & ".0"
+                       elsif Whole (Whole'Last) = '.' then Whole & "0"
+                       else Whole);
+         Power    : constant String :=
+                      (if Exponent = 0 then ""
+                       else "E" & Rest (Exponent + 1 .. Rest'Last));
+      begin
+         N := Checked_Inexact (Long_Float'Value (Sign & Pointed & Power));
+         Valid := True;
+      exception
+         when Constraint_Error =>
+            N := (Kind => Fixnum, Value => 0);
+            Valid := False;
+      end;
+   end Read_Decimal;
+
+   -------------
+   -- Rounded --
+   -------------
+
+   function Rounded (N : Number; How : Rounding) return Number is
+   begin
+      if Is_Exact (N) then
+         return N;
+      end if;
+
+      return (Kind    => Flonum,
+              Inexact =>
+                (case How is
+                    when Floor    => Long_Float'Floor (N.Inexact),
+                    when Ceiling  => Long_Float'Ceiling (N.Inexact),
+                    when Truncate => Long_Float'Truncation (N.Inexact),
+                    when Round    =>
+                      Long_Float'Unbiased_Rounding (N.Inexact)));
+   end Rounded;
+
    --------------
    -- Subtract --
    --------------
 
    function Subtract (Left, Right : Number) return Number
-   is (if Both_Fixnums (Left, Right)
+   is (if Either_Inexact (Left, Right)
+       then Double_Op (Left, '-', Right)
+       elsif Both_Fixnums (Left, Right)
        then Normal (Widened (Left) - Widened (Right))
        else Normal (To_Big (Left) - To_Big (Right)));
 
@@ -359,5 +668,76 @@ package body Raven.Numbers is
 
    function To_Big (N : Number) return Big_Integer
    is (if N.Kind = Fixnum then To_Big_Integer (N.Value) else N.Big);
+
+   ---------------
+   -- To_Double --
+   ---------------
+
+   --  A bignum past what a double holds has no double, and says so.
+
+   function To_Double (N : Number) return Long_Float is
+   begin
+      case N.Kind is
+         when Fixnum =>
+            return Long_Float (N.Value);
+         when Flonum =>
+            return N.Inexact;
+         when Bignum =>
+            return Long_Float'Value (To_String (N.Big));
+      end case;
+   exception
+      when Constraint_Error =>
+         raise Constraint_Error with
+           "inexact overflow: " & To_String (N.Big)
+           & " is past what a double holds";
+   end To_Double;
+
+   --------------
+   -- To_Exact --
+   --------------
+
+   function To_Exact (N : Number) return Number is
+   begin
+      if Is_Exact (N) then
+         return N;
+      end if;
+
+      if not Is_Whole (N) then
+         raise Constraint_Error with
+           "exact: " & Double_Image (N.Inexact)
+           & " is not a whole number, and there are no exact fractions yet";
+      end if;
+
+      --  A whole double is its significand times a power of two, and
+      --  both are exact.  Below 2**62 it fits in a Long_Long_Integer and
+      --  the conversion is direct.
+
+      if abs N.Inexact < 2.0 ** 62 then
+         return Normal (Long_Long_Integer (N.Inexact));
+      end if;
+
+      declare
+         Fraction    : constant Long_Float :=
+                         Long_Float'Fraction (N.Inexact);
+         Significand : constant Long_Long_Integer :=
+                         Long_Long_Integer
+                           (Long_Float'Scaling
+                              (Fraction, Long_Float'Machine_Mantissa));
+         Power       : constant Natural :=
+                         Long_Float'Exponent (N.Inexact)
+                         - Long_Float'Machine_Mantissa;
+      begin
+         return Normal
+           (Wide_Conversions.To_Big_Integer (Significand)
+            * To_Big_Integer (2) ** Power);
+      end;
+   end To_Exact;
+
+   ----------------
+   -- To_Inexact --
+   ----------------
+
+   function To_Inexact (N : Number) return Number
+   is (if Is_Exact (N) then Checked_Inexact (To_Double (N)) else N);
 
 end Raven.Numbers;

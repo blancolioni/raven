@@ -62,6 +62,12 @@ package body Raven.Features is
 
          Result.Append ("exact-closed");
 
+         --  An inexact number is a double (#103), kept as the immediate
+         --  float when that holds it exactly and boxed when it does not,
+         --  and worked on as a double either way.
+
+         Result.Append ("ieee-float");
+
          Result.Append_Vector (OS_Features);
          Result.Append_Vector (Arch_Features);
       end return;

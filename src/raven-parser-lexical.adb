@@ -722,7 +722,7 @@ package body Raven.Parser.Lexical is
 
    function Tok_Float_Value
      (This : in out Instance'Class)
-      return Float
+      return Long_Float
    is
       Text : constant Wide_Wide_String :=
                To_Wide_Wide_String (This.Current_Stream.Tok_Text);
@@ -778,7 +778,7 @@ package body Raven.Parser.Lexical is
          end;
       end loop;
 
-      return Float'Wide_Wide_Value (Norm (1 .. Last));
+      return Long_Float'Wide_Wide_Value (Norm (1 .. Last));
    end Tok_Float_Value;
 
    -----------------------

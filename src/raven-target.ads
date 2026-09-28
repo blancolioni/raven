@@ -288,13 +288,25 @@ private package Raven.Target is
                   Readable : Boolean := True)
                   return String;
 
-   --  A bignum as it is written, which is the machine's to work out:
-   --  its digits are in the heap, and reading them is Raven.Numbers'.
+   --  A number that is not a fixnum as it is written, which is the
+   --  machine's to work out: a bignum's digits and a boxed double are in
+   --  the heap, and the shortest decimal that reads back as a double is
+   --  Raven.Numbers' to find.
 
-   function Show_Bignum
+   function Show_Number
      (This : Abstraction;
       X    : Object)
       return String
+   is abstract;
+
+   --  An inexact number the reader has read, as the object it is: the
+   --  immediate float when that holds it exactly, and a boxed double,
+   --  which the machine makes, when it does not.
+
+   function Read_Inexact
+     (This  : in out Abstraction;
+      Value : Long_Float)
+      return Object
    is abstract;
 
    --  The exact integer this literal is, when it is too large to be a

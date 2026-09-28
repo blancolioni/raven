@@ -141,13 +141,23 @@ package body Raven.Tests.Numbers is
                   "-1208925819614629174706175");
 
       --  What arithmetic is given that it cannot take is refused by the
-      --  primitive that was asked, and a float is said to be a number,
-      --  which it is, that there is no arithmetic on yet.  Both were a
-      --  failed precondition on Get_Slot, out of the machine.
+      --  primitive that was asked.  It was a failed precondition on
+      --  Get_Slot, out of the machine.
 
       Test_Message (VM, "(+ 1 'a)", "+: not a number: a");
+      Test_Shown (VM, "(* 1.5 2)", "3.0");
+
+      --  What exact cannot answer yet, and a double past a double.
+
       Test_Message
-        (VM, "(* 1.5 2)", "*: raven has no arithmetic on floats yet: 1.5");
+        (VM, "(exact 1.5)",
+         "exact: 1.5 is not a whole number, and there are no exact"
+         & " fractions yet");
+      Test_Message
+        (VM, "(* 1e300 1e300)",
+         "inexact overflow: past what a double holds");
+      Test_Message (VM, "(/ 1.5 0)", "divide by zero");
+      Test_Message (VM, "(/ 1.5 0.0)", "divide by zero");
       Test_Message (VM, "(< 1 'a)", "comparison: not a number: a");
       Test_Message (VM, "(= 1 'a)", "=: not a number: a");
       Test_Message (VM, "(= 1.5 'a)", "=: not a number: a");

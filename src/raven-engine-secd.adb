@@ -366,11 +366,17 @@ package body Raven.Engine.SECD is
       return Foreign_Value_Instance'Class
    is (This.Memory.To_Foreign_Value (Value));
 
-   overriding function Show_Bignum
+   overriding function Show_Number
      (This : Instance;
       X    : Object)
       return String
    is (Raven.Numbers.Image (Raven.Numbers.Decode (This.VM, X)));
+
+   overriding function Read_Inexact
+     (This  : in out Instance;
+      Value : Long_Float)
+      return Object
+   is (Raven.Numbers.Encode (This.VM, Raven.Numbers.Inexact_Of (Value)));
 
    overriding function Read_Integer
      (This : in out Instance;
