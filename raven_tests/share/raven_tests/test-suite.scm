@@ -3158,6 +3158,97 @@
 
 (test "cond-expand around a definition" 'defined probe-expanded)
 
+;;  Records (#154).  A record is a thing of its own: not a vector, a
+;;  pair or a procedure, and only its own type's predicate knows it.
+
+(define-record-type <point>
+  (make-point x y)
+  point?
+  (x point-x set-point-x!)
+  (y point-y))
+
+(define a-point (make-point 1 2))
+
+(test "a record answers its predicate" #t (point? a-point))
+(test "a number does not" #f (point? 5))
+(test "nor a vector of the same fields" #f (point? (vector <point> 1 2)))
+(test "an accessor" 1 (point-x a-point))
+(test "the other accessor" 2 (point-y a-point))
+(set-point-x! a-point 10)
+(test "a modifier" 10 (point-x a-point))
+(test "and leaves the other field alone" 2 (point-y a-point))
+(test "a record is not a vector" #f (vector? a-point))
+(test "nor a pair" #f (pair? a-point))
+(test "nor a procedure" #f (procedure? a-point))
+(test "nor its type" #f (point? <point>))
+(test "a record is itself" #t (eq? a-point a-point))
+(test "and two with the same fields are two" #f
+      (equal? (make-point 1 2) (make-point 1 2)))
+(test "a record written" "#<<point>>"
+      (let ((port (open-output-string)))
+        (write (make-point 1 2) port)
+        (get-output-string port)))
+(test "its type written" "#<record-type <point>>"
+      (let ((port (open-output-string)))
+        (write <point> port)
+        (get-output-string port)))
+
+;;  A constructor may take fewer fields than there are, and in another
+;;  order; a field it does not take can be set later.
+
+(define-record-type <node>
+  (make-node value)
+  node?
+  (next node-next set-node-next!)
+  (value node-value))
+
+(define a-node (make-node 'first))
+
+(test "a constructor of fewer fields" 'first (node-value a-node))
+(set-node-next! a-node (make-node 'second))
+(test "and the field it did not take, set" 'second
+      (node-value (node-next a-node)))
+(test "types with fields of their own are told apart" #f (point? a-node))
+
+(define-record-type <swapped> (swapped b a) swapped? (a swapped-a) (b swapped-b))
+
+(test "a constructor's fields in its own order" '(2 1)
+      (let ((s (swapped 1 2))) (list (swapped-a s) (swapped-b s))))
+
+(define-record-type <nothing> (make-nothing) nothing?)
+
+(test "a record of no fields" #t (nothing? (make-nothing)))
+(test "is told from another" #f (nothing? a-point))
+
+;;  Asking the wrong record, or giving a constructor the wrong number
+;;  of fields, is an error that says which procedure it was.
+
+(test "an accessor of the wrong record" "point-x: expected a <point>"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (point-x a-node)))
+(test "a modifier of something else" "set-point-x!: expected a <point>"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (set-point-x! 5 1)))
+(test "a constructor given too few" "make-point: expected 2 arguments"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (make-point 1)))
+
+;;  And a record survives a collection with its type and fields.
+
+(define kept-point (make-point 'kept (make-point 3 4)))
+(vector-churn 3000)
+(test "a record survives a collection" #t (point? kept-point))
+(test "with its fields" 4 (point-y (point-y kept-point)))
+(test "and its type" #t (point? (point-y kept-point)))
+
+;;  define-record-type is a definition, so it may stand in a body too.
+
+(define (local-record-field)
+  (define-record-type <local> (make-local a) local? (a local-a))
+  (local-a (make-local 5)))
+
+(test "a record type defined in a body" 5 (local-record-field))
+
 (write-string "Tests: ")
 (display num-tests)
 (write-string ", Passed: ")

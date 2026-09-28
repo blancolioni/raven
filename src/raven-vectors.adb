@@ -13,6 +13,22 @@ package body Raven.Vectors is
 
    procedure Is_Vector (VM : Raven_VM);
    procedure Make_Vector (VM : Raven_VM);
+
+   --  Records (#154), which are laid out as vectors are: the type is
+   --  element 0, and field I is element I + 1.  What a record type is
+   --  and what its fields are called is the base library's.
+
+   procedure Is_Record (VM : Raven_VM);
+   procedure Make_Record (VM : Raven_VM);
+   procedure Record_Ref (VM : Raven_VM);
+   procedure Record_Set (VM : Raven_VM);
+   procedure Record_Type (VM : Raven_VM);
+
+   function Checked_Field
+     (VM   : Raven_VM;
+      Name : String;
+      R    : Object)
+      return Positive;
    procedure Vector_Length (VM : Raven_VM);
    procedure Vector_Ref (VM : Raven_VM);
    procedure Vector_Set (VM : Raven_VM);
@@ -109,6 +125,34 @@ package body Raven.Vectors is
    end Check_Vector;
 
    -------------------
+   -- Checked_Field --
+   -------------------
+
+   --  The field is in slot 2, as an index is, and the element it is
+   --  is one past it, because the type is element 0.
+
+   function Checked_Field
+     (VM   : Raven_VM;
+      Name : String;
+      R    : Object)
+      return Positive
+   is
+      Field  : constant Integer := VM.Get_Slot (2);
+      Fields : constant Natural := VM.Vector_Length (R) - 1;
+   begin
+      if not Raven.Objects.Is_Record (R) then
+         raise Constraint_Error with
+           Name & ": not a record: " & Encode (VM.Display (R));
+      elsif Field not in 0 .. Fields - 1 then
+         raise Constraint_Error with
+           Name & ":" & Field'Image & " is not a field of a record of"
+           & Fields'Image;
+      end if;
+
+      return Field + 1;
+   end Checked_Field;
+
+   -------------------
    -- Checked_Index --
    -------------------
 
@@ -144,6 +188,15 @@ package body Raven.Vectors is
    end Is_Bytevector;
 
    ---------------
+   -- Is_Record --
+   ---------------
+
+   procedure Is_Record (VM : Raven_VM) is
+   begin
+      VM.Set_Slot (1, Raven.Objects.Is_Record (VM.Get_Slot (1)));
+   end Is_Record;
+
+   ---------------
    -- Is_Vector --
    ---------------
 
@@ -170,6 +223,17 @@ package body Raven.Vectors is
         ("raven-vector-ref", Vector_Ref'Access, 2);
       Evaluator.Bind_Foreign_Function
         ("raven-vector-set!", Vector_Set'Access, 3);
+
+      Evaluator.Bind_Foreign_Function
+        ("raven-record?", Is_Record'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-make-record", Make_Record'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-record-type", Record_Type'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-record-ref", Record_Ref'Access, 2);
+      Evaluator.Bind_Foreign_Function
+        ("raven-record-set!", Record_Set'Access, 3);
 
       Evaluator.Bind_Foreign_Function
         ("raven-bytevector?", Is_Bytevector'Access, 1);
@@ -219,6 +283,40 @@ package body Raven.Vectors is
    end Make_Bytevector;
 
    -----------------
+   -- Make_Record --
+   -----------------
+
+   procedure Make_Record (VM : Raven_VM) is
+      Fields : constant Integer := VM.Get_Slot (2);
+   begin
+      if Fields < 0 then
+         raise Constraint_Error with
+           "raven-make-record: a record cannot have" & Fields'Image
+           & " fields";
+      end if;
+
+      --  Made as a vector and tagged as a record, which is the same
+      --  cells.  Making it may collect, so the type is read out of slot
+      --  1 afterwards, where the collector will have moved it.  A field
+      --  the constructor does not take starts as #f.
+
+      declare
+         R      : constant Object :=
+                    Raven.Objects.To_Record
+                      (Raven.Objects.Get_Address
+                         (VM.New_Vector (Fields + 1)));
+         Of_Type : constant Object := VM.Get_Slot (1);
+      begin
+         VM.Set_Vector_Element (R, 0, Of_Type);
+         for I in 1 .. Fields loop
+            VM.Set_Vector_Element (R, I, Raven.Objects.To_Object (False));
+         end loop;
+
+         VM.Set_Slot (1, R);
+      end;
+   end Make_Record;
+
+   -----------------
    -- Make_Vector --
    -----------------
 
@@ -245,6 +343,43 @@ package body Raven.Vectors is
          VM.Set_Slot (1, V);
       end;
    end Make_Vector;
+
+   ----------------
+   -- Record_Ref --
+   ----------------
+
+   procedure Record_Ref (VM : Raven_VM) is
+      R : constant Object := VM.Get_Slot (1);
+   begin
+      VM.Set_Slot
+        (1, VM.Vector_Element (R, Checked_Field (VM, "raven-record-ref", R)));
+   end Record_Ref;
+
+   ----------------
+   -- Record_Set --
+   ----------------
+
+   procedure Record_Set (VM : Raven_VM) is
+      R : constant Object := VM.Get_Slot (1);
+   begin
+      VM.Set_Vector_Element
+        (R, Checked_Field (VM, "raven-record-set!", R), VM.Get_Slot (3));
+   end Record_Set;
+
+   -----------------
+   -- Record_Type --
+   -----------------
+
+   procedure Record_Type (VM : Raven_VM) is
+      R : constant Object := VM.Get_Slot (1);
+   begin
+      if not Raven.Objects.Is_Record (R) then
+         raise Constraint_Error with
+           "raven-record-type: not a record: " & Encode (VM.Display (R));
+      end if;
+
+      VM.Set_Slot (1, VM.Vector_Element (R, 0));
+   end Record_Type;
 
    --------------------
    -- String_To_UTF8 --

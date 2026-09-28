@@ -451,6 +451,17 @@ package body Raven.Tests.Imports is
       Test_Undefined (VM, "(hiding-first (vector 1))");
       Test_Number (VM, "(hiding-prefixed (vector 5))", 5);
       Test_Number (VM, "(hiding-length (vector 1 2 3))", 3);
+
+      --  A record type defined in a library (#154).  What it offers
+      --  works here, on records made here; what it keeps is not here.
+
+      Evaluate (VM, "(import (probe records))");
+      Test_Number (VM, "(pair-of-left (make-pair-of 3 4))", 3);
+      Test_Number (VM, "(pair-of-sum (make-pair-of 3 4))", 7);
+      Test_Name (VM, "(pair-of? (make-pair-of 3 4))", "#t");
+      Test_Name (VM, "(pair-of? (vector 3 4))", "#f");
+      Test_Undefined (VM, "(pair-of-right (make-pair-of 3 4))");
+      Test_Undefined (VM, "(set-pair-of-left! (make-pair-of 3 4) 1)");
    end Run_Tests;
 
    ---------------

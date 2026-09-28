@@ -120,5 +120,8 @@
    define-syntax let let* letrec letrec* let-syntax letrec-syntax
    when unless and or cond case do
 
+   ;;  records
+   define-record-type
+
    ;;  what this raven is, and choosing by it
    features cond-expand))

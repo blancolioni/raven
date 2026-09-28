@@ -32,7 +32,10 @@
 ;;  read-line-from, read-line-onto, read-string-from, read-chars,
 ;;  write-u8-list, read-u8s, read-bytevector-from, read-bytevector-into,
 ;;  raven-the-eof-object, raven-output-port, raven-error-port,
-;;  raven-input-port, optional and
+;;  raven-input-port, make-record-type, record-type-name,
+;;  record-type-fields, record-of?, record-field-index, record-check,
+;;  record-constructor, record-accessor, record-modifier,
+;;  record-field-procedures, optional and
 ;;  caddr, which the expander
 ;;  uses and which a program asks (scheme cxr) for.
 ;;
@@ -153,6 +156,9 @@
    ;;  syntax
    define-syntax let let* letrec letrec* let-syntax letrec-syntax
    when unless and or cond case do
+
+   ;;  records
+   define-record-type
 
    ;;  what this raven is, and choosing by it
    features cond-expand

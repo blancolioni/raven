@@ -1154,6 +1154,106 @@
   (syntax-rules ()
     ((_ expression) (make-promise-of (lambda () (force expression))))))
 
+;;  Records (#154).  A record is an object of its own, laid out as a
+;;  vector is with its type in front, so that nothing else answers for
+;;  it: it is not a vector, a pair or a procedure.  A record type is a
+;;  record too, with #f where its type would be; its fields are its
+;;  name and the names of the fields of its records.
+;;
+;;  define-record-type makes the type and then asks it for each
+;;  procedure, which is worked out once, when the type is defined: the
+;;  constructor knows which fields it fills and the accessors which
+;;  field they read.  Each says which of them it is when it is handed
+;;  something that is not a record of its type.
+
+(define (make-record-type name fields)
+  (let ((type (raven-make-record #f 2)))
+    (raven-record-set! type 0 name)
+    (raven-record-set! type 1 fields)
+    type))
+
+(define (record-type-name type) (raven-record-ref type 0))
+(define (record-type-fields type) (raven-record-ref type 1))
+
+(define (record-of? type x)
+  (if (raven-record? x) (eq? (raven-record-type x) type) #f))
+
+(define (record-field-index type field who)
+  (let loop ((fields (record-type-fields type)) (index 0))
+    (cond ((null? fields)
+           (error (string-append (symbol->string who) ": "
+                                 (symbol->string field)
+                                 " is not a field of "
+                                 (symbol->string (record-type-name type)))))
+          ((eq? (car fields) field) index)
+          (else (loop (cdr fields) (+ index 1))))))
+
+(define (record-check type x who)
+  (if (not (record-of? type x))
+      (error (string-append (symbol->string who) ": expected a "
+                            (symbol->string (record-type-name type)))
+             x)))
+
+(define (record-constructor type fields who)
+  (let ((count (length (record-type-fields type)))
+        (indices (map (lambda (field) (record-field-index type field who))
+                      fields)))
+    (lambda args
+      (if (not (= (length args) (length indices)))
+          (error (string-append (symbol->string who) ": expected "
+                                (number->string (length indices))
+                                " arguments")
+                 args))
+      (let ((record (raven-make-record type count)))
+        (for-each (lambda (index arg) (raven-record-set! record index arg))
+                  indices args)
+        record))))
+
+(define (record-accessor type field who)
+  (let ((index (record-field-index type field who)))
+    (lambda (record)
+      (record-check type record who)
+      (raven-record-ref record index))))
+
+(define (record-modifier type field who)
+  (let ((index (record-field-index type field who)))
+    (lambda (record value)
+      (record-check type record who)
+      (raven-record-set! record index value)
+      (if #f #f))))
+
+;;  Each field spec is (field accessor) or (field accessor modifier),
+;;  one at a time, so that the two shapes can be told apart.
+
+(define-syntax record-field-procedures
+  (syntax-rules ()
+    ((_ type (field accessor))
+     (define accessor (record-accessor type 'field 'accessor)))
+    ((_ type (field accessor modifier))
+     (begin
+       (define accessor (record-accessor type 'field 'accessor))
+       (define modifier (record-modifier type 'field 'modifier))))
+    ((_ type spec more ...)
+     (begin
+       (record-field-procedures type spec)
+       (record-field-procedures type more ...)))))
+
+(define-syntax define-record-type
+  (syntax-rules ()
+    ((_ type (constructor field ...) predicate)
+     (begin
+       (define type (make-record-type 'type '()))
+       (define constructor
+         (record-constructor type '(field ...) 'constructor))
+       (define (predicate x) (record-of? type x))))
+    ((_ type (constructor field ...) predicate spec ...)
+     (begin
+       (define type (make-record-type 'type (map car '(spec ...))))
+       (define constructor
+         (record-constructor type '(field ...) 'constructor))
+       (define (predicate x) (record-of? type x))
+       (record-field-procedures type spec ...)))))
+
 ;;  boolean? waits here for or rather than sitting with the other
 ;;  predicates, because or is now one of the forms above.
 
