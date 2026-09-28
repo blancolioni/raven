@@ -1494,7 +1494,7 @@ package body Raven.Engine.SECD is
       Raven.Numbers.Read (Text, 10, N, Valid);
 
       if not Valid then
-         raise Constraint_Error with "not an integer: " & Text;
+         raise Constraint_Error with "not an exact number: " & Text;
       end if;
 
       return Raven.Numbers.Encode (This.VM, N);

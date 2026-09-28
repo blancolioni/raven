@@ -843,6 +843,9 @@ package body Raven.Engine.Memory is
          elsif Raven.Objects.Is_Flonum (Item) then
             return Raven.Objects.To_Flonum
               (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Ratnum (Item) then
+            return Raven.Objects.To_Ratnum
+              (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
          end if;

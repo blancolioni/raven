@@ -51,13 +51,12 @@ package body Raven.Tests.Numbers is
       Test_Number (VM, "(/ 6 2)", 3);
       Test_Number (VM, "(/ 24 2 3)", 4);
 
-      --  Every number here is an integer, so a division that does not
-      --  come out exactly throws the remainder away.  R7RS asks for
-      --  7/2 and there is nothing to say it with, so this is written
-      --  down as what happens rather than left to be found.
+      --  A division that does not come out exactly is the rational it
+      --  comes to, where it threw the remainder away while there was
+      --  nothing to say 7/2 with (#104).
 
-      Test_Number (VM, "(/ 7 2)", 3);
-      Test_Number (VM, "(/ 2)", 0);
+      Test_Shown (VM, "(/ 7 2)", "7/2");
+      Test_Shown (VM, "(/ 2)", "1/2");
 
       Test_Error (VM, "(/ 1 0)");
 
@@ -147,12 +146,17 @@ package body Raven.Tests.Numbers is
       Test_Message (VM, "(+ 1 'a)", "+: not a number: a");
       Test_Shown (VM, "(* 1.5 2)", "3.0");
 
-      --  What exact cannot answer yet, and a double past a double.
+      --  Every double is an exact rational, so exact always answers:
+      --  (exact 1.5) is 3/2, where it was refused while there were no
+      --  exact fractions.  And a double past a double.
 
-      Test_Message
-        (VM, "(exact 1.5)",
-         "exact: 1.5 is not a whole number, and there are no exact"
-         & " fractions yet");
+      Test_Shown (VM, "(exact 1.5)", "3/2");
+
+      --  Integer division refuses what is not an integer, and every
+      --  division refuses nought.
+
+      Test_Message (VM, "(quotient 1/2 1)", "quotient: not an integer: 1/2");
+      Test_Message (VM, "(/ 1/2 0)", "divide by zero");
       Test_Message
         (VM, "(* 1e300 1e300)",
          "inexact overflow: past what a double holds");

@@ -68,6 +68,13 @@ package body Raven.Features is
 
          Result.Append ("ieee-float");
 
+         --  / with exact arguments answers exactly (#104).  Which truncating
+         --  division did too, by the letter of R7RS's appendix: an exact
+         --  wrong answer is still exact.  It is here now because (/ 7 2)
+         --  is 7/2, and not because the sentence was true before.
+
+         Result.Append ("ratios");
+
          Result.Append_Vector (OS_Features);
          Result.Append_Vector (Arch_Features);
       end return;

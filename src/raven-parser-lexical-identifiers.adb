@@ -7,12 +7,14 @@ package body Raven.Parser.Lexical.Identifiers is
                        Number_Sign, Leading_Dot,
                        Decimal_Point, Scanning_Decimals,
                        Exponent, Exponent_Sign, Scanning_Exponent,
+                       Ratio_Slash, Scanning_Ratio,
                        End_State_Identifier,
                        End_State_Integer,
-                       End_State_Float);
+                       End_State_Float,
+                       End_State_Rational);
 
    subtype End_State is State_Type range
-     End_State_Identifier .. End_State_Float;
+     End_State_Identifier .. End_State_Rational;
 
    type Integer_Base is range 2 .. 16;
 
@@ -47,6 +49,8 @@ package body Raven.Parser.Lexical.Identifiers is
             return Tok_Integer;
          when End_State_Float =>
             return Tok_Float;
+         when End_State_Rational =>
+            return Tok_Rational;
       end case;
    end Classify_Identifier;
 
@@ -175,10 +179,28 @@ package body Raven.Parser.Lexical.Identifiers is
                      else
                         State := Exponent;
                      end if;
+                  elsif Ch = '/' then
+
+                     --  A rational: the digits of the denominator follow,
+                     --  in the same base, and there has to be one.
+
+                     if Last then
+                        State := End_State_Identifier;
+                     else
+                        State := Ratio_Slash;
+                     end if;
                   elsif not Is_Base_Digit (Ch, Base) then
                      State := End_State_Identifier;
                   elsif Last then
                      State := End_State_Integer;
+                  end if;
+               when Ratio_Slash | Scanning_Ratio =>
+                  if not Is_Base_Digit (Ch, Base) then
+                     State := End_State_Identifier;
+                  elsif Last then
+                     State := End_State_Rational;
+                  else
+                     State := Scanning_Ratio;
                   end if;
                when Leading_Dot =>
                   if Is_Digit (Ch) then
