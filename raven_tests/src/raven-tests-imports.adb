@@ -164,6 +164,12 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(import (probe ring-b))");
       Test_Name (VM, "ring-b-name", "ring-b");
 
+      --  Each offers ring-shared and neither defines it, so following
+      --  it back goes round the ring: it is not here, and asking does
+      --  not go round for ever (#140).
+
+      Test_Undefined (VM, "ring-shared");
+
       --  The base library's list procedures are written on walks it
       --  keeps to itself: one for the member family and one for the
       --  assoc family, each taking the question to ask.  Those are how
@@ -381,6 +387,26 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "sets-name", "a");
       Test_Number (VM, "(sets-twice 7)", 14);
       Test_Undefined (VM, "in-gamma-a");
+
+      --  A library that offers what it imported (#140).  A reference
+      --  was compiled into the library that offered the name, which
+      --  had imported it and never defined it, so it was undefined.
+      --
+      --  (probe chain) first, which offers what (probe reexport)
+      --  offers: two steps back to (probe gamma), where the names are
+      --  defined, and nothing of (probe reexport) is here yet to answer
+      --  in its place.  The macro reads its template where it was
+      --  written, which is further back still.
+
+      Evaluate (VM, "(import (probe chain))");
+      Test_Name (VM, "chained", "c");
+      Test_Number (VM, "(reexport-twice 3)", 6);
+      Test_Undefined (VM, "reexport-renamed");
+
+      Evaluate (VM, "(import (probe reexport))");
+      Test_Name (VM, "gamma-b", "b");
+      Test_Name (VM, "reexport-renamed", "c");
+      Test_Number (VM, "(reexport-twice 4)", 8);
    end Run_Tests;
 
    ---------------
