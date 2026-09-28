@@ -321,7 +321,7 @@ package body Raven.Strings is
    is
    begin
       Evaluator.Bind_Foreign_Function
-        ("string?", Is_String'Access, 1);
+        ("raven-string?", Is_String'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-display-text", Display_Text'Access, 1);
       Evaluator.Bind_Foreign_Function

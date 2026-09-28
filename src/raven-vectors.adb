@@ -161,30 +161,30 @@ package body Raven.Vectors is
    is
    begin
       Evaluator.Bind_Foreign_Function
-        ("vector?", Is_Vector'Access, 1);
+        ("raven-vector?", Is_Vector'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-make-vector", Make_Vector'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("vector-length", Vector_Length'Access, 1);
+        ("raven-vector-length", Vector_Length'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("vector-ref", Vector_Ref'Access, 2);
+        ("raven-vector-ref", Vector_Ref'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("vector-set!", Vector_Set'Access, 3);
+        ("raven-vector-set!", Vector_Set'Access, 3);
 
       Evaluator.Bind_Foreign_Function
-        ("bytevector?", Is_Bytevector'Access, 1);
+        ("raven-bytevector?", Is_Bytevector'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-make-bytevector", Make_Bytevector'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("bytevector-length", Bytevector_Length'Access, 1);
+        ("raven-bytevector-length", Bytevector_Length'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("bytevector-u8-ref", Bytevector_Ref'Access, 2);
+        ("raven-bytevector-u8-ref", Bytevector_Ref'Access, 2);
       Evaluator.Bind_Foreign_Function
-        ("bytevector-u8-set!", Bytevector_Set'Access, 3);
+        ("raven-bytevector-u8-set!", Bytevector_Set'Access, 3);
       Evaluator.Bind_Foreign_Function
-        ("string->utf8", String_To_UTF8'Access, 1);
+        ("raven-string->utf8", String_To_UTF8'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("utf8->string", UTF8_To_String'Access, 1);
+        ("raven-utf8->string", UTF8_To_String'Access, 1);
    end Load_Vector_Library;
 
    ---------------------

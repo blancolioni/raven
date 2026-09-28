@@ -437,6 +437,20 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "gamma-b", "b");
       Test_Name (VM, "reexport-renamed", "c");
       Test_Number (VM, "(reexport-twice 4)", 8);
+
+      --  What the machine does for the base library is bound under a
+      --  raven- name, so the R7RS name is only where a library offers
+      --  it (#166).  vector-ref was a foreign function of that name,
+      --  and so in every library whatever it imported.
+
+      Evaluate (VM, "(import (probe bare))");
+      Test_Name (VM, "bare-name", "bare");
+      Test_Undefined (VM, "(bare-first (vector 1))");
+
+      Evaluate (VM, "(import (probe hiding))");
+      Test_Undefined (VM, "(hiding-first (vector 1))");
+      Test_Number (VM, "(hiding-prefixed (vector 5))", 5);
+      Test_Number (VM, "(hiding-length (vector 1 2 3))", 3);
    end Run_Tests;
 
    ---------------

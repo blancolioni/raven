@@ -349,19 +349,19 @@ package body Raven.Ports is
       Evaluator.Bind_Foreign_Function
         ("raven-eof-object", Eof_Object'Access, 0);
       Evaluator.Bind_Foreign_Function
-        ("port?", Is_Port'Access, 1);
+        ("raven-port?", Is_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("input-port?", Is_Input_Port'Access, 1);
+        ("raven-input-port?", Is_Input_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("output-port?", Is_Output_Port'Access, 1);
+        ("raven-output-port?", Is_Output_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-standard-port", Standard_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("open-input-string", Open_Input_String'Access, 1);
+        ("raven-open-input-string", Open_Input_String'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("open-output-string", Open_Output_String'Access, 0);
+        ("raven-open-output-string", Open_Output_String'Access, 0);
       Evaluator.Bind_Foreign_Function
-        ("get-output-string", Get_Output_String'Access, 1);
+        ("raven-get-output-string", Get_Output_String'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-port-open?", Is_Open'Access, 1);
       Evaluator.Bind_Foreign_Function
@@ -380,15 +380,15 @@ package body Raven.Ports is
       --  side, so nothing here asks it for a byte.
 
       Evaluator.Bind_Foreign_Function
-        ("binary-port?", Is_Binary_Port'Access, 1);
+        ("raven-binary-port?", Is_Binary_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("textual-port?", Is_Textual_Port'Access, 1);
+        ("raven-textual-port?", Is_Textual_Port'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("open-input-bytevector", Open_Input_Bytevector'Access, 1);
+        ("raven-open-input-bytevector", Open_Input_Bytevector'Access, 1);
       Evaluator.Bind_Foreign_Function
-        ("open-output-bytevector", Open_Output_Bytevector'Access, 0);
+        ("raven-open-output-bytevector", Open_Output_Bytevector'Access, 0);
       Evaluator.Bind_Foreign_Function
-        ("get-output-bytevector", Get_Output_Bytevector'Access, 1);
+        ("raven-get-output-bytevector", Get_Output_Bytevector'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-read-u8", Port_Read_U8'Access, 1);
       Evaluator.Bind_Foreign_Function
