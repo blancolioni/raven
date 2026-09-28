@@ -1752,6 +1752,81 @@
 (test "a delay of a name defined after it" 'defined-later
       (force forward-probe))
 
+;;  Parameters (#155).  R7RS's own example: a radix whose converter
+;;  refuses what is not one, and a procedure that reads it.
+
+(define radix
+  (make-parameter 10 (lambda (x)
+                       (if (and (exact-integer? x) (<= 2 x 16))
+                           x
+                           (error "invalid radix" x)))))
+(define (radix-text n) (number->string n (radix)))
+
+(test "a parameter answers its value" 10 (radix))
+(test "which a procedure reads" "12" (radix-text 12))
+(test "parameterize gives it another" "1100"
+      (parameterize ((radix 2)) (radix-text 12)))
+(test "for the body only" "12" (radix-text 12))
+(test "the converter refuses what it refuses" "invalid radix"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (parameterize ((radix 0)) (radix-text 12))))
+(test "and the value is as it was" 10 (radix))
+(test "a parameter is a procedure" #t (procedure? radix))
+(test "that takes no arguments" "a parameter takes no arguments"
+      (guard (e ((error-object? e) (error-object-message e))) (radix 5)))
+
+(define converted (make-parameter "5" string->number))
+
+(test "the converter makes the first value" 5 (converted))
+(test "and each value parameterize gives" 7
+      (parameterize ((converted "7")) (converted)))
+(test "nested, the inner one" '(1 2 1)
+      (let ((p (make-parameter 0)))
+        (parameterize ((p 1))
+          (list (p) (parameterize ((p 2)) (p)) (p)))))
+(test "several at once" '(a b)
+      (let ((p (make-parameter 0)) (q (make-parameter 0)))
+        (parameterize ((p 'a) (q 'b)) (list (p) (q)))))
+
+;;  Leaving the body by an error or a continuation puts the old value
+;;  back, which is what dynamic-wind is for.
+
+(define escaping (make-parameter 'outside))
+(guard (e (#t #f))
+  (parameterize ((escaping 'inside)) (error "leave")))
+(test "an error leaving the body puts it back" 'outside (escaping))
+(call/cc (lambda (k) (parameterize ((escaping 'inside)) (k 'left))))
+(test "and so does a continuation" 'outside (escaping))
+(test "coming back into the body puts the new value back" '(in in out)
+      (let ((p (make-parameter 'out)) (k #f) (seen '()))
+        (let ((v (parameterize ((p 'in))
+                   (call/cc (lambda (c) (set! k c)))
+                   (p))))
+          (set! seen (cons v seen))
+          (if (< (length seen) 2) (k #f))
+          (reverse (cons (p) seen)))))
+
+;;  The current ports are parameters, so what is written can be sent
+;;  somewhere else for the extent of a body.
+
+(test "parameterize the current output port" "hi42"
+      (let ((port (open-output-string)))
+        (parameterize ((current-output-port port))
+          (write-string "hi")
+          (display 42))
+        (get-output-string port)))
+(test "and it is the host's again after" #t
+      (let ((before (current-output-port)))
+        (parameterize ((current-output-port (open-output-string))) 1)
+        (eq? before (current-output-port))))
+(test "read from a string as the current input port" #\x
+      (parameterize ((current-input-port (open-input-string "xyz")))
+        (read-char)))
+(test "the current output port takes only an output port"
+      "current-output-port: expected a port"
+      (guard (e ((error-object? e) (error-object-message e)))
+        (parameterize ((current-output-port 5)) 1)))
+
 ;;  A name under two ellipses holds a list of lists, and repeats twice
 ;;  over on the way out.
 

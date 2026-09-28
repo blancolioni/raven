@@ -22,7 +22,8 @@
 ;;  rests, str=?, str<?, do-next, cond-expand-choose, expt-by-squaring,
 ;;  values-rename, let-values-expand, raven-winders, raven-travel-to,
 ;;  raven-set-winders!, raven-handlers, raven-set-handlers!,
-;;  raven-with-handlers, raven-raise, error-object,
+;;  raven-with-handlers, raven-raise, error-object, raven-parameter-set,
+;;  raven-parameter-converter, raven-parameterize, raven-port-converter,
 ;;  make-error-object, raven-describe, raven-raise-from-machine,
 ;;  raven-guard-clauses,
 ;;  simplest-between, simplest-positive,
@@ -161,6 +162,9 @@
 
    ;;  records
    define-record-type
+
+   ;;  parameters
+   make-parameter parameterize
 
    ;;  what this raven is, and choosing by it
    features cond-expand

@@ -1314,6 +1314,46 @@
 (define (char>=? . cs)
   (all-left-assoc (lambda (a b) (>= (char-code a) (char-code b))) #t cs))
 
+;;  Parameters (#155).  A parameter is a procedure that answers its
+;;  value, which is its converter's answer to what it was made with.
+;;  parameterize gives it another for the dynamic extent of a body: the
+;;  new values are converted first, then swapped in and out by
+;;  dynamic-wind, so that leaving the body by an error or a continuation
+;;  puts the old ones back and coming into it again puts the new ones
+;;  back in.  What a parameter keeps is reached through markers nothing
+;;  else has, so a program can only ask a parameter its value.
+
+(define raven-parameter-set (list 'parameter-set))
+(define raven-parameter-converter (list 'parameter-converter))
+
+(define (make-parameter value converter)
+  (let* ((convert (optional converter (lambda (x) x)))
+         (current (convert value)))
+    (lambda args
+      (cond ((null? args) current)
+            ((eq? (car args) raven-parameter-set)
+             (set! current (car (cdr args))))
+            ((eq? (car args) raven-parameter-converter) convert)
+            (else (error "a parameter takes no arguments" args))))))
+
+(define (raven-parameterize parameters values thunk)
+  (let ((held (map (lambda (p v) ((p raven-parameter-converter) v))
+                   parameters values)))
+    (let ((swap (lambda ()
+                  (set! held
+                        (map (lambda (p v)
+                               (let ((old (p)))
+                                 (p raven-parameter-set v)
+                                 old))
+                             parameters held)))))
+      (dynamic-wind swap thunk swap))))
+
+(define-syntax parameterize
+  (syntax-rules ()
+    ((_ ((parameter value) ...) body ...)
+     (raven-parameterize (list parameter ...) (list value ...)
+                         (lambda () body ...)))))
+
 ;;  Ports.  Everything raven could write went to one place through
 ;;  one foreign function, and nothing could read at all.
 ;;
@@ -1335,9 +1375,23 @@
 (define raven-error-port (raven-standard-port 2))
 (define raven-input-port (raven-standard-port 3))
 
-(define (current-output-port) raven-output-port)
-(define (current-error-port) raven-error-port)
-(define (current-input-port) raven-input-port)
+;;  The current ports are parameters, as R7RS has them, so that
+;;  parameterize can send what is written somewhere else (#155).  Each
+;;  takes only the kind of port it is.
+
+(define (raven-port-converter who kind?)
+  (lambda (p)
+    (if (kind? p) p (error (string-append who ": expected a port") p))))
+
+(define current-output-port
+  (make-parameter raven-output-port
+                  (raven-port-converter "current-output-port" output-port?)))
+(define current-error-port
+  (make-parameter raven-error-port
+                  (raven-port-converter "current-error-port" output-port?)))
+(define current-input-port
+  (make-parameter raven-input-port
+                  (raven-port-converter "current-input-port" input-port?)))
 
 ;;  textual-port? and binary-port? are the machine's to answer now.
 ;;  Every port was textual, so one was port? and the other was #f.
