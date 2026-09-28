@@ -123,5 +123,8 @@
    ;;  records
    define-record-type
 
+   ;;  parameters
+   make-parameter parameterize
+
    ;;  what this raven is, and choosing by it
    features cond-expand))
