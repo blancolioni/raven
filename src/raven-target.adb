@@ -162,6 +162,23 @@ package body Raven.Target is
                       & Show_List (This.Cdr (List)))
               & ">";
          end;
+      elsif Is_Record (X) then
+
+         --  Which type it is, since nothing else says so: #<point> for
+         --  a point, and #<record-type point> for the type itself,
+         --  whose name is the first of its fields.
+
+         declare
+            Of_Type : constant Object := This.Vector_Element (X, 0);
+         begin
+            if Is_Record (Of_Type) then
+               return "#<" & This.Show (This.Vector_Element (Of_Type, 1))
+                 & ">";
+            else
+               return "#<record-type "
+                 & This.Show (This.Vector_Element (X, 1)) & ">";
+            end if;
+         end;
       elsif Is_Vector (X) or else Is_Bytevector (X) then
 
          --  #(1 2 3) and #u8(1 2 3), which is how each is written and

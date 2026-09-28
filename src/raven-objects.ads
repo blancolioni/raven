@@ -115,6 +115,18 @@ private package Raven.Objects is
      and then Has_Address (To_Continuation'Result)
      and then Get_Address (To_Continuation'Result) = Address;
 
+   --  A record (#154): laid out as a vector is, with its type in the
+   --  first element and its fields after it, and tagged as nothing
+   --  else is, so that no other kind of thing answers for it.  A
+   --  record type is a record too, with #f where its type would be.
+
+   function Is_Record (X : Object) return Boolean;
+   function To_Record (Address : Address_Type) return Object
+     with Pre => Address < Max_Addressable_Cells,
+     Post => Is_Record (To_Record'Result)
+     and then Has_Address (To_Record'Result)
+     and then Get_Address (To_Record'Result) = Address;
+
    function Is_Values (X : Object) return Boolean;
    function To_Values (Address : Address_Type) return Object
      with Pre => Address < Max_Addressable_Cells,
@@ -391,6 +403,7 @@ private
    Ratnum_Tag      : constant := Escape_Tag + 12 * Extended_Step;
    Values_Tag      : constant := Escape_Tag + 13 * Extended_Step;
    Continuation_Tag : constant := Escape_Tag + 14 * Extended_Step;
+   Record_Tag      : constant := Escape_Tag + 15 * Extended_Step;
 
    function Full_Tag (X : Object) return Object
    is (X and Full_Tag_Mask);
@@ -533,7 +546,8 @@ private
        or else Full_Tag (X) = Flonum_Tag
        or else Full_Tag (X) = Ratnum_Tag
        or else Full_Tag (X) = Values_Tag
-       or else Full_Tag (X) = Continuation_Tag);
+       or else Full_Tag (X) = Continuation_Tag
+       or else Full_Tag (X) = Record_Tag);
 
    --  And their payloads are not in the same place, because one of
    --  them is an extended type.
@@ -578,6 +592,12 @@ private
 
    function To_Continuation (Address : Address_Type) return Object
    is (Extend (Object (Address), Continuation_Tag));
+
+   function Is_Record (X : Object) return Boolean
+   is (Full_Tag (X) = Record_Tag);
+
+   function To_Record (Address : Address_Type) return Object
+   is (Extend (Object (Address), Record_Tag));
 
    function To_Values (Address : Address_Type) return Object
    is (Extend (Object (Address), Values_Tag));

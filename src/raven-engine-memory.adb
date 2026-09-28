@@ -803,6 +803,7 @@ package body Raven.Engine.Memory is
             --  first.
 
             if Raven.Objects.Is_Vector (Item)
+              or else Raven.Objects.Is_Record (Item)
               or else Holds_Bytes (Item)
             then
                Cell.Car :=
@@ -851,6 +852,9 @@ package body Raven.Engine.Memory is
               (Raven.Objects.Get_Address (Cell.Car));
          elsif Raven.Objects.Is_Continuation (Item) then
             return Raven.Objects.To_Continuation
+              (Raven.Objects.Get_Address (Cell.Car));
+         elsif Raven.Objects.Is_Record (Item) then
+            return Raven.Objects.To_Record
               (Raven.Objects.Get_Address (Cell.Car));
          else
             return Cell.Car;
