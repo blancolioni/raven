@@ -1660,8 +1660,7 @@
       (let probe-again ((n 2))
         (if (= n 0) 'inner (probe-again (- n 1)))))
 
-;;  A promise is a closure and a set!: it answers the same thing every
-;;  time and works it out once.
+;;  A promise answers the same thing every time and works it out once.
 
 (test "force answers what was delayed" 3 (force (delay (+ 1 2))))
 (test "force answers the same twice" '(3 3)
@@ -1680,6 +1679,60 @@
       (let ((n 0))
         (delay (set! n 1))
         n))
+
+;;  A promise is an object of its own (#168), so it can be told from a
+;;  procedure, and make-promise of a procedure is a promise of it.
+
+(test "promise? of a delay" #t (promise? (delay 1)))
+(test "promise? of a delay-force" #t (promise? (delay-force (delay 1))))
+(test "promise? of make-promise" #t (promise? (make-promise 1)))
+(test "promise? of a procedure" #f (promise? (lambda () 1)))
+(test "promise? of a number" #f (promise? 5))
+(test "a promise is not a procedure" #f (procedure? (delay 1)))
+(test "make-promise of a procedure is a promise of it" #t
+      (let ((f (lambda () 1))) (eq? (force (make-promise f)) f)))
+(test "make-promise of a promise is that promise" #t
+      (let ((p (delay 1))) (eq? (make-promise p) p)))
+(test "force of what is not a promise is itself" 5 (force 5))
+(test "a promise written" "#<promise>"
+      (let ((port (open-output-string)))
+        (write (delay 1) port)
+        (get-output-string port)))
+
+;;  R7RS's own example: a promise whose thunk forces it again.  The
+;;  first answer to arrive is the promise's.
+
+(define reentrant-count 0)
+(define reentrant-x 5)
+(define reentrant-p
+  (delay (begin (set! reentrant-count (+ reentrant-count 1))
+                (if (> reentrant-count reentrant-x)
+                    reentrant-count
+                    (force reentrant-p)))))
+(test "a promise forced from its own thunk" 6 (force reentrant-p))
+(test "and it keeps that answer" 6
+      (begin (set! reentrant-x 10) (force reentrant-p)))
+
+;;  A chain of delay-force runs in the space of one link, so a loop
+;;  written with it is as deep as the program likes.  Twenty thousand
+;;  links is past what the heap holds of calls that have not returned.
+
+(define (promise-loop n)
+  (delay-force (if (= n 0) (delay 'done) (promise-loop (- n 1)))))
+(test "a long chain of delay-force" 'done (force (promise-loop 20000)))
+
+;;  A name passed to a library's macro that the caller has not defined
+;;  yet is the caller's, and means what the caller goes on to define.
+;;  It was read in the macro's library, where nothing defines it, so a
+;;  stream -- a procedure that delays a call of itself -- was undefined.
+
+(define (integers-from n) (delay (cons n (integers-from (+ n 1)))))
+(test "a delay of a call of the procedure it is in" 3
+      (car (force (cdr (force (cdr (force (integers-from 1))))))))
+(define forward-probe (delay later-defined-probe))
+(define later-defined-probe 'defined-later)
+(test "a delay of a name defined after it" 'defined-later
+      (force forward-probe))
 
 ;;  A name under two ellipses holds a list of lists, and repeats twice
 ;;  over on the way out.
