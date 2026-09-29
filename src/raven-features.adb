@@ -49,6 +49,14 @@ package body Raven.Features is
    function Build return String_Vectors.Vector is
    begin
       return Result : String_Vectors.Vector do
+
+         --  All of (scheme base), which is what R7RS asks of everything
+         --  that claims it: the last of it was datum labels (#167), the
+         --  ellipsis of a syntax-rules' own (#41), and the half of hygiene
+         --  that reads a template's names where it was written (#24,
+         --  #178-#182).  R7RS lists it first.
+
+         Result.Append ("r7rs");
          Result.Append ("raven");
          Result.Append ("raven-" & Raven_Config.Crate_Version);
 
