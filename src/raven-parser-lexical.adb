@@ -677,6 +677,47 @@ package body Raven.Parser.Lexical is
                                             [Current_Stream.Ch]) > 0));
             begin
                if Current_Stream.Ch = '#'
+                 and then This.Peek in '0' .. '9'
+               then
+
+                  --  A datum label (#167), #n= or #n#.  Nothing else
+                  --  written with a # starts with a digit.
+
+                  This.Next_Character;
+                  This.Start_Token;
+
+                  while not This.End_Of_Stream
+                    and then Current_Stream.Ch in '0' .. '9'
+                  loop
+                     This.Next_Character;
+                  end loop;
+
+                  This.Stop_Token;
+
+                  --  The number is the text, and stepping past the = or
+                  --  the # would add it, so the digits are put back.
+
+                  Tok := Tok_None;
+
+                  declare
+                     Digits_Read : constant Unbounded_Wide_Wide_String :=
+                                     Current_Stream.Tok_Text;
+                  begin
+                     if Current_Stream.Ch = '=' then
+                        This.Next_Character;
+                        Tok := Tok_Label_Define;
+                     elsif Current_Stream.Ch = '#' then
+                        This.Next_Character;
+                        Tok := Tok_Label_Reference;
+                     end if;
+                     Current_Stream.Tok_Text := Digits_Read;
+                  end;
+
+                  if Tok = Tok_None then
+                     This.Error ("a datum label is #n= or #n#");
+                     Tok := Tok_Bad_Character;
+                  end if;
+               elsif Current_Stream.Ch = '#'
                  and then This.Peek = '|'
                then
 

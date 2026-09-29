@@ -619,7 +619,16 @@ package body Raven.Loader is
 
    exception
       when E : others =>
+
+         --  The rest of the file was not read at all, which is a library
+         --  that did not read whole, and is counted as a form given up
+         --  on.  It was reported and nothing else, so a harness asking
+         --  whether its suite had read whole was told it had, with
+         --  every test after the failure never run (#167).
+
          Report (Target, Name & ": " & Ada.Exceptions.Exception_Message (E));
+         Target.Abandon_Form;
+         Target.Set_Incomplete (Library);
          if not Loading.Is_Empty then
             Loading.Delete_Last;
          end if;

@@ -1,4 +1,5 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
+with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
 with Ada.Finalization;
@@ -13,6 +14,8 @@ package body Raven.Engine.SECD.Translator is
 
    use Raven.Instructions;
    use type Raven.Target.Library_Id;
+
+   package Object_Sets is new Ada.Containers.Ordered_Sets (Object);
    use type Raven.Target.Macro_Id;
 
    package Object_Lists is
@@ -141,6 +144,14 @@ package body Raven.Engine.SECD.Translator is
       C    : Object)
      with Pre => Objects.Is_Atom (C);
 
+   --  A datum loaded whole, pairs and all (#167), which only LDC takes:
+   --  the code lists are marked, so the collector moves it with them,
+   --  and Emit pushes it as it is.
+
+   procedure Append_Datum
+     (This : in out Instance'Class;
+      C    : Object);
+
    ------------
    -- Append --
    ------------
@@ -165,6 +176,18 @@ package body Raven.Engine.SECD.Translator is
    begin
       This.Code (This.Current).Append (C);
    end Append;
+
+   ------------------
+   -- Append_Datum --
+   ------------------
+
+   procedure Append_Datum
+     (This : in out Instance'Class;
+      C    : Object)
+   is
+   begin
+      This.Code (This.Current).Append (C);
+   end Append_Datum;
 
    ------------
    -- Create --
@@ -800,6 +823,16 @@ package body Raven.Engine.SECD.Translator is
 
          procedure Load_Macro_Args (Args : Object);
 
+         --  A quote's datum.  One that reaches a pair more than once --
+         --  shared, or running back into itself, which datum labels
+         --  make (#167) -- is loaded as the one object it is: building
+         --  it again pair by pair would make two of what was one, and
+         --  would never finish one that runs round.
+
+         procedure Load_Quoted (K : Object);
+
+         function Reaches_Twice (K : Object) return Boolean;
+
          -------------------
          -- Load_Constant --
          -------------------
@@ -834,10 +867,70 @@ package body Raven.Engine.SECD.Translator is
                This.Append (Objects.Nil);
             else
                Load_Macro_Args (Target.Cdr (Args));
-               Load_Constant (Target.Car (Args), Strip => False);
+
+               --  An argument that shares structure, or runs back into
+               --  itself, goes to the macro as the one object it is.
+
+               if Raven.Objects.Is_Pair (Target.Car (Args))
+                 and then Reaches_Twice (Target.Car (Args))
+               then
+                  This.Append (LDC);
+                  This.Append_Datum (Target.Car (Args));
+               else
+                  Load_Constant (Target.Car (Args), Strip => False);
+               end if;
                This.Append (CONS);
             end if;
          end Load_Macro_Args;
+
+         -----------------
+         -- Load_Quoted --
+         -----------------
+
+         procedure Load_Quoted (K : Object) is
+         begin
+            if Raven.Objects.Is_Pair (K) and then Reaches_Twice (K) then
+               This.Append (LDC);
+               This.Append_Datum (K);
+            else
+               Load_Constant (K);
+            end if;
+         end Load_Quoted;
+
+         -------------------
+         -- Reaches_Twice --
+         -------------------
+
+         function Reaches_Twice (K : Object) return Boolean is
+            Seen : Object_Sets.Set;
+
+            function Walk (Item : Object) return Boolean;
+
+            ----------
+            -- Walk --
+            ----------
+
+            function Walk (Item : Object) return Boolean is
+               It : Object := Item;
+            begin
+               while Raven.Objects.Is_Pair (It) loop
+                  if Seen.Contains (It) then
+                     return True;
+                  end if;
+                  Seen.Insert (It);
+
+                  if Walk (Target.Car (It)) then
+                     return True;
+                  end if;
+
+                  It := Target.Cdr (It);
+               end loop;
+               return False;
+            end Walk;
+
+         begin
+            return Walk (K);
+         end Reaches_Twice;
 
       begin
          if Raven.Objects.Is_Atom (Get (X)) then
@@ -905,7 +998,7 @@ package body Raven.Engine.SECD.Translator is
             begin
                if H = Raven.Objects.Quote then
                   Expect (1, 1, "quote takes one datum: (quote x)");
-                  Load_Constant (Target.Cadr (Get (X)));
+                  Load_Quoted (Target.Cadr (Get (X)));
                elsif H = Raven.Objects.If_Obj then
                   Expect (2, 3,
                           "if takes a test, what to do, and what to do "

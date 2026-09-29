@@ -80,6 +80,7 @@ package body Raven.Engine.SECD is
          VM          : Raven_VM;
          Abandoned   : Natural := 0;
          Held        : Object_Vectors.Vector;
+         Kept        : Object_Vectors.Vector;
          Suspended   : Object_Vectors.Vector;
          Incomplete  : Library_Id_Vectors.Vector;
          St          : Stacks;
@@ -379,6 +380,35 @@ package body Raven.Engine.SECD is
      (This : Instance)
       return Boolean
    is (This.Trace);
+
+   overriding procedure Replace_Car
+     (This  : in out Instance;
+      Pair  : Object;
+      Value : Object);
+
+   overriding procedure Replace_Cdr
+     (This  : in out Instance;
+      Pair  : Object;
+      Value : Object);
+
+   overriding procedure Replace_Element
+     (This   : in out Instance;
+      Vector : Object;
+      Index  : Natural;
+      Value  : Object);
+
+   overriding function Keep
+     (This  : in out Instance;
+      Value : Object)
+      return Positive;
+
+   overriding function Kept
+     (This  : Instance;
+      Index : Positive)
+      return Object
+   is (This.Kept (Index));
+
+   overriding procedure Forget_Kept (This : in out Instance);
 
    overriding function Expansion_Library
      (This : Instance)
@@ -908,6 +938,7 @@ package body Raven.Engine.SECD is
         (VM          => VM,
          Abandoned   => 0,
          Held        => Object_Vectors.Empty_Vector,
+         Kept        => Object_Vectors.Empty_Vector,
          Suspended   => Object_Vectors.Empty_Vector,
          Incomplete  => Library_Id_Vectors.Empty_Vector,
          St          => [others => Raven.Objects.Nil],
@@ -1520,6 +1551,15 @@ package body Raven.Engine.SECD is
       end loop;
    end Execute;
 
+   -----------------
+   -- Forget_Kept --
+   -----------------
+
+   overriding procedure Forget_Kept (This : in out Instance) is
+   begin
+      This.Kept.Clear;
+   end Forget_Kept;
+
    ---------------
    -- Get_Macro --
    ---------------
@@ -1566,6 +1606,20 @@ package body Raven.Engine.SECD is
    begin
       This.Libraries.Iterate_Exports (Library, Process);
    end Iterate_Exports;
+
+   ----------
+   -- Keep --
+   ----------
+
+   overriding function Keep
+     (This  : in out Instance;
+      Value : Object)
+      return Positive
+   is
+   begin
+      This.Kept.Append (Value);
+      return This.Kept.Last_Index;
+   end Keep;
 
    -------------------
    -- List_To_Block --
@@ -1667,6 +1721,14 @@ package body Raven.Engine.SECD is
          begin
             Process (Stack);
             This.Held.Replace_Element (Position, Stack);
+         end;
+      end loop;
+      for Position in This.Kept.Iterate loop
+         declare
+            Item : Object := Object_Vectors.Element (Position);
+         begin
+            Process (Item);
+            This.Kept.Replace_Element (Position, Item);
          end;
       end loop;
       for Position in This.Suspended.Iterate loop
@@ -1857,6 +1919,52 @@ package body Raven.Engine.SECD is
 
       This.Held.Delete_Last;
    end Release_Stack;
+
+   -----------------
+   -- Replace_Car --
+   -----------------
+
+   overriding procedure Replace_Car
+     (This  : in out Instance;
+      Pair  : Object;
+      Value : Object)
+   is
+      Address : constant Address_Type := Objects.Get_Address (Pair);
+      Cell    : Raven.Memory.Cell_Type := This.Memory.Get (Address);
+   begin
+      Cell.Car := Value;
+      This.Memory.Set (Address, Cell);
+   end Replace_Car;
+
+   -----------------
+   -- Replace_Cdr --
+   -----------------
+
+   overriding procedure Replace_Cdr
+     (This  : in out Instance;
+      Pair  : Object;
+      Value : Object)
+   is
+      Address : constant Address_Type := Objects.Get_Address (Pair);
+      Cell    : Raven.Memory.Cell_Type := This.Memory.Get (Address);
+   begin
+      Cell.Cdr := Value;
+      This.Memory.Set (Address, Cell);
+   end Replace_Cdr;
+
+   ---------------------
+   -- Replace_Element --
+   ---------------------
+
+   overriding procedure Replace_Element
+     (This   : in out Instance;
+      Vector : Object;
+      Index  : Natural;
+      Value  : Object)
+   is
+   begin
+      This.Memory.Set_Vector_Element (Vector, Index, Value);
+   end Replace_Element;
 
    overriding procedure Report (This : Instance) is
    begin

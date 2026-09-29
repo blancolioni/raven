@@ -308,6 +308,46 @@ private package Raven.Target is
       return Object
    is abstract;
 
+   --  What the reader needs to read datum labels (#167): a pair's car or
+   --  cdr, or a vector's element, replaced where it is, which is how a
+   --  datum that refers to itself is made; and somewhere to keep the
+   --  data the labels name while the rest is read, which the collector
+   --  sees and moves them in.  Keep answers with where each is kept, and
+   --  Forget_Kept lets them all go.
+
+   procedure Replace_Car
+     (This  : in out Abstraction;
+      Pair  : Object;
+      Value : Object)
+   is abstract;
+
+   procedure Replace_Cdr
+     (This  : in out Abstraction;
+      Pair  : Object;
+      Value : Object)
+   is abstract;
+
+   procedure Replace_Element
+     (This   : in out Abstraction;
+      Vector : Object;
+      Index  : Natural;
+      Value  : Object)
+   is abstract;
+
+   function Keep
+     (This  : in out Abstraction;
+      Value : Object)
+      return Positive
+   is abstract;
+
+   function Kept
+     (This  : Abstraction;
+      Index : Positive)
+      return Object
+   is abstract;
+
+   procedure Forget_Kept (This : in out Abstraction) is abstract;
+
    --  A vector of the elements of the list on top of the stack, which
    --  it replaces.
    --
@@ -341,9 +381,15 @@ private package Raven.Target is
    --  Readable picks which, and is the one every caller but display
    --  wants.
 
+   --
+   --  Shared is write-shared's (#167): every pair or vector reached more
+   --  than once is labelled, where otherwise only one the object runs
+   --  back into is.
+
    function Show (This     : Abstraction'Class;
                   X        : Object;
-                  Readable : Boolean := True)
+                  Readable : Boolean := True;
+                  Shared   : Boolean := False)
                   return String;
 
    --  A number that is not a fixnum as it is written, which is the

@@ -1,3 +1,5 @@
+with Ada.Containers.Ordered_Maps;
+with Ada.Containers.Ordered_Sets;
 with Ada.Strings.Fixed;
 with Ada.Strings.Wide_Wide_Fixed;
 with Ada.Unchecked_Deallocation;
@@ -11,6 +13,24 @@ package body Raven.Parser is
       record
          Lex : Raven.Parser.Lexical.Instance;
       end record;
+
+   --  Datum labels (#167).  A label stands for a placeholder while its
+   --  datum is being read, which is what a reference to it inside the
+   --  datum is until the datum is whole; then for the datum, which the
+   --  machine keeps where the collector moves it.  Kept is where, and
+   --  nought while the datum is being read.
+
+   type Label_Entry is
+      record
+         Placeholder : Object;
+         Kept        : Natural := 0;
+      end record;
+
+   package Label_Maps is
+     new Ada.Containers.Ordered_Maps (Natural, Label_Entry);
+
+   package Object_Sets is
+     new Ada.Containers.Ordered_Sets (Object);
 
    procedure Parse_S_Expression
      (Lex    : in out Raven.Parser.Lexical.Instance'Class;
@@ -91,11 +111,44 @@ package body Raven.Parser is
       Target : Raven.Target.Reference)
    is
 
+      --  The number of the label the lexer is at, or nought, said, for
+      --  one too large to be one.
+
+      function Label_Number return Natural;
+
       procedure Parse_Expression;
 
       procedure Parse_Rest_Of_List;
 
+      --  Every Placeholder in Datum replaced by Datum itself, which is
+      --  how a datum that refers to itself is made.  Nothing is made
+      --  while it walks, so nothing moves under it; and it walks each
+      --  pair and vector once, so a datum that already goes round in a
+      --  circle does not take it round for ever.
+
+      procedure Patch
+        (Datum       : Object;
+         Placeholder : Object);
+
       procedure Skip_Datum_Comments;
+
+      --  The labels of the datum being read, which are its own and no
+      --  other's.
+
+      Labels : Label_Maps.Map;
+
+      ------------------
+      -- Label_Number --
+      ------------------
+
+      function Label_Number return Natural is
+      begin
+         return Natural'Wide_Wide_Value (Lex.Tok_Text);
+      exception
+         when Constraint_Error =>
+            Lex.Error ("datum label " & Lex.Tok_Text & " is too large");
+            return 0;
+      end Label_Number;
 
       ----------------------
       -- Parse_Expression --
@@ -334,6 +387,48 @@ package body Raven.Parser is
                   end if;
                   Lex.Scan;
                end;
+            when Tok_Label_Define =>
+               declare
+                  Number      : constant Natural := Label_Number;
+                  Placeholder : constant Object :=
+                                  Target.New_Symbol ("datum-label");
+               begin
+                  Lex.Scan;
+
+                  if Labels.Contains (Number) then
+                     Lex.Error
+                       ("datum label" & Natural'Wide_Wide_Image (Number)
+                        & " is defined twice");
+                  end if;
+
+                  Labels.Include (Number, (Placeholder, 0));
+                  Parse_Expression;
+
+                  if Target.Top = Placeholder then
+                     Lex.Error ("a datum label cannot name only itself");
+                  else
+                     Patch (Target.Top, Placeholder);
+                  end if;
+
+                  Labels.Include
+                    (Number, (Placeholder, Target.Keep (Target.Top)));
+               end;
+            when Tok_Label_Reference =>
+               declare
+                  Number : constant Natural := Label_Number;
+               begin
+                  Lex.Scan;
+
+                  if not Labels.Contains (Number) then
+                     Lex.Error
+                       ("no datum label" & Natural'Wide_Wide_Image (Number));
+                     Target.Push (Raven.Objects.To_Object (False));
+                  elsif Labels (Number).Kept = 0 then
+                     Target.Push (Labels (Number).Placeholder);
+                  else
+                     Target.Push (Target.Kept (Labels (Number).Kept));
+                  end if;
+               end;
             when others =>
                Lex.Error ("bad token");
                Lex.Scan;
@@ -379,6 +474,64 @@ package body Raven.Parser is
          Target.Cons;
       end Parse_Rest_Of_List;
 
+      -----------
+      -- Patch --
+      -----------
+
+      procedure Patch
+        (Datum       : Object;
+         Placeholder : Object)
+      is
+         use Raven.Objects;
+         Visited : Object_Sets.Set;
+
+         procedure Visit (X : Object);
+
+         -----------
+         -- Visit --
+         -----------
+
+         procedure Visit (X : Object) is
+            It : Object := X;
+         begin
+            --  Along the cdrs by looping and into the cars by asking
+            --  again, so a long list is not a deep one.
+
+            loop
+               exit when not (Is_Pair (It) or else Is_Vector (It))
+                 or else Visited.Contains (It);
+               Visited.Insert (It);
+
+               if Is_Vector (It) then
+                  for I in 0 .. Target.Vector_Length (It) - 1 loop
+                     if Target.Vector_Element (It, I) = Placeholder then
+                        Target.Replace_Element (It, I, Datum);
+                     else
+                        Visit (Target.Vector_Element (It, I));
+                     end if;
+                  end loop;
+                  exit;
+               end if;
+
+               if Target.Car (It) = Placeholder then
+                  Target.Replace_Car (It, Datum);
+               else
+                  Visit (Target.Car (It));
+               end if;
+
+               if Target.Cdr (It) = Placeholder then
+                  Target.Replace_Cdr (It, Datum);
+                  exit;
+               end if;
+
+               It := Target.Cdr (It);
+            end loop;
+         end Visit;
+
+      begin
+         Visit (Datum);
+      end Patch;
+
       --------------------------
       -- Skip_Datum_Comments --
       --------------------------
@@ -404,6 +557,12 @@ package body Raven.Parser is
       Lex.Report_To (Target);
 
       Parse_Expression;
+
+      --  What the labels named is in the datum now, if anywhere.
+
+      if not Labels.Is_Empty then
+         Target.Forget_Kept;
+      end if;
    end Parse_S_Expression;
 
    -----------
