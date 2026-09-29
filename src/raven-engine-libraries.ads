@@ -3,8 +3,7 @@ private with Ada.Containers.Indefinite_Ordered_Maps;
 private with Ada.Containers.Indefinite_Ordered_Sets;
 private with Ada.Containers.Indefinite_Vectors;
 private with Ada.Containers.Vectors;
-private with Ada.Strings.Equal_Case_Insensitive;
-private with Ada.Strings.Hash_Case_Insensitive;
+private with Ada.Strings.Hash;
 private with Ada.Strings.Unbounded;
 
 with Raven.Environment;
@@ -225,12 +224,15 @@ private
    package Import_Vectors is
      new Ada.Containers.Vectors (Positive, Import_Entry);
 
+   --  Names are compared as they are written, as symbols are (#160):
+   --  this still folded case, so Foo and foo were one name here.
+
    package Macro_Maps is
      new Ada.Containers.Indefinite_Hashed_Maps
        (Key_Type        => String,
         Element_Type    => Raven.Target.Real_Macro_Id,
-        Hash            => Ada.Strings.Hash_Case_Insensitive,
-        Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive,
+        Hash            => Ada.Strings.Hash,
+        Equivalent_Keys => "=",
         "="             => Raven.Target."=");
 
    type Library_Record is

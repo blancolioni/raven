@@ -1,16 +1,18 @@
 with Ada.Containers.Indefinite_Hashed_Maps;
-with Ada.Strings.Equal_Case_Insensitive;
-with Ada.Strings.Hash_Case_Insensitive;
+with Ada.Strings.Hash;
 with Ada.Unchecked_Deallocation;
 with Raven.Objects;
 
 package body Raven.Engine.Environment is
 
+   --  Names are compared as they are written, as symbols are (#160):
+   --  this still folded case, so Foo and foo were one name here.
+
    package Object_Maps is new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type        => String,
       Element_Type    => Object,
-      Hash            => Ada.Strings.Hash_Case_Insensitive,
-      Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive);
+      Hash            => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
 
    type Instance is new Raven.Environment.Abstraction with
       record

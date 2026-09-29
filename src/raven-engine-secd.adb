@@ -1,7 +1,6 @@
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
-with Ada.Strings.Equal_Case_Insensitive;
 with Ada.Text_IO;
 
 with Raven.Engine.Libraries;
@@ -775,9 +774,7 @@ package body Raven.Engine.SECD is
       --  spend one each time.
 
       for I in 1 .. This.Foreign.Last_Index loop
-         if Ada.Strings.Equal_Case_Insensitive
-           (This.Foreign (I).Name, Name)
-         then
+         if This.Foreign (I).Name = Name then
             This.Foreign (I) := New_Entry;
             Id := I;
             Found := True;
