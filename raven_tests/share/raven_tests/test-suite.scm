@@ -3533,6 +3533,8 @@
 
 (test "features is a list of symbols" #t
       (and (list? (features)) (symbol? (car (features)))))
+(test "r7rs is one, now that (scheme base) is whole" #t (probe-has? 'r7rs))
+(test "and first, where R7RS lists it" 'r7rs (car (features)))
 (test "raven is one" #t (probe-has? 'raven))
 (test "and full-unicode" #t (probe-has? 'full-unicode))
 (test "and ratios, since exact rationals" #t (probe-has? 'ratios))
@@ -3546,6 +3548,9 @@
 
 (test "cond-expand takes a feature it has" 'yes
       (cond-expand (raven 'yes) (else 'no)))
+(test "and r7rs" 'yes (cond-expand (r7rs 'yes) (else 'no)))
+(cond-expand (r7rs (define probe-r7rs-defined 'defined)))
+(test "and r7rs around a definition" 'defined probe-r7rs-defined)
 (test "and passes one it has not" 'no
       (cond-expand (exact-complex 'yes) (else 'no)))
 (test "and the first that holds" 1
