@@ -465,6 +465,17 @@ private package Raven.Target is
       return Library_Id
    is abstract;
 
+   --  Whether the macro whose body has just run was syntax-rules' (#178),
+   --  which it says as it expands.  The translator clears it before it
+   --  runs a body and asks after.
+
+   procedure Set_Hygienic
+     (This  : in out Abstraction;
+      Value : Boolean)
+   is abstract;
+
+   function Hygienic (This : Abstraction) return Boolean is abstract;
+
    function Append_Lists
      (This  : in out Abstraction;
       List1 : Object;

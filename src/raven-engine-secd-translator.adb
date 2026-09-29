@@ -13,7 +13,6 @@ with Raven.Target;
 package body Raven.Engine.SECD.Translator is
 
    use Raven.Instructions;
-   use type Raven.Target.Library_Id;
 
    package Object_Sets is new Ada.Containers.Ordered_Sets (Object);
    use type Raven.Target.Macro_Id;
@@ -321,11 +320,28 @@ package body Raven.Engine.SECD.Translator is
       Home      : Raven.Target.Real_Library_Id := Library;
       Expanding : Boolean := False;
 
+      --  Whether what is being read came from syntax-rules (#178).  Every
+      --  name such a template wrote is an alias, so a plain name in its
+      --  expansion is the caller's, and means what it means at the use
+      --  site and nowhere else.  What a define-macro wrote may be its
+      --  own, and is looked for in its library after the use site.
+
+      Hygienic  : Boolean := False;
+
+      --  Where the macro whose expansion is being read was used, which is
+      --  where a name the caller passed in means something.  That was
+      --  taken to be Library, the library being translated, which it is
+      --  for a macro used in what the library wrote; but a macro used in
+      --  another macro's body was used where that body was written, and
+      --  one used in another macro's expansion where that one was used.
+
+      Use_Site  : Raven.Target.Real_Library_Id := Library;
+
       --  Which library a definition here belongs to, and so which one
       --  a macro defined here is named in.
 
       function Written_In return Raven.Target.Real_Library_Id
-      is (if Expanding then Library else Home);
+      is (if Expanding then Use_Site else Home);
 
       --  Everything this translation is working with lives here, so
       --  that a collection provoked by a macro expansion neither takes
@@ -512,11 +528,11 @@ package body Raven.Engine.SECD.Translator is
          --
          --  A name a syntax-rules template wrote is not one of these:
          --  it is an alias (#24), which Locate reads where the template
-         --  was written.  What comes here from an expansion is a name
-         --  the caller passed in, or one a define-macro wrote, and the
-         --  two cannot be told apart.  So a caller's reference to a
-         --  name it has not defined yet, which the macro's library
-         --  defines, still goes to that library instead.
+         --  was written.  So a plain name in what syntax-rules made is
+         --  one the caller passed in, and is the use site's (#178), even
+         --  where the use site has not defined it yet and the macro's
+         --  library has.  What a define-macro made may hold names of its
+         --  own, which is what the rule above is still for.
          --
          --  A name neither library accounts for is the use site's
          --  (#168).  It went to the macro's library, where nothing
@@ -525,13 +541,14 @@ package body Raven.Engine.SECD.Translator is
          --  n (ints (+ n 1))))) -- was undefined for good.  At the use
          --  site it means whatever the caller goes on to define.
 
-         if Home = Library then
-            Where := Library;
-         elsif Expanding
-           and then (Target.Binds (Library, Name)
-                     or else not Target.Binds (Home, Name))
+         if not Expanding then
+            Where := Home;
+         elsif Hygienic then
+            Where := Use_Site;
+         elsif Target.Binds (Use_Site, Name)
+           or else not Target.Binds (Home, Name)
          then
-            Where := Library;
+            Where := Use_Site;
          else
             Where := Home;
          end if;
@@ -1233,6 +1250,9 @@ package body Raven.Engine.SECD.Translator is
                         Old_Home        : constant
                           Raven.Target.Real_Library_Id := Home;
                         Old_Expanding   : constant Boolean := Expanding;
+                        Old_Hygienic    : constant Boolean := Hygienic;
+                        Old_Use_Site    : constant
+                          Raven.Target.Real_Library_Id := Use_Site;
                         Old_Current     : constant Positive := This.Current;
                         Expansion_Level : Positive;
                      begin
@@ -1245,6 +1265,7 @@ package body Raven.Engine.SECD.Translator is
 
                         Home      := Macro_Home;
                         Expanding := False;
+                        Hygienic  := False;
 
                         declare
                            Params     : constant Root :=
@@ -1275,7 +1296,9 @@ package body Raven.Engine.SECD.Translator is
                            begin
                               Target.Set_Expansion_Library
                                 (Macro_Expansion);
+                              Target.Set_Hygienic (False);
                               Target.Execute;
+                              Hygienic := Target.Hygienic;
                               Target.Set_Expansion_Library (Old_Expansion);
                            exception
                               when others =>
@@ -1292,10 +1315,14 @@ package body Raven.Engine.SECD.Translator is
 
                         Home      := Macro_Expansion;
                         Expanding := True;
+                        Use_Site  :=
+                          (if Old_Expanding then Old_Use_Site else Old_Home);
                         Go (Target.Pop, Tail);
 
                         Home      := Old_Home;
                         Expanding := Old_Expanding;
+                        Hygienic  := Old_Hygienic;
+                        Use_Site  := Old_Use_Site;
                      end;
                   else
                      declare
@@ -1382,7 +1409,7 @@ package body Raven.Engine.SECD.Translator is
                              else Raven.Target.No_Macro);
                   end if;
 
-                  return Target.Macro (Library, Written);
+                  return Target.Macro (Use_Site, Written);
                end;
             elsif not Found then
                --  As a name that is not a macro is resolved: a
@@ -1390,14 +1417,14 @@ package body Raven.Engine.SECD.Translator is
                --  written in, and what the body produced means the
                --  use site's first.
 
-               if Home = Library then
-                  return Target.Macro (Library, Name);
-               elsif not Expanding then
+               if not Expanding then
                   return Target.Macro (Home, Name);
+               elsif Hygienic then
+                  return Target.Macro (Use_Site, Name);
                else
                   declare
                      Id : constant Raven.Target.Macro_Id :=
-                            Target.Macro (Library, Name);
+                            Target.Macro (Use_Site, Name);
                   begin
                      if Id = Raven.Target.No_Macro then
                         return Target.Macro (Home, Name);
@@ -1491,8 +1518,8 @@ package body Raven.Engine.SECD.Translator is
                Append_Reference_In (Macro_Library, Written);
             elsif Try_Lexical (Text) then
                null;
-            elsif Target.Binds (Library, Text) then
-               Append_Reference_In (Library, Written);
+            elsif Target.Binds (Use_Site, Text) then
+               Append_Reference_In (Use_Site, Written);
             else
                Append_Reference_In (Macro_Library, Written);
             end if;
