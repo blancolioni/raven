@@ -1084,15 +1084,24 @@
 
 ;;  (syntax-rules ellipsis (literal ...) rule ...) names the ellipsis
 ;;  (#41); without the name it is ....
+;;
+;;  The rules go to the expander by raven-syntax-quote, which leaves an
+;;  alias in them an alias (#180): rules a template wrote, in a macro
+;;  that writes macros, mean by each name what that template meant.
 
 (define-macro (define-syntax sr-name sr-rules)
   (if (sr-syntax-rules? sr-rules)
       (if (symbol? (cadr sr-rules))
           `(define-macro (,sr-name . sr-form)
-             (sr-expand ',(cadr sr-rules) ',(caddr sr-rules)
-                        ',(cdr (cddr sr-rules)) sr-form))
+             (sr-expand (raven-syntax-quote ,(cadr sr-rules))
+                        (raven-syntax-quote ,(caddr sr-rules))
+                        (raven-syntax-quote ,(cdr (cddr sr-rules)))
+                        sr-form))
           `(define-macro (,sr-name . sr-form)
-             (sr-expand '... ',(cadr sr-rules) ',(cddr sr-rules) sr-form)))
+             (sr-expand '...
+                        (raven-syntax-quote ,(cadr sr-rules))
+                        (raven-syntax-quote ,(cddr sr-rules))
+                        sr-form)))
       (error "define-syntax: expected (syntax-rules (literal ...) rule ...)")))
 
 ;;  The forms above are all define-syntax has to be written with.  What

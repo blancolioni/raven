@@ -453,6 +453,8 @@ package body Raven.Engine.SECD.Translator is
       S_Eq                : constant Object := Target.To_Symbol ("raven-eq?");
       S_Pair              : constant Object := Target.To_Symbol ("pair?");
       S_Quasiquote        : constant Object := Target.To_Symbol ("quasiquote");
+      S_Syntax_Quote      : constant Object :=
+                              Target.To_Symbol ("raven-syntax-quote");
       S_Set               : constant Object := Target.To_Symbol ("set!");
       S_Unquote           : constant Object := Target.To_Symbol ("unquote");
       S_Unquote_Splicing  : constant Object :=
@@ -850,6 +852,14 @@ package body Raven.Engine.SECD.Translator is
 
          procedure Load_Quoted (K : Object);
 
+         --  raven-syntax-quote's datum (#180): a quote that leaves an
+         --  alias in it an alias, which is how define-syntax hands its
+         --  rules to the expander.  Rules a template wrote are full of
+         --  aliases, each meaning what it meant where that template was
+         --  written, and a quote read them as the names they stood for.
+
+         procedure Load_Syntax (K : Object);
+
          function Reaches_Twice (K : Object) return Boolean;
 
          -------------------
@@ -915,6 +925,20 @@ package body Raven.Engine.SECD.Translator is
                Load_Constant (K);
             end if;
          end Load_Quoted;
+
+         -----------------
+         -- Load_Syntax --
+         -----------------
+
+         procedure Load_Syntax (K : Object) is
+         begin
+            if Raven.Objects.Is_Pair (K) and then Reaches_Twice (K) then
+               This.Append (LDC);
+               This.Append_Datum (K);
+            else
+               Load_Constant (K, Strip => False);
+            end if;
+         end Load_Syntax;
 
          -------------------
          -- Reaches_Twice --
@@ -1018,6 +1042,11 @@ package body Raven.Engine.SECD.Translator is
                if H = Raven.Objects.Quote then
                   Expect (1, 1, "quote takes one datum: (quote x)");
                   Load_Quoted (Target.Cadr (Get (X)));
+               elsif H = S_Syntax_Quote then
+                  Expect (1, 1,
+                          "raven-syntax-quote takes one datum: "
+                          & "(raven-syntax-quote x)");
+                  Load_Syntax (Target.Cadr (Get (X)));
                elsif H = Raven.Objects.If_Obj then
                   Expect (2, 3,
                           "if takes a test, what to do, and what to do "
