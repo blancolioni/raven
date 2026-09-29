@@ -475,6 +475,17 @@ private package Raven.Target is
    is abstract;
 
    function Hygienic (This : Abstraction) return Boolean is abstract;
+   --  And for a macro a body bound, how many of the translator's scopes
+   --  there were where it was bound (#181), which the aliases it makes
+   --  carry; nought for a macro a library defined.
+
+   procedure Set_Expansion_Scope
+     (This  : in out Abstraction;
+      Scope : Natural)
+   is abstract;
+
+   function Expansion_Scope (This : Abstraction) return Natural
+   is abstract;
 
    --  Where the macro whose body is running was used (#179): the library,
    --  and every name bound there in a scope of the form being read.

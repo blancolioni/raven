@@ -663,7 +663,8 @@ package body Raven is
            (1,
             Raven.Objects.To_Object
               (VM.Data.Target.New_Alias_Id
-                 (Raven.Objects.To_Symbol (X), Positive (Library))));
+                 (Raven.Objects.To_Symbol (X), Positive (Library),
+                  VM.Data.Target.Expansion_Scope)));
       end if;
    end Make_Alias;
 

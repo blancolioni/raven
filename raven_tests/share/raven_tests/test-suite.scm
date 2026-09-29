@@ -1598,6 +1598,19 @@
 (test "and an else no one has bound still is" 'taken
       (cond (#f 'no) (else 'taken)))
 
+;;  And the body's names are those it had where the macro was bound
+;;  (#181), not ones the caller has bound since.
+
+(test "a macro in a body means the body's names, not the caller's" 5
+      (let ((n 5))
+        (let-syntax ((get-n (syntax-rules () ((_) n))))
+          (let ((n 99)) (get-n)))))
+(test "and its template's macro is the body's" 'outer
+      (let-syntax ((which (syntax-rules () ((_) 'outer))))
+        (let-syntax ((call-which (syntax-rules () ((_) (which)))))
+          (let-syntax ((which (syntax-rules () ((_) 'inner))))
+            (call-which)))))
+
 (define-syntax call-later (syntax-rules () ((_) (defined-after-the-macro))))
 (define (defined-after-the-macro) 'later)
 (test "a template's name defined after the macro" 'later (call-later))

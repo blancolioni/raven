@@ -91,6 +91,12 @@ package body Raven.Engine.SECD.Translator is
                Is_List : Boolean;
             when Macro_Binding =>
                Macro   : Raven.Target.Real_Macro_Id;
+
+               --  How many scopes there were where it was bound, which
+               --  are the ones its template's names are looked for in
+               --  (#181).
+
+               Depth   : Natural;
          end case;
       end record;
 
@@ -384,7 +390,10 @@ package body Raven.Engine.SECD.Translator is
       --  Whether a lexical binding holds Name, and its address appended
       --  when one does.
 
-      function Try_Lexical (Name : String) return Boolean;
+      function Try_Lexical
+        (Name   : String;
+         Within : Natural := Natural'Last)
+         return Boolean;
 
       procedure Bind_Macro
         (Name : String;
@@ -401,10 +410,14 @@ package body Raven.Engine.SECD.Translator is
 
       procedure Emit (Level : Positive);
 
+      --  Within is how many scopes, from the outermost, are looked in:
+      --  those that were there where a macro a body bound was bound.
+
       procedure Find_Binding
-        (Name  : String;
-         Found : out Boolean;
-         Ent   : out Env_Entry);
+        (Name   : String;
+         Found  : out Boolean;
+         Ent    : out Env_Entry;
+         Within : Natural := Natural'Last);
 
       --  Tail says that the value of this form is the value of the
       --  body it stands in, so that a call here need save nothing.  It
@@ -419,8 +432,12 @@ package body Raven.Engine.SECD.Translator is
         (Form : Object;
          Tail : Boolean := False);
 
+      --  Depth is where a macro a body bound was bound (#181), and
+      --  nought for one a library defined.
+
       function Head_Macro
-        (F : Object)
+        (F     : Object;
+         Depth : out Natural)
          return Raven.Target.Macro_Id;
 
       function Head_Name (F : Object) return Object;
@@ -606,7 +623,8 @@ package body Raven.Engine.SECD.Translator is
             Target.Release_Macro (Env_Maps.Element (Position).Macro);
          end if;
 
-         Frame.Bindings.Include (Name, Env_Entry'(Macro_Binding, Id));
+         Frame.Bindings.Include
+           (Name, Env_Entry'(Macro_Binding, Id, Natural (Env.Length)));
       end Bind_Macro;
 
       ---------------
@@ -802,22 +820,27 @@ package body Raven.Engine.SECD.Translator is
       ------------------
 
       procedure Find_Binding
-        (Name  : String;
-         Found : out Boolean;
-         Ent   : out Env_Entry)
+        (Name   : String;
+         Found  : out Boolean;
+         Ent    : out Env_Entry;
+         Within : Natural := Natural'Last)
       is
+         Index : Natural := Natural (Env.Length);
       begin
          for Frame of reverse Env loop
-            declare
-               Position : constant Env_Maps.Cursor :=
-                            Frame.Bindings.Find (Name);
-            begin
-               if Env_Maps.Has_Element (Position) then
-                  Found := True;
-                  Ent   := Env_Maps.Element (Position);
-                  return;
-               end if;
-            end;
+            if Index <= Within then
+               declare
+                  Position : constant Env_Maps.Cursor :=
+                               Frame.Bindings.Find (Name);
+               begin
+                  if Env_Maps.Has_Element (Position) then
+                     Found := True;
+                     Ent   := Env_Maps.Element (Position);
+                     return;
+                  end if;
+               end;
+            end if;
+            Index := Index - 1;
          end loop;
          Found := False;
          Ent   := Env_Entry'(Variable_Binding, 0, False);
@@ -990,8 +1013,9 @@ package body Raven.Engine.SECD.Translator is
                          Hold (Table, Target.Car (Get (X)));
                A     : constant Root :=
                          Hold (Table, Target.Cdr (Get (X)));
+               Depth : Natural;
                Macro : constant Raven.Target.Macro_Id :=
-                         Head_Macro (Get (F));
+                         Head_Macro (Get (F), Depth);
 
                --  What the head is as a special form.  A template's
                --  begin or define is an alias (#24), and is still begin
@@ -1324,6 +1348,8 @@ package body Raven.Engine.SECD.Translator is
                               Old_Expansion : constant
                                 Raven.Target.Library_Id :=
                                   Target.Expansion_Library;
+                              Old_Scope     : constant Natural :=
+                                                Target.Expansion_Scope;
                            begin
                               Target.Set_Expansion_Library
                                 (Macro_Expansion);
@@ -1346,15 +1372,18 @@ package body Raven.Engine.SECD.Translator is
                                  end loop;
                               end loop;
 
+                              Target.Set_Expansion_Scope (Depth);
                               Target.Execute;
                               Hygienic := Target.Hygienic;
                               Target.Clear_Use_Site;
                               Target.Set_Expansion_Library (Old_Expansion);
+                              Target.Set_Expansion_Scope (Old_Scope);
                            exception
                               when others =>
                                  Target.Clear_Use_Site;
                                  Target.Set_Expansion_Library
                                    (Old_Expansion);
+                                 Target.Set_Expansion_Scope (Old_Scope);
                                  raise;
                            end;
                         end;
@@ -1413,10 +1442,13 @@ package body Raven.Engine.SECD.Translator is
       ----------------
 
       function Head_Macro
-        (F : Object)
+        (F     : Object;
+         Depth : out Natural)
          return Raven.Target.Macro_Id
       is
       begin
+         Depth := 0;
+
          if not Raven.Objects.Is_Symbol (F) then
             return Raven.Target.No_Macro;
          end if;
@@ -1448,16 +1480,27 @@ package body Raven.Engine.SECD.Translator is
                   Found_It : Boolean;
                   Local    : Env_Entry;
                begin
-                  if Id /= Raven.Target.No_Macro then
-                     return Id;
+                  --  A macro a body bound, named by a template of a macro
+                  --  that body bound, is looked for where that macro was.
+
+                  if Target.Alias_Scope (Raven.Objects.To_Symbol (F)) > 0
+                  then
+                     Find_Binding
+                       (Written, Found_It, Local,
+                        Within =>
+                          Target.Alias_Scope (Raven.Objects.To_Symbol (F)));
+
+                     if Found_It then
+                        if Local.Kind = Macro_Binding then
+                           Depth := Local.Depth;
+                           return Local.Macro;
+                        end if;
+                        return Raven.Target.No_Macro;
+                     end if;
                   end if;
 
-                  Find_Binding (Written, Found_It, Local);
-
-                  if Found_It then
-                     return (if Local.Kind = Macro_Binding
-                             then Local.Macro
-                             else Raven.Target.No_Macro);
+                  if Id /= Raven.Target.No_Macro then
+                     return Id;
                   end if;
 
                   return Target.Macro (Use_Site, Written);
@@ -1484,6 +1527,7 @@ package body Raven.Engine.SECD.Translator is
                   end;
                end if;
             elsif Ent.Kind = Macro_Binding then
+               Depth := Ent.Depth;
                return Ent.Macro;
             else
                return Raven.Target.No_Macro;
@@ -1565,10 +1609,17 @@ package body Raven.Engine.SECD.Translator is
                Inner := Target.Alias_Original (Inner);
             end loop;
 
-            if Target.Binds (Macro_Library, Text) then
-               Append_Reference_In (Macro_Library, Written);
-            elsif Try_Lexical (Text) then
+            --  A macro a body bound means that body's names, which are
+            --  the scopes that were there where it was bound (#181), and
+            --  not one the caller has opened since.
+
+            if Target.Alias_Scope (Objects.To_Symbol (Sym)) > 0
+              and then Try_Lexical
+                (Text, Within => Target.Alias_Scope (Objects.To_Symbol (Sym)))
+            then
                null;
+            elsif Target.Binds (Macro_Library, Text) then
+               Append_Reference_In (Macro_Library, Written);
             elsif Target.Binds (Use_Site, Text) then
                Append_Reference_In (Use_Site, Written);
             else
@@ -1674,14 +1725,22 @@ package body Raven.Engine.SECD.Translator is
       -- Try_Lexical --
       -----------------
 
-      function Try_Lexical (Name : String) return Boolean is
-         I : Natural := 0;
+      function Try_Lexical
+        (Name   : String;
+         Within : Natural := Natural'Last)
+         return Boolean
+      is
+         I     : Natural := 0;
+         Index : Natural := Natural (Env.Length);
       begin
          for Frame of reverse Env loop
             declare
                Position : constant Env_Maps.Cursor :=
-                            Frame.Bindings.Find (Name);
+                            (if Index <= Within
+                             then Frame.Bindings.Find (Name)
+                             else Env_Maps.No_Element);
             begin
+               Index := Index - 1;
                if Env_Maps.Has_Element (Position) then
                   declare
                      Ent : constant Env_Entry := Env_Maps.Element (Position);

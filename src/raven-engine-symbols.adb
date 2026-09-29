@@ -27,6 +27,7 @@ package body Raven.Engine.Symbols is
       record
          Original : Raven.Objects.Symbol_Id;
          Library  : Positive;
+         Scope    : Natural;
       end record;
 
    package Alias_Maps is
@@ -45,8 +46,14 @@ package body Raven.Engine.Symbols is
    overriding function New_Alias_Id
      (This     : in out Instance;
       Original : Raven.Objects.Symbol_Id;
-      Library  : Positive)
+      Library  : Positive;
+      Scope    : Natural := 0)
       return Raven.Objects.Symbol_Id;
+
+   overriding function Alias_Scope
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural;
 
    overriding function Alias_Original
      (This : Instance;
@@ -105,6 +112,22 @@ package body Raven.Engine.Symbols is
               else Id);
    end Alias_Original;
 
+   -----------------
+   -- Alias_Scope --
+   -----------------
+
+   overriding function Alias_Scope
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
+   is
+      Position : constant Alias_Maps.Cursor := This.Aliases.Find (Id);
+   begin
+      return (if Alias_Maps.Has_Element (Position)
+              then Alias_Maps.Element (Position).Scope
+              else 0);
+   end Alias_Scope;
+
    ------------
    -- Create --
    ------------
@@ -121,7 +144,8 @@ package body Raven.Engine.Symbols is
    overriding function New_Alias_Id
      (This     : in out Instance;
       Original : Raven.Objects.Symbol_Id;
-      Library  : Positive)
+      Library  : Positive;
+      Scope    : Natural := 0)
       return Raven.Objects.Symbol_Id
    is
       --  Shown as the name it stands for and a count, as a generated
@@ -130,7 +154,7 @@ package body Raven.Engine.Symbols is
       Id : constant Raven.Objects.Symbol_Id :=
              This.New_Symbol_Id (This.To_String (Original));
    begin
-      This.Aliases.Insert (Id, (Original, Library));
+      This.Aliases.Insert (Id, (Original, Library, Scope));
       return Id;
    end New_Alias_Id;
 
