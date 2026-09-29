@@ -1,6 +1,6 @@
 name = "raven"
 description = "Simple functional virtual machine"
-version = "0.1.0-dev"
+version = "0.1.0"
 
 authors = ["Fraser Wilson"]
 maintainers = ["Fraser Wilson <fraser@thewhitelion.eu>"]
