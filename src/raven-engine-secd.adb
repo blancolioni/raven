@@ -103,6 +103,7 @@ package body Raven.Engine.SECD is
          Hygienic    : Boolean := False;
          Use_Site    : Raven.Target.Library_Id := Raven.Target.No_Library;
          Bound_Here  : Name_Sets.Set;
+         Scope       : Natural := 0;
       end record;
 
    type Instance_Reference is access all Instance'Class;
@@ -325,9 +326,16 @@ package body Raven.Engine.SECD is
    overriding function New_Alias_Id
      (This     : in out Instance;
       Original : Raven.Objects.Symbol_Id;
-      Library  : Positive)
+      Library  : Positive;
+      Scope    : Natural := 0)
       return Raven.Objects.Symbol_Id
-   is (This.Syms.New_Alias_Id (Original, Library));
+   is (This.Syms.New_Alias_Id (Original, Library, Scope));
+
+   overriding function Alias_Scope
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
+   is (This.Syms.Alias_Scope (Id));
 
    overriding function Alias_Original
      (This : Instance;
@@ -447,6 +455,12 @@ package body Raven.Engine.SECD is
       Name : String)
       return Boolean
    is (This.Bound_Here.Contains (Name));
+   overriding function Expansion_Scope (This : Instance) return Natural
+   is (This.Scope);
+
+   overriding procedure Set_Expansion_Scope
+     (This  : in out Instance;
+      Scope : Natural);
 
    overriding procedure Set_Expansion_Library
      (This    : in out Instance;
@@ -1001,6 +1015,7 @@ package body Raven.Engine.SECD is
          Hygienic    => False,
          Use_Site    => Raven.Target.No_Library,
          Bound_Here  => Name_Sets.Empty_Set,
+         Scope       => 0,
          --  Named explicitly, because Symbols is an anonymous access
          --  parameter and Syms is a named access type.  Ada wants the
          --  conversion written; the GNAT this was developed against
@@ -2151,6 +2166,18 @@ package body Raven.Engine.SECD is
    begin
       This.Expansion := Library;
    end Set_Expansion_Library;
+
+   -------------------------
+   -- Set_Expansion_Scope --
+   -------------------------
+
+   overriding procedure Set_Expansion_Scope
+     (This  : in out Instance;
+      Scope : Natural)
+   is
+   begin
+      This.Scope := Scope;
+   end Set_Expansion_Scope;
 
    ---------------------
    -- Set_Export_List --

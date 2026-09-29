@@ -57,9 +57,16 @@ package body Raven.Engine is
    overriding function New_Alias_Id
      (This     : in out Instance;
       Original : Raven.Objects.Symbol_Id;
-      Library  : Positive)
+      Library  : Positive;
+      Scope    : Natural := 0)
       return Raven.Objects.Symbol_Id
-   is (This.Syms.New_Alias_Id (Original, Library));
+   is (This.Syms.New_Alias_Id (Original, Library, Scope));
+
+   overriding function Alias_Scope
+     (This : Instance;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
+   is (This.Syms.Alias_Scope (Id));
 
    overriding function Alias_Original
      (This : Instance;

@@ -50,11 +50,23 @@ private package Raven.Symbols is
    --  Alias_Original and Alias_Library of a symbol that is not an
    --  alias are the symbol itself and zero.
 
+   --  Scope is how many of the translator's scopes there were where the
+   --  macro was bound (#181), for a macro a body defined, whose template
+   --  means that body's names by the names it wrote; nought for a macro a
+   --  library defined.
+
    function New_Alias_Id
      (This     : in out Abstraction;
       Original : Raven.Objects.Symbol_Id;
-      Library  : Positive)
+      Library  : Positive;
+      Scope    : Natural := 0)
       return Raven.Objects.Symbol_Id
+      is abstract;
+
+   function Alias_Scope
+     (This : Abstraction;
+      Id   : Raven.Objects.Symbol_Id)
+      return Natural
       is abstract;
 
    function Alias_Original
