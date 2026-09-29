@@ -1582,6 +1582,62 @@
 (define (defined-after-the-macro) 'later)
 (test "a template's name defined after the macro" 'later (call-later))
 
+;;  An ellipsis of its own (#41): syntax-rules may name the identifier
+;;  it repeats with, and ... is then a name like any other.
+
+(define-syntax colon-list (syntax-rules ::: () ((_ x :::) (list x :::))))
+(test "an ellipsis of its own" '(1 2 3) (colon-list 1 2 3))
+(test "over nothing" '() (colon-list))
+
+(define-syntax pairs-of
+  (syntax-rules ::: ()
+    ((_ (a b :::) :::) '((a (b :::)) :::))))
+(test "an ellipsis of its own inside itself" '((1 (2 3)) (4 (5)))
+      (pairs-of (1 2 3) (4 5)))
+
+(define-syntax dots-are-a-name (syntax-rules ::: () ((_ ...) (list ...))))
+(test "... is a name when the ellipsis is another" '(5) (dots-are-a-name 5))
+
+;;  An ellipsis among the literals is a literal, and there is none.
+
+(define-syntax dots-literal
+  (syntax-rules (...)
+    ((_ ...) 'dots)
+    ((_ x) 'other)))
+(test "an ellipsis that is a literal" '(dots other)
+      (list (dots-literal ...) (dots-literal 1)))
+
+;;  (... template) is the template with no ellipsis in it, so (... ...)
+;;  is the ellipsis itself -- which is how a macro writes another
+;;  macro's rules.
+
+(define-syntax make-lister
+  (syntax-rules ()
+    ((_ name)
+     (define-syntax name
+       (syntax-rules () ((_ x (... ...)) (list x (... ...))))))))
+(make-lister lister)
+(test "(... ...) writes an ellipsis" '(1 2 3) (lister 1 2 3))
+
+(define-syntax quoted-dots (syntax-rules () ((_) '(... ...))))
+(test "and is the name ... as data" #t (eq? (quoted-dots) '...))
+
+;;  A vector pattern matches a vector whose elements match it, and a
+;;  vector template makes one.
+
+(define-syntax vector-sum (syntax-rules () ((_ #(x ...)) (+ x ...))))
+(test "a vector pattern" 6 (vector-sum #(1 2 3)))
+
+(define-syntax vector-or-list
+  (syntax-rules ()
+    ((_ #(x ...)) 'vector)
+    ((_ (x ...)) 'list)))
+(test "a vector pattern is not a list pattern" '(vector list)
+      (list (vector-or-list #(1)) (vector-or-list (1))))
+
+(define-syntax as-vector (syntax-rules () ((_ x ...) '#(x ...))))
+(test "a vector template" #(1 2 3) (as-vector 1 2 3))
+
 ;;  The library's own macros are written with syntax-rules now.  or
 ;;  holds what it tests in a name of its own, which it could not do
 ;;  while a name a template binds was the caller's.

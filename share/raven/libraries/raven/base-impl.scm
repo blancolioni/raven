@@ -720,14 +720,25 @@
 
 (define (sr-is? x name) (eq? (raven-syntax-name x) name))
 
+;;  The ellipsis of the macro being expanded (#41): ... unless its
+;;  syntax-rules names one of its own, and nothing when the ellipsis is
+;;  one of its literals, or inside (... template), where what would be
+;;  the ellipsis is a name like any other.  An expansion runs through
+;;  to its end before another starts, so one name holds it.
+
+(define sr-current-ellipsis '...)
+
+(define (sr-ellipsis-name? x)
+  (if (symbol? x) (sr-is? x sr-current-ellipsis) #f))
+
 (define (sr-ellipsis? x)
-  (if (pair? x) (sr-is? (car x) '...) #f))
+  (if (pair? x) (sr-ellipsis-name? (car x)) #f))
 
 (define (sr-vars pattern literals)
   (if (symbol? pattern)
       (if (sr-is? pattern '_)
           '()
-          (if (sr-is? pattern '...)
+          (if (sr-ellipsis-name? pattern)
               '()
               (if (eq? (memq pattern literals) #f)
                   (list pattern)
@@ -735,7 +746,9 @@
       (if (pair? pattern)
           (append (sr-vars (car pattern) literals)
                   (sr-vars (cdr pattern) literals))
-          '())))
+          (if (vector? pattern)
+              (sr-vars (vector->list pattern) literals)
+              '()))))
 
 ;;  Splitting a form for an ellipsis, without counting: step a lead
 ;;  pointer as far into the form as the pattern after the ellipsis
@@ -777,7 +790,16 @@
                                 (sr-match (car pattern) (car form)
                                           literals depth bindings))
                       sr-none))
-              (if (equal? pattern form) bindings sr-none)))))
+
+              ;;  A vector pattern matches a vector whose elements match
+              ;;  it as a list would, ellipsis and all.
+
+              (if (vector? pattern)
+                  (if (vector? form)
+                      (sr-match (vector->list pattern) (vector->list form)
+                                literals depth bindings)
+                      sr-none)
+                  (if (equal? pattern form) bindings sr-none))))))
 
 (define (sr-match-name pattern form literals depth bindings)
   (if (sr-is? pattern '_)
@@ -826,7 +848,9 @@
           (if (sr-ellipsis? (cdr pattern))
               (+ 1 (sr-under name (car pattern)))
               (sr-under name (car pattern))))
-      0))
+      (if (vector? pattern)
+          (sr-under name (vector->list pattern))
+          0)))
 
 (define (sr-gather names sub matches depth)
   (if (null? names)
@@ -854,12 +878,12 @@
 
 (define (sr-names x)
   (if (symbol? x)
-      (if (sr-is? x '...)
+      (if (sr-ellipsis-name? x)
           '()
           (if (sr-is? x '_) '() (list x)))
       (if (pair? x)
           (append (sr-names (car x)) (sr-names (cdr x)))
-          '())))
+          (if (vector? x) (sr-names (vector->list x)) '()))))
 
 (define (sr-let-names bindings)
   (if (pair? bindings)
@@ -946,12 +970,34 @@
               ;;  What the pattern bound still goes in.
 
               (cons 'quote (sr-instantiate (cdr template) bindings '()))
-              (if (sr-ellipsis? (cdr template))
-                  (append (sr-repeat (car template) bindings renames)
-                          (sr-instantiate (cddr template) bindings renames))
-                  (cons (sr-instantiate (car template) bindings renames)
-                        (sr-instantiate (cdr template) bindings renames))))
-          template)))
+              (if (if (sr-ellipsis-name? (car template))
+                      (if (pair? (cdr template)) (null? (cddr template)) #f)
+                      #f)
+                  (sr-escaped (cadr template) bindings renames)
+                  (if (sr-ellipsis? (cdr template))
+                      (append (sr-repeat (car template) bindings renames)
+                              (sr-instantiate (cddr template) bindings
+                                              renames))
+                      (cons (sr-instantiate (car template) bindings renames)
+                            (sr-instantiate (cdr template) bindings
+                                            renames)))))
+          (if (vector? template)
+              (list->vector
+               (sr-instantiate (vector->list template) bindings renames))
+              template))))
+
+;;  (... template) is template with no ellipsis in it (#41), so that
+;;  (... ...) is the ellipsis itself: what a template writes when what
+;;  it writes is another macro's rules.
+
+(define (sr-escaped template bindings renames)
+  ((lambda (outer)
+     (set! sr-current-ellipsis sr-none)
+     ((lambda (result)
+        (set! sr-current-ellipsis outer)
+        result)
+      (sr-instantiate template bindings renames)))
+   sr-current-ellipsis))
 
 (define (sr-repeat sub bindings renames)
   ((lambda (names)
@@ -1001,13 +1047,18 @@
       (cons (sr-instantiate sub (sr-heads names bindings) renames)
             (sr-repeat-each sub names (sr-rests names bindings) renames))))
 
-(define (sr-expand literals rules args)
+(define (sr-expand ellipsis literals rules args)
+  (set! sr-current-ellipsis
+        (if (eq? (memq ellipsis literals) #f) ellipsis sr-none))
+  (sr-expand-rules literals rules args))
+
+(define (sr-expand-rules literals rules args)
   (if (null? rules)
       (error "syntax-rules: no rule matches this form")
       ((lambda (rule)
          ((lambda (bindings)
             (if (eq? bindings sr-none)
-                (sr-expand literals (cdr rules) args)
+                (sr-expand-rules literals (cdr rules) args)
                 (sr-instantiate (cadr rule) bindings
                                 (sr-names-for (cadr rule) bindings))))
           (sr-match (cdr (car rule)) args literals 0 '())))
@@ -1027,12 +1078,17 @@
 ;;  the macros it defines, for the same reason -- the expander cannot
 ;;  use what only it can expand.
 
+;;  (syntax-rules ellipsis (literal ...) rule ...) names the ellipsis
+;;  (#41); without the name it is ....
+
 (define-macro (define-syntax sr-name sr-rules)
   (if (sr-syntax-rules? sr-rules)
       (if (symbol? (cadr sr-rules))
-          (error "define-syntax: syntax-rules with an ellipsis of its own is not here yet")
           `(define-macro (,sr-name . sr-form)
-             (sr-expand ',(cadr sr-rules) ',(cddr sr-rules) sr-form)))
+             (sr-expand ',(cadr sr-rules) ',(caddr sr-rules)
+                        ',(cdr (cddr sr-rules)) sr-form))
+          `(define-macro (,sr-name . sr-form)
+             (sr-expand '... ',(cadr sr-rules) ',(cddr sr-rules) sr-form)))
       (error "define-syntax: expected (syntax-rules (literal ...) rule ...)")))
 
 ;;  The forms above are all define-syntax has to be written with.  What
