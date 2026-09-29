@@ -1560,6 +1560,15 @@
 (define-syntax name-of (syntax-rules () ((_) 'template-name)))
 (test "a template's quoted name" #t (eq? (name-of) 'template-name))
 
+(define-syntax binds-and-quasiquotes
+  (syntax-rules () ((_) (let ((tmp 1)) `(tmp ,tmp)))))
+(test "a name a template binds, quasiquoted, is the name" #t
+      (let ((v (binds-and-quasiquotes)))
+        (and (eq? (car v) 'tmp) (= (cadr v) 1))))
+(test "and does not take the caller's" '(tmp 1 caller)
+      (let ((tmp 'caller))
+        (append (binds-and-quasiquotes) (list tmp))))
+
 (define-syntax tagged (syntax-rules () ((_ x) `(tag ,x))))
 (test "a template's quasiquoted name" #t
       (let ((v (tagged 5))) (and (eq? (car v) 'tag) (= (cadr v) 5))))
