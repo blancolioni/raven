@@ -26,6 +26,11 @@ private package Raven.Parser.Tokens is
        --  the parser is what reads the datum and drops it.
 
        Tok_Datum_Comment,
+
+       --  Datum labels (#167): #n= in front of a datum names it n, and
+       --  #n# is that datum again.  The number is the token's text.
+
+       Tok_Label_Define, Tok_Label_Reference,
        Tok_Nil);
 
 end Raven.Parser.Tokens;

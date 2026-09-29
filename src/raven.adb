@@ -225,10 +225,12 @@ package body Raven is
    function Display
      (This     : Raven_VM'Class;
       Value    : Object;
-      Readable : Boolean := True)
+      Readable : Boolean := True;
+      Shared   : Boolean := False)
       return Wide_Wide_String
    is
-      Image : constant String := This.Data.Target.Show (Value, Readable);
+      Image : constant String :=
+                This.Data.Target.Show (Value, Readable, Shared);
    begin
       return Decode (Image);
    end Display;

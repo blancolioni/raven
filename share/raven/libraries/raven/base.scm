@@ -152,9 +152,10 @@
    read-u8 peek-u8 u8-ready? write-u8
    read-bytevector read-bytevector! write-bytevector
 
-   ;;  output.  write-simple is write, which marks no structure a
-   ;;  datum shares; write-shared, which does, is not here yet.
-   write write-simple write-char write-string newline display
+   ;;  output.  write marks with a datum label what a datum runs back
+   ;;  into, and write-shared what it reaches more than once; write-simple
+   ;;  is write.
+   write write-simple write-shared write-char write-string newline display
 
    ;;  errors
    error

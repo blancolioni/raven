@@ -6,6 +6,7 @@ package body Raven.Strings is
 
    procedure Display_Text (VM : Raven_VM);
    procedure Write_Text (VM : Raven_VM);
+   procedure Write_Shared_Text (VM : Raven_VM);
    procedure Is_String (VM : Raven_VM);
    procedure String_Length (VM : Raven_VM);
    procedure List_To_String (VM : Raven_VM);
@@ -366,6 +367,8 @@ package body Raven.Strings is
         ("raven-display-text", Display_Text'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-write-text", Write_Text'Access, 1);
+      Evaluator.Bind_Foreign_Function
+        ("raven-write-shared-text", Write_Shared_Text'Access, 1);
       Evaluator.Bind_Foreign_Function
         ("raven-string-length", String_Length'Access, 1);
       Evaluator.Bind_Foreign_Function
@@ -950,6 +953,18 @@ package body Raven.Strings is
          end loop;
       end return;
    end To_Value;
+
+   -----------------------
+   -- Write_Shared_Text --
+   -----------------------
+
+   procedure Write_Shared_Text (VM : Raven_VM) is
+      S : constant Wide_Wide_String :=
+            VM.Display (VM.Get_Slot (1), Readable => True, Shared => True);
+      V : constant Instance := To_Value (S);
+   begin
+      VM.Set_Slot (1, VM.Create_Foreign_Value (V));
+   end Write_Shared_Text;
 
    ------------------
    -- Write_String --

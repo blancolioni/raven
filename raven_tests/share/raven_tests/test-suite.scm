@@ -3674,6 +3674,50 @@ y"))
 (test "the peculiar names are plain" "(+ - ... ->x)" (written '(+ - ... ->x)))
 (test "display writes the name as it is" "a b" (displayed (string->symbol "a b")))
 
+;;  Datum labels (#167).  #n= names the datum after it, and #n# is that
+;;  datum again, so a datum read in can share structure or run back into
+;;  itself.
+
+(define shared-read '(#0=(1 2) #0#))
+(test "a label read twice is one object" #t
+      (eq? (car shared-read) (cadr shared-read)))
+(test "and is what it names" '(1 2) (car shared-read))
+
+(define circular-read '#0=(a b . #0#))
+(test "a list that runs back into itself" '(a b a b a)
+      (list (car circular-read) (cadr circular-read) (caddr circular-read)
+            (cadddr circular-read) (car (cddddr circular-read))))
+(test "a vector that holds itself" #t
+      (let ((v '#0=#(1 #0#))) (eq? v (vector-ref v 1))))
+(test "labels inside labels" #t
+      (let ((x '#0=(a #1=(b #0#) #1#)))
+        (and (eq? (cadr (cadr x)) x) (eq? (cadr x) (caddr x)))))
+
+(define labelled-first '#0=(x))
+(test "labels are their datum's own" '(y y) '(#0=y #0#))
+
+;;  write labels what a datum runs back into, so that writing it comes
+;;  to an end, and display does the same; write-shared labels whatever
+;;  it reaches more than once, numbered as they are written.
+
+(define (written-shared x)
+  (let ((p (open-output-string))) (write-shared x p) (get-output-string p)))
+
+(test "write of a list that runs back into itself" "#0=(a b . #0#)"
+      (written circular-read))
+(test "display of it" "#0=(a b . #0#)" (displayed circular-read))
+(test "write of a vector that holds itself" "#0=#(1 #0#)"
+      (written (let ((v (vector 1 2))) (vector-set! v 1 v) v)))
+(test "write of a list whose car runs back" "#0=(#0# 1)"
+      (written (let ((p (list 1 1))) (set-car! p p) p)))
+(test "write of what is shared but does not run back" "((1 2) (1 2))"
+      (written shared-read))
+(test "write-shared of it" "(#0=(1 2) #0#)" (written-shared shared-read))
+(test "write-shared numbers its labels in order" "(#0=(1) #0# #1=(2) #1#)"
+      (let ((a (list 1)) (b (list 2))) (written-shared (list a a b b))))
+(test "write-shared of what shares nothing" "(1 (2) #(3))"
+      (written-shared (list 1 (list 2) (vector 3))))
+
 (write-string "Tests: ")
 (display num-tests)
 (write-string ", Passed: ")

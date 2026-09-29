@@ -1,4 +1,20 @@
+with Ada.Containers.Ordered_Maps;
+with Ada.Containers.Ordered_Sets;
+with Ada.Containers.Vectors;
+
 package body Raven.Target is
+
+   package Object_Sets is new Ada.Containers.Ordered_Sets (Object);
+
+   package Object_Vectors is
+     new Ada.Containers.Vectors (Positive, Object);
+
+   package Label_Maps is
+     new Ada.Containers.Ordered_Maps (Object, Natural);
+
+   --  A label's number as it is written, with no space in front.
+
+   function Image (N : Natural) return String;
 
    function Character_To_Name
      (Ch : Wide_Wide_Character)
@@ -44,19 +60,281 @@ package body Raven.Target is
       end case;
    end Character_To_Name;
 
+   -----------
+   -- Image --
+   -----------
+
+   function Image (N : Natural) return String is
+      Text : constant String := N'Image;
+   begin
+      return Text (Text'First + 1 .. Text'Last);
+   end Image;
+
    ----------
    -- Show --
    ----------
 
    function Show (This     : Abstraction'Class;
                   X        : Object;
-                  Readable : Boolean := True)
+                  Readable : Boolean := True;
+                  Shared   : Boolean := False)
                   return String
    is
       use Raven.Objects;
 
+      --  Datum labels (#167).  A pair or vector that the object runs
+      --  back into from inside itself is written #n= where it is first
+      --  written and #n# wherever it comes again, so that writing a
+      --  circular list comes to an end; with Shared, which is
+      --  write-shared, so is every one that is reached more than once.
+      --  Which need a label is found before anything is written, and
+      --  each is numbered as it is first written.
+      --
+      --  Nothing is made while an object is shown, so nothing moves:
+      --  an object is the same word from the first look to the last.
+
+      Needs  : Object_Sets.Set;
+      Labels : Label_Maps.Map;
+      Next   : Natural := 0;
+
+      procedure Find_Labels (Top : Object);
+
+      function Render (Item : Object) return String;
+      function Render_List (List : Object) return String;
+      function Render_Plain (Item : Object) return String;
       function Show_Held (Held : Object) return String;
-      function Show_List (List : Object) return String;
+
+      -----------------
+      -- Find_Labels --
+      -----------------
+
+      procedure Find_Labels (Top : Object) is
+         On_Path : Object_Sets.Set;
+         Done    : Object_Sets.Set;
+
+         procedure Walk (Item : Object);
+
+         ----------
+         -- Walk --
+         ----------
+
+         --  Along the cdrs by looping and into the rest by asking again,
+         --  so that a long list is not a deep one.
+
+         procedure Walk (Item : Object) is
+            Chain : Object_Vectors.Vector;
+            It    : Object := Item;
+         begin
+            loop
+               exit when not (Is_Pair (It) or else Is_Vector (It));
+
+               if On_Path.Contains (It) then
+                  Needs.Include (It);
+                  exit;
+               elsif Done.Contains (It) then
+                  if Shared then
+                     Needs.Include (It);
+                  end if;
+                  exit;
+               end if;
+
+               On_Path.Insert (It);
+               Chain.Append (It);
+
+               if Is_Vector (It) then
+                  for I in 0 .. This.Vector_Length (It) - 1 loop
+                     Walk (This.Vector_Element (It, I));
+                  end loop;
+                  exit;
+               end if;
+
+               Walk (This.Car (It));
+               It := This.Cdr (It);
+            end loop;
+
+            for Passed of Chain loop
+               On_Path.Delete (Passed);
+               Done.Insert (Passed);
+            end loop;
+         end Walk;
+
+      begin
+         Walk (Top);
+      end Find_Labels;
+
+      ------------
+      -- Render --
+      ------------
+
+      function Render (Item : Object) return String is
+      begin
+         if not Needs.Contains (Item) then
+            return Render_Plain (Item);
+         elsif Labels.Contains (Item) then
+            return "#" & Image (Labels (Item)) & "#";
+         end if;
+
+         declare
+            Label : constant Natural := Next;
+         begin
+            Next := Next + 1;
+            Labels.Insert (Item, Label);
+            return "#" & Image (Label) & "=" & Render_Plain (Item);
+         end;
+      end Render;
+
+      -----------------
+      -- Render_List --
+      -----------------
+
+      --  The rest of a list.  A pair in it that has a label is written
+      --  after a dot, because what the label names starts there.
+
+      function Render_List (List : Object) return String is
+      begin
+         if List = Nil then
+            return "";
+         elsif Is_Pair (List) and then not Needs.Contains (List) then
+            return " " & Render (This.Car (List))
+              & Render_List (This.Cdr (List));
+         else
+            return " . " & Render (List);
+         end if;
+      end Render_List;
+
+      ------------------
+      -- Render_Plain --
+      ------------------
+
+      function Render_Plain (Item : Object) return String is
+      begin
+         if Item = Nil then
+            return "()";
+         elsif Item = To_Object (True) then
+            return "#t";
+         elsif Item = To_Object (False) then
+            return "#f";
+         elsif Item = Lambda then
+            return "lambda";
+         elsif Item = Call_CC then
+            return "#<procedure call/cc>";
+         elsif Is_Continuation (Item) then
+            return "#<continuation>";
+         elsif Item = Quote then
+            return "quote";
+         elsif Item = Pending then
+            return "<pending>";
+         elsif Item = Undefined then
+            return "<undefined>";
+         elsif Is_Eof (Item) then
+            return "#eof";
+         elsif Is_Instruction (Item) then
+            return To_Instruction (Item)'Image;
+         elsif Is_Bignum (Item) or else Is_Ratnum (Item)
+           or else Is_Float (Item) or else Is_Flonum (Item)
+         then
+            return This.Show_Number (Item);
+         elsif Is_Integer (Item) then
+            declare
+               I   : constant Integer := To_Integer (Item);
+               Img : constant String := I'Image;
+            begin
+               return (if I < 0 then Img else Img (2 .. Img'Last));
+            end;
+         elsif Is_Character (Item) then
+            declare
+               Ch   : constant Wide_Wide_Character := To_Character (Item);
+               Name : constant String := Character_To_Name (Ch);
+
+               --  The character on its own, which is what it is read as
+               --  and what display answers with.
+
+               function Bare return String
+               is (if Wide_Wide_Character'Pos (Ch) <= 255
+                   then [Character'Val (Wide_Wide_Character'Pos (Ch))]
+                   else Encode ([Ch]));
+            begin
+               if not Readable then
+                  return Bare;
+               elsif Name /= "" then
+                  return "#\" & Name;
+               else
+                  return "#\" & Bare;
+               end if;
+            end;
+         elsif Is_Symbol (Item) then
+            return Symbol_Text
+              (This.To_String (Raven.Objects.To_Symbol (Item)), Readable);
+         elsif Is_Closure (Item) then
+
+            --  What a procedure shows as, rather than the whole of its
+            --  code and everything it captured, which is what a pair
+            --  showed as and what a closure was.
+
+            return "#procedure";
+         elsif Is_Foreign_Function (Item) then
+            return "#ff"
+              & Integer'Image (-Integer (To_Foreign_Function_Id (Item)));
+         elsif Is_Pair (Item) then
+            return "(" & Render (This.Car (Item))
+              & Render_List (This.Cdr (Item)) & ")";
+         elsif Is_Values (Item) then
+
+            --  Several values where one was wanted, which R7RS calls an
+            --  error and raven lets through: written so that it is plain
+            --  what it is.
+
+            declare
+               List : constant Object := This.Car (Item);
+            begin
+               return "#<values"
+                 & (if List = Nil then ""
+                    else " " & Render (This.Car (List))
+                         & Render_List (This.Cdr (List)))
+                 & ">";
+            end;
+         elsif Is_Record (Item) then
+
+            --  Which type it is, since nothing else says so: #<point> for
+            --  a point, and #<record-type point> for the type itself,
+            --  whose name is the first of its fields.
+
+            declare
+               Of_Type : constant Object := This.Vector_Element (Item, 0);
+            begin
+               if Is_Record (Of_Type) then
+                  return "#<"
+                    & This.Show (This.Vector_Element (Of_Type, 1)) & ">";
+               else
+                  return "#<record-type "
+                    & This.Show (This.Vector_Element (Item, 1)) & ">";
+               end if;
+            end;
+         elsif Is_Vector (Item) or else Is_Bytevector (Item) then
+
+            --  #(1 2 3) and #u8(1 2 3), which is how each is written and
+            --  how the reader takes it back.
+
+            declare
+               function Elements (Index : Natural) return String
+               is (if Index = This.Vector_Length (Item)
+                   then ""
+                   else (if Index = 0 then "" else " ")
+                     & Render (This.Vector_Element (Item, Index))
+                     & Elements (Index + 1));
+            begin
+               return (if Is_Bytevector (Item) then "#u8(" else "#(")
+                 & Elements (0) & ")";
+            end;
+         elsif Is_Foreign_Value (Item) then
+            return (if Readable
+                    then This.To_Foreign_Value (Item).Show (Show_Held'Access)
+                    else This.To_Foreign_Value (Item).Display
+                           (Show_Held'Access));
+         else
+            return To_String (Item);
+         end if;
+      end Render_Plain;
 
       ---------------
       -- Show_Held --
@@ -66,150 +344,14 @@ package body Raven.Target is
       --  written if it is written, displayed if it is displayed.
 
       function Show_Held (Held : Object) return String
-      is (This.Show (Held, Readable));
-
-      ---------------
-      -- Show_List --
-      ---------------
-
-      function Show_List (List : Object) return String is
-      begin
-         if List = Nil then
-            return "";
-         elsif Is_Pair (List) then
-            return " " & This.Show (This.Car (List), Readable)
-              & Show_List (This.Cdr (List));
-         else
-            return " . "
-              & This.Show (List, Readable);
-         end if;
-      end Show_List;
+      is (This.Show (Held, Readable, Shared));
 
    begin
-      if X = Nil then
-         return "()";
-      elsif X = To_Object (True) then
-         return "#t";
-      elsif X = To_Object (False) then
-         return "#f";
-      elsif X = Lambda then
-         return "lambda";
-      elsif X = Call_CC then
-         return "#<procedure call/cc>";
-      elsif Is_Continuation (X) then
-         return "#<continuation>";
-      elsif X = Quote then
-         return "quote";
-      elsif X = Pending then
-         return "<pending>";
-      elsif X = Undefined then
-         return "<undefined>";
-      elsif Is_Eof (X) then
-         return "#eof";
-      elsif Is_Instruction (X) then
-         return To_Instruction (X)'Image;
-      elsif Is_Bignum (X) or else Is_Ratnum (X)
-        or else Is_Float (X) or else Is_Flonum (X)
-      then
-         return This.Show_Number (X);
-      elsif Is_Integer (X) then
-         declare
-            I   : constant Integer := To_Integer (X);
-            Img : constant String := I'Image;
-         begin
-            return (if I < 0 then Img else Img (2 .. Img'Last));
-         end;
-      elsif Is_Character (X) then
-         declare
-            Ch   : constant Wide_Wide_Character := To_Character (X);
-            Name : constant String := Character_To_Name (Ch);
-
-            --  The character on its own, which is what it is read as
-            --  and what display answers with.
-
-            function Bare return String
-            is (if Wide_Wide_Character'Pos (Ch) <= 255
-                then [Character'Val (Wide_Wide_Character'Pos (Ch))]
-                else Encode ([Ch]));
-         begin
-            if not Readable then
-               return Bare;
-            elsif Name /= "" then
-               return "#\" & Name;
-            else
-               return "#\" & Bare;
-            end if;
-         end;
-      elsif Is_Symbol (X) then
-         return Symbol_Text
-           (This.To_String (Raven.Objects.To_Symbol (X)), Readable);
-      elsif Is_Closure (X) then
-
-         --  What a procedure shows as, rather than the whole of its
-         --  code and everything it captured, which is what a pair
-         --  showed as and what a closure was.
-
-         return "#procedure";
-      elsif Is_Foreign_Function (X) then
-         return "#ff" & Integer'Image (-Integer (To_Foreign_Function_Id (X)));
-      elsif Is_Pair (X) then
-         return "(" & This.Show (This.Car (X), Readable)
-           & Show_List (This.Cdr (X)) & ")";
-      elsif Is_Values (X) then
-
-         --  Several values where one was wanted, which R7RS calls an
-         --  error and raven lets through: written so that it is plain
-         --  what it is.
-
-         declare
-            List : constant Object := This.Car (X);
-         begin
-            return "#<values"
-              & (if List = Nil then ""
-                 else " " & This.Show (This.Car (List), Readable)
-                      & Show_List (This.Cdr (List)))
-              & ">";
-         end;
-      elsif Is_Record (X) then
-
-         --  Which type it is, since nothing else says so: #<point> for
-         --  a point, and #<record-type point> for the type itself,
-         --  whose name is the first of its fields.
-
-         declare
-            Of_Type : constant Object := This.Vector_Element (X, 0);
-         begin
-            if Is_Record (Of_Type) then
-               return "#<" & This.Show (This.Vector_Element (Of_Type, 1))
-                 & ">";
-            else
-               return "#<record-type "
-                 & This.Show (This.Vector_Element (X, 1)) & ">";
-            end if;
-         end;
-      elsif Is_Vector (X) or else Is_Bytevector (X) then
-
-         --  #(1 2 3) and #u8(1 2 3), which is how each is written and
-         --  how the reader takes it back.
-
-         declare
-            function Elements (Index : Natural) return String
-            is (if Index = This.Vector_Length (X)
-                then ""
-                else (if Index = 0 then "" else " ")
-                  & This.Show (This.Vector_Element (X, Index), Readable)
-                  & Elements (Index + 1));
-         begin
-            return (if Is_Bytevector (X) then "#u8(" else "#(")
-              & Elements (0) & ")";
-         end;
-      elsif Is_Foreign_Value (X) then
-         return (if Readable
-                 then This.To_Foreign_Value (X).Show (Show_Held'Access)
-                 else This.To_Foreign_Value (X).Display (Show_Held'Access));
-      else
-         return To_String (X);
+      if Is_Pair (X) or else Is_Vector (X) then
+         Find_Labels (X);
       end if;
+
+      return Render (X);
    end Show;
 
    -----------------

@@ -1542,6 +1542,13 @@
 
 (define (write x port) (write-string (raven-write-text x) port))
 (define (write-simple x port) (write x port))
+
+;;  write-shared labels every pair or vector the datum reaches more than
+;;  once, so that it reads back as shared as it was (#167); write labels
+;;  only what the datum runs back into, so that it stops.
+
+(define (write-shared x port)
+  (write-string (raven-write-shared-text x) port))
 (define (display x port) (write-string (raven-display-text x) port))
 
 ;;  A port that has run out answers with the end of file object, which

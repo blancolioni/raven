@@ -790,10 +790,14 @@ private
    --  because every caller but display wants a thing it can quote in a
    --  message about what went wrong.
 
+   --  Shared labels every pair or vector reached more than once, as
+   --  write-shared does (#167).
+
    function Display
      (This     : Raven_VM'Class;
       Value    : Object;
-      Readable : Boolean := True)
+      Readable : Boolean := True;
+      Shared   : Boolean := False)
       return Wide_Wide_String;
 
    function Equal
