@@ -806,7 +806,11 @@
       bindings
       (if (eq? (memq pattern literals) #f)
           (cons (list pattern depth form) bindings)
-          (if (sr-is? form (raven-syntax-name pattern)) bindings sr-none))))
+          ;;  A literal matches a name in the form that means what the
+          ;;  literal means (#179): the same name, bound to the same thing
+          ;;  or to nothing.  An else the caller has bound is not else.
+
+          (if (raven-same-binding? form pattern) bindings sr-none))))
 
 (define (sr-match-repeated sub tail form literals depth bindings)
   ((lambda (split)

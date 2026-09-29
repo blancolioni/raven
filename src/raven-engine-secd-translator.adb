@@ -1328,11 +1328,31 @@ package body Raven.Engine.SECD.Translator is
                               Target.Set_Expansion_Library
                                 (Macro_Expansion);
                               Target.Set_Hygienic (False);
+
+                              --  And where it is used, for syntax-rules
+                              --  to match its literals by (#179): where
+                              --  a name the caller passed in means what
+                              --  it means, which is what Use_Site will be
+                              --  while the expansion is read.
+
+                              Target.Clear_Use_Site;
+                              Target.Set_Use_Site
+                                (if Old_Expanding then Old_Use_Site
+                                 else Old_Home);
+                              for Frame of Env loop
+                                 for Position in Frame.Bindings.Iterate loop
+                                    Target.Add_Bound_Name
+                                      (Env_Maps.Key (Position));
+                                 end loop;
+                              end loop;
+
                               Target.Execute;
                               Hygienic := Target.Hygienic;
+                              Target.Clear_Use_Site;
                               Target.Set_Expansion_Library (Old_Expansion);
                            exception
                               when others =>
+                                 Target.Clear_Use_Site;
                                  Target.Set_Expansion_Library
                                    (Old_Expansion);
                                  raise;
