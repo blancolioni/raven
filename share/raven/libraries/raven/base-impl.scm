@@ -1051,6 +1051,7 @@
             (sr-repeat-each sub names (sr-rests names bindings) renames))))
 
 (define (sr-expand ellipsis literals rules args)
+  (raven-mark-hygienic)
   (set! sr-current-ellipsis
         (if (eq? (memq ellipsis literals) #f) ellipsis sr-none))
   (sr-expand-rules literals rules args))

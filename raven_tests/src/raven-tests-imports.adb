@@ -462,6 +462,17 @@ package body Raven.Tests.Imports is
       --  A record type defined in a library (#154).  What it offers
       --  works here, on records made here; what it keeps is not here.
 
+      --  A caller's forward reference through a library's macro is the
+      --  caller's (#178), though the library has a name of its own the
+      --  same: it went to the library, and stayed there after the
+      --  caller had defined it.
+
+      Evaluate (VM, "(import (probe forward))");
+      Evaluate (VM, "(define (forward-user) (call-it forward-helper))");
+      Evaluate (VM, "(define (forward-helper) 'caller)");
+      Test_Name (VM, "(forward-user)", "caller");
+      Test_Name (VM, "(forward-own)", "library");
+
       Evaluate (VM, "(import (probe records))");
       Test_Number (VM, "(pair-of-left (make-pair-of 3 4))", 3);
       Test_Number (VM, "(pair-of-sum (make-pair-of 3 4))", 7);

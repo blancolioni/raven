@@ -96,6 +96,7 @@ package body Raven.Engine.SECD is
          Trace       : Boolean := False;
          Dynamic     : Dynamic_Registers := [others => Objects.Nil];
          Expansion   : Raven.Target.Library_Id := Raven.Target.No_Library;
+         Hygienic    : Boolean := False;
       end record;
 
    type Instance_Reference is access all Instance'Class;
@@ -413,6 +414,13 @@ package body Raven.Engine.SECD is
      (This : Instance)
       return Raven.Target.Library_Id
    is (This.Expansion);
+
+   overriding function Hygienic (This : Instance) return Boolean
+   is (This.Hygienic);
+
+   overriding procedure Set_Hygienic
+     (This  : in out Instance;
+      Value : Boolean);
 
    overriding procedure Set_Expansion_Library
      (This    : in out Instance;
@@ -942,6 +950,7 @@ package body Raven.Engine.SECD is
          Rs          => [others => Raven.Objects.Nil],
          Dynamic     => [others => Raven.Objects.Nil],
          Expansion   => Raven.Target.No_Library,
+         Hygienic    => False,
          --  Named explicitly, because Symbols is an anonymous access
          --  parameter and Syms is a named access type.  Ada wants the
          --  conversion written; the GNAT this was developed against
@@ -2104,6 +2113,18 @@ package body Raven.Engine.SECD is
    begin
       This.Libraries.Set_Export_List (Library);
    end Set_Export_List;
+
+   ------------------
+   -- Set_Hygienic --
+   ------------------
+
+   overriding procedure Set_Hygienic
+     (This  : in out Instance;
+      Value : Boolean)
+   is
+   begin
+      This.Hygienic := Value;
+   end Set_Hygienic;
 
    --------------------
    -- Set_Incomplete --

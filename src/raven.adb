@@ -70,6 +70,12 @@ package body Raven is
    procedure Make_Alias (VM : Raven_VM);
    procedure Syntax_Name (VM : Raven_VM);
 
+   --  raven-mark-hygienic is what syntax-rules says as it expands
+   --  (#178): that the names in what it makes are aliases or the
+   --  caller's.
+
+   procedure Mark_Hygienic (VM : Raven_VM);
+
    procedure Check_Kind
      (This     : Raven_VM;
       Index    : Slot_Index;
@@ -655,6 +661,15 @@ package body Raven is
       end if;
    end Make_Alias;
 
+   -------------------
+   -- Mark_Hygienic --
+   -------------------
+
+   procedure Mark_Hygienic (VM : Raven_VM) is
+   begin
+      VM.Data.Target.Set_Hygienic (True);
+   end Mark_Hygienic;
+
    --------------------
    -- New_Bytevector --
    --------------------
@@ -787,6 +802,8 @@ package body Raven is
         ("raven-make-alias", Make_Alias'Access, 1);
       This.Bind_Foreign_Function
         ("raven-syntax-name", Syntax_Name'Access, 1);
+      This.Bind_Foreign_Function
+        ("raven-mark-hygienic", Mark_Hygienic'Access, 0);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
