@@ -2332,6 +2332,23 @@
 #!no-fold-case
 (test "#!no-fold-case reads names as written again" #f (eq? 'ABC 'abc))
 
+;;  And a name is its name as written wherever it is bound, not only
+;;  as a symbol.  The environments, the translator's scopes and the
+;;  macro table still folded case, so Foo and foo were one variable, and
+;;  binding both in one let was refused.
+
+(define Case-Probe 1)
+(define case-probe 2)
+(test "two definitions that differ by case are two" '(1 2)
+      (list Case-Probe case-probe))
+(test "and two let bindings" '(1 2) (let ((Foo 1) (foo 2)) (list Foo foo)))
+(test "and two parameters" '(1 2) ((lambda (Bar bar) (list Bar bar)) 1 2))
+
+(define-syntax Pair-Twice (syntax-rules () ((_ x) (list x x))))
+(define (pair-twice x) 'procedure)
+(test "a macro and a procedure that differ by case are two" '((1 1) procedure)
+      (list (Pair-Twice 1) (pair-twice 1)))
+
 ;;  A generated symbol has a name so that it can be shown, and is not
 ;;  the symbol that name reads as.  string->symbol is what finally
 ;;  lets that be asked.

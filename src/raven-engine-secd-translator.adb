@@ -3,8 +3,7 @@ with Ada.Containers.Ordered_Sets;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
 with Ada.Finalization;
-with Ada.Strings.Equal_Case_Insensitive;
-with Ada.Strings.Hash_Case_Insensitive;
+with Ada.Strings.Hash;
 with Ada.Text_IO;
 with Raven.Instructions;
 with Raven.Objects;
@@ -96,12 +95,15 @@ package body Raven.Engine.SECD.Translator is
          end case;
       end record;
 
+   --  Names are compared as they are written, as symbols are (#160):
+   --  this still folded case, so Foo and foo were one name here.
+
    package Env_Maps is
      new Ada.Containers.Indefinite_Hashed_Maps
      (Key_Type        => String,
       Element_Type    => Env_Entry,
-      Hash            => Ada.Strings.Hash_Case_Insensitive,
-      Equivalent_Keys => Ada.Strings.Equal_Case_Insensitive);
+      Hash            => Ada.Strings.Hash,
+      Equivalent_Keys => "=");
 
    --  A run time frame is one the machine will build when it applies a
    --  closure, so it counts towards the frame index LD needs.  A scope

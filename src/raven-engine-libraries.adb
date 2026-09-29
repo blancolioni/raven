@@ -243,9 +243,7 @@ package body Raven.Engine.Libraries is
    is
    begin
       for Id in 1 .. This.Table.Last_Index loop
-         if Ada.Strings.Equal_Case_Insensitive
-           (To_String (This.Table (Id).Name), Name)
-         then
+         if To_String (This.Table (Id).Name) = Name then
             return Id;
          end if;
       end loop;
