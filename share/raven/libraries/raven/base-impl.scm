@@ -871,10 +871,8 @@
 ;;  alias is the template's, so it is the template's name all the same.
 ;;
 ;;  A name inside a quote or a quasiquote is data, and the translator
-;;  reads an alias there as the name it stands for.  A name a template
-;;  binds is renamed inside a quasiquote as though it were code, where
-;;  hygiene would hand back the name as written; a quote is left as it
-;;  was written.
+;;  reads an alias there as the name it stands for, whether the template
+;;  bound the name or only wrote it.  A quote is left as it was written.
 
 (define (sr-names x)
   (if (symbol? x)
@@ -927,10 +925,15 @@
           (cons (car names) (sr-introduced (cdr names) bindings))
           (sr-introduced (cdr names) bindings))))
 
+;;  A name a template binds is renamed to an alias of it (#182), which is
+;;  as fresh as a generated name -- nothing the caller writes is it --
+;;  and which the translator reads as the name it stands for where it
+;;  is data: inside a quasiquote, (tmp ,tmp) gives back tmp and the value.
+
 (define (sr-fresh names)
   (if (null? names)
       '()
-      (cons (cons (car names) (gensym (car names)))
+      (cons (cons (car names) (raven-make-alias (car names)))
             (sr-fresh (cdr names)))))
 
 (define (sr-renames template bindings)
