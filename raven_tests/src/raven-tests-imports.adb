@@ -459,9 +459,6 @@ package body Raven.Tests.Imports is
       Test_Number (VM, "(hiding-prefixed (vector 5))", 5);
       Test_Number (VM, "(hiding-length (vector 1 2 3))", 3);
 
-      --  A record type defined in a library (#154).  What it offers
-      --  works here, on records made here; what it keeps is not here.
-
       --  A caller's forward reference through a library's macro is the
       --  caller's (#178), though the library has a name of its own the
       --  same: it went to the library, and stayed there after the
@@ -472,6 +469,20 @@ package body Raven.Tests.Imports is
       Evaluate (VM, "(define (forward-helper) 'caller)");
       Test_Name (VM, "(forward-user)", "caller");
       Test_Name (VM, "(forward-own)", "library");
+
+      --  A macro a library's macro writes here means by its template's
+      --  names what the library meant (#180), though the name is one the
+      --  library keeps and this library has one of its own.  Its rules
+      --  were quoted, which read every alias in them as a plain name.
+
+      Evaluate (VM, "(import (probe maker))");
+      Evaluate (VM, "(define (maker-helper) 'host)");
+      Evaluate (VM, "(def-maker call-maker)");
+      Test_Name (VM, "(call-maker)", "maker");
+      Test_Name (VM, "(maker-helper)", "host");
+
+      --  A record type defined in a library (#154).  What it offers
+      --  works here, on records made here; what it keeps is not here.
 
       Evaluate (VM, "(import (probe records))");
       Test_Number (VM, "(pair-of-left (make-pair-of 3 4))", 3);
