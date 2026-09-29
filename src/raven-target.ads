@@ -476,6 +476,31 @@ private package Raven.Target is
 
    function Hygienic (This : Abstraction) return Boolean is abstract;
 
+   --  Where the macro whose body is running was used (#179): the library,
+   --  and every name bound there in a scope of the form being read.
+   --  syntax-rules asks it whether a name in the form means what a
+   --  literal of its rules means, which is what matching a literal is.
+
+   procedure Clear_Use_Site (This : in out Abstraction) is abstract;
+
+   procedure Set_Use_Site
+     (This    : in out Abstraction;
+      Library : Real_Library_Id)
+   is abstract;
+
+   procedure Add_Bound_Name
+     (This : in out Abstraction;
+      Name : String)
+   is abstract;
+
+   function Use_Site (This : Abstraction) return Library_Id is abstract;
+
+   function Is_Bound_Here
+     (This : Abstraction;
+      Name : String)
+      return Boolean
+   is abstract;
+
    function Append_Lists
      (This  : in out Abstraction;
       List1 : Object;

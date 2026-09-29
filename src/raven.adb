@@ -75,6 +75,12 @@ package body Raven is
    --  caller's.
 
    procedure Mark_Hygienic (VM : Raven_VM);
+   --  raven-same-binding? is whether a name in the form a macro was used
+   --  on means what a literal of its rules means (#179): the same name,
+   --  and bound to the same thing or to nothing where each was written.
+   --  A name bound in a scope of the form is not a literal of the macro.
+
+   procedure Same_Binding (VM : Raven_VM);
 
    procedure Check_Kind
      (This     : Raven_VM;
@@ -804,6 +810,8 @@ package body Raven is
         ("raven-syntax-name", Syntax_Name'Access, 1);
       This.Bind_Foreign_Function
         ("raven-mark-hygienic", Mark_Hygienic'Access, 0);
+      This.Bind_Foreign_Function
+        ("raven-same-binding?", Same_Binding'Access, 2);
 
       Raven.Loader.Import
         (This.Data.Target, "(scheme base)",
@@ -922,9 +930,114 @@ package body Raven is
       VM.Set_Slot (1, VM.Data.Target.Run_Depth);
    end Run_Depth_Of;
 
-   -------------
+   ------------------
+   -- Same_Binding --
+   ------------------
+
+   procedure Same_Binding (VM : Raven_VM) is
+      use type Raven.Target.Library_Id;
+
+      Target  : constant Raven.Target.Reference := VM.Data.Target;
+      Form    : constant Object := VM.Get_Slot (1);
+      Literal : constant Object := VM.Get_Slot (2);
+
+      --  The name an alias stands for, and the library it stands in,
+      --  or the name and the given library for one that is not.
+
+      function Written (Sym : Object) return String;
+      function Where
+        (Sym     : Object;
+         Default : Raven.Target.Library_Id)
+         return Raven.Target.Library_Id;
+
+      -----------
+      -- Where --
+      -----------
+
+      function Where
+        (Sym     : Object;
+         Default : Raven.Target.Library_Id)
+         return Raven.Target.Library_Id
+      is
+         Id      : Raven.Objects.Symbol_Id := Raven.Objects.To_Symbol (Sym);
+         Library : Raven.Target.Library_Id := Default;
+      begin
+         while Target.Alias_Library (Id) /= 0 loop
+            Library := Raven.Target.Library_Id (Target.Alias_Library (Id));
+            Id := Target.Alias_Original (Id);
+         end loop;
+         return Library;
+      end Where;
+
+      -------------
+      -- Written --
+      -------------
+
+      function Written (Sym : Object) return String is
+         Id : Raven.Objects.Symbol_Id := Raven.Objects.To_Symbol (Sym);
+      begin
+         while Target.Alias_Library (Id) /= 0 loop
+            Id := Target.Alias_Original (Id);
+         end loop;
+         return Target.To_String (Id);
+      end Written;
+
+   begin
+      if not Raven.Objects.Is_Symbol (Form)
+        or else not Raven.Objects.Is_Symbol (Literal)
+        or else Written (Form) /= Written (Literal)
+      then
+         VM.Set_Slot (1, False);
+         return;
+      end if;
+
+      --  Outside an expansion there is nothing to compare but the names.
+
+      if Target.Use_Site = Raven.Target.No_Library
+        or else Target.Expansion_Library = Raven.Target.No_Library
+      then
+         VM.Set_Slot (1, True);
+         return;
+      end if;
+
+      --  A binding in a scope of the form is not what the literal means.
+
+      if Target.Is_Bound_Here
+        (Target.To_String (Raven.Objects.To_Symbol (Form)))
+      then
+         VM.Set_Slot (1, False);
+         return;
+      end if;
+
+      declare
+         Name          : constant String := Written (Form);
+         Form_Library  : constant Raven.Target.Real_Library_Id :=
+                           Where (Form, Target.Use_Site);
+         Macro_Library : constant Raven.Target.Real_Library_Id :=
+                           Where (Literal, Target.Expansion_Library);
+         Form_Bound    : constant Boolean :=
+                           Target.Binds (Form_Library, Name);
+         Macro_Bound   : constant Boolean :=
+                           Target.Binds (Macro_Library, Name);
+      begin
+         if Form_Bound /= Macro_Bound then
+            VM.Set_Slot (1, False);
+         elsif not Form_Bound then
+            VM.Set_Slot (1, True);
+         else
+            VM.Set_Slot
+              (1,
+               Target.Resolve (Form_Library, Name)
+                 = Target.Resolve (Macro_Library, Name)
+               and then Target.Resolved_Name (Form_Library, Name)
+                          = Target.Resolved_Name (Macro_Library, Name));
+         end if;
+      end;
+   end Same_Binding;
+
+   ---------------
    -- Set_Car --
-   -------------
+   ---------------
 
    procedure Set_Car (This  : Raven_VM'Class;
                       Pair  : Object;

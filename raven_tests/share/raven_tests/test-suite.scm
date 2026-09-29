@@ -1587,6 +1587,17 @@
         (let-syntax ((get-n (syntax-rules () ((_) n))))
           (get-n))))
 
+;;  A literal matches a name that means what the literal means where the
+;;  macro was written (#179): an else the caller has bound is a variable,
+;;  and the clause it heads is a test of it.
+
+(test "a literal the caller has bound is not the literal" #f
+      (let ((else #f)) (cond (#f 'no) (else 'taken))))
+(test "nor is => the caller has bound" 'ok
+      (let ((=> #f)) (cond (#t => 'ok))))
+(test "and an else no one has bound still is" 'taken
+      (cond (#f 'no) (else 'taken)))
+
 (define-syntax call-later (syntax-rules () ((_) (defined-after-the-macro))))
 (define (defined-after-the-macro) 'later)
 (test "a template's name defined after the macro" 'later (call-later))

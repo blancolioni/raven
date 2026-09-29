@@ -1,3 +1,4 @@
+with Ada.Containers.Indefinite_Ordered_Sets;
 with Ada.Containers.Indefinite_Vectors;
 with Ada.Containers.Vectors;
 with Ada.Exceptions;
@@ -12,6 +13,9 @@ with Raven.Strings;
 with Raven.Translator;
 
 package body Raven.Engine.SECD is
+
+   package Name_Sets is
+     new Ada.Containers.Indefinite_Ordered_Sets (String);
 
    use Raven.Instructions;
 
@@ -97,6 +101,8 @@ package body Raven.Engine.SECD is
          Dynamic     : Dynamic_Registers := [others => Objects.Nil];
          Expansion   : Raven.Target.Library_Id := Raven.Target.No_Library;
          Hygienic    : Boolean := False;
+         Use_Site    : Raven.Target.Library_Id := Raven.Target.No_Library;
+         Bound_Here  : Name_Sets.Set;
       end record;
 
    type Instance_Reference is access all Instance'Class;
@@ -421,6 +427,26 @@ package body Raven.Engine.SECD is
    overriding procedure Set_Hygienic
      (This  : in out Instance;
       Value : Boolean);
+   overriding procedure Clear_Use_Site (This : in out Instance);
+
+   overriding procedure Set_Use_Site
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id);
+
+   overriding procedure Add_Bound_Name
+     (This : in out Instance;
+      Name : String);
+
+   overriding function Use_Site
+     (This : Instance)
+      return Raven.Target.Library_Id
+   is (This.Use_Site);
+
+   overriding function Is_Bound_Here
+     (This : Instance;
+      Name : String)
+      return Boolean
+   is (This.Bound_Here.Contains (Name));
 
    overriding procedure Set_Expansion_Library
      (This    : in out Instance;
@@ -586,6 +612,18 @@ package body Raven.Engine.SECD is
    begin
       This.Abandoned := This.Abandoned + 1;
    end Abandon_Form;
+
+   --------------------
+   -- Add_Bound_Name --
+   --------------------
+
+   overriding procedure Add_Bound_Name
+     (This : in out Instance;
+      Name : String)
+   is
+   begin
+      This.Bound_Here.Include (Name);
+   end Add_Bound_Name;
 
    ----------------
    -- Add_Export --
@@ -908,6 +946,16 @@ package body Raven.Engine.SECD is
       This.Rs := [others => Nil];
    end Capture_Continuation;
 
+   --------------------
+   -- Clear_Use_Site --
+   --------------------
+
+   overriding procedure Clear_Use_Site (This : in out Instance) is
+   begin
+      This.Use_Site := Raven.Target.No_Library;
+      This.Bound_Here.Clear;
+   end Clear_Use_Site;
+
    ----------
    -- Cons --
    ----------
@@ -951,6 +999,8 @@ package body Raven.Engine.SECD is
          Dynamic     => [others => Raven.Objects.Nil],
          Expansion   => Raven.Target.No_Library,
          Hygienic    => False,
+         Use_Site    => Raven.Target.No_Library,
+         Bound_Here  => Name_Sets.Empty_Set,
          --  Named explicitly, because Symbols is an anonymous access
          --  parameter and Syms is a named access type.  Ada wants the
          --  conversion written; the GNAT this was developed against
@@ -2154,6 +2204,18 @@ package body Raven.Engine.SECD is
          This.Trace := Boolean'Value (Value);
       end if;
    end Set_Parameter;
+
+   ------------------
+   -- Set_Use_Site --
+   ------------------
+
+   overriding procedure Set_Use_Site
+     (This    : in out Instance;
+      Library : Raven.Target.Real_Library_Id)
+   is
+   begin
+      This.Use_Site := Library;
+   end Set_Use_Site;
 
    -----------------
    -- Store_Macro --

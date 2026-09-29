@@ -481,6 +481,13 @@ package body Raven.Tests.Imports is
       Test_Name (VM, "(call-maker)", "maker");
       Test_Name (VM, "(maker-helper)", "host");
 
+      --  A literal of a macro's rules matches a name that means what it
+      --  means where the macro was written (#179), so an else a library
+      --  defines is not cond's else there.
+
+      Evaluate (VM, "(import (probe elsewhere))");
+      Test_Name (VM, "elsewhere-result", "#f");
+
       --  A record type defined in a library (#154).  What it offers
       --  works here, on records made here; what it keeps is not here.
 
