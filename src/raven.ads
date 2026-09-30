@@ -32,15 +32,11 @@ package Raven is
    --  Every operation is abstract rather than a default that does
    --  nothing, because a host that forgets one should be told so
    --  where it is compiled and not by output quietly going nowhere.
-   --  Write_Text_Handler and Read_File_Handler, which New_VM took and
-   --  nothing ever called, are what this replaces.
    --
-   --  Files are not here.  Everything a VM reads today is either the
-   --  library it ships with, found on a path the host sets, or a path
-   --  the host itself handed to Import_Library, so there is nothing a
-   --  program can read that the host did not already choose.  File
-   --  ports are what change that, and are where this grows a way to
-   --  say no.
+   --  There are no files here.  What a VM reads is the library it ships
+   --  with, found on a path the host sets, and what the host hands to
+   --  Import_Library, so a program reads nothing the host did not
+   --  choose.  File ports, and a host's way of refusing them, are #201.
 
    type IO_Interface is interface;
    type IO_Reference is access all IO_Interface'Class;
@@ -73,11 +69,9 @@ package Raven is
    --  to itself: the default gives it 32,768, which is 512 KB of heap
    --  all told at eight bytes a cell.
    --
-   --  It wants to be said rather than assumed.  A host with less
-   --  memory than that cannot have raven at all otherwise, and one
-   --  with a great deal more cannot ask for it.  The standard library
-   --  is about 6,500 live cells once it is loaded, which is the floor
-   --  under anything useful.
+   --  A host says how large a heap it can give, less than the default
+   --  or more.  The standard library is loaded into it before anything
+   --  else and stays live, so it is the floor under anything useful.
 
    Default_Heap_Size : constant := 65_536;
 
@@ -105,11 +99,10 @@ package Raven is
       return User_Data_Reference;
 
    --  How many forms this VM has abandoned: read, and then given up
-   --  on part way through, because the form named something undefined
-   --  or the translator refused it.  One bad form does not stop a
-   --  file, which is right, but nothing downstream could tell it had
-   --  happened -- a suite whose tests never ran looked exactly like
-   --  one where every test passed.
+   --  on part way through, because the form named something undefined,
+   --  the translator refused it, or the file it was in stopped being
+   --  read.  A bad form does not stop the file it is in, and this is how
+   --  a caller finds out that one was given up on.
    --
    --  It only ever goes up, so a caller that wants to know whether
    --  some particular thing was read whole reads this before and
@@ -117,10 +110,9 @@ package Raven is
 
    function Forms_Abandoned (This : Raven_VM) return Natural;
 
-   --  A whole line of complaint, where this VM's host said errors go.
-   --  The loader, the translator and the lexer all wrote to the
-   --  terminal directly, so a host that had been given everything a
-   --  program wrote still saw these go past it.
+   --  A whole line of complaint, written where this VM's host said
+   --  errors go, which is where the loader, the translator and the
+   --  reader write theirs.
 
    procedure Write_Error
      (This    : Raven_VM'Class;
@@ -130,10 +122,9 @@ package Raven is
 
    function Is_Null (This : Handle) return Boolean;
 
-   --  Giving a handle back.  Until this, the list they live in was
-   --  only ever appended to, so every handle kept what it named for
-   --  the rest of the session and every collection walked all of
-   --  them.
+   --  Giving a handle back.  A handle keeps what it names alive, and
+   --  every collection walks every handle there is, until it is
+   --  released.
    --
    --  The one released is left null, which Is_Null answers for.  A
    --  copy of it taken beforehand is not, and using one of those is
@@ -155,18 +146,18 @@ package Raven is
 
    --  What is in a slot, so that a host can find out before it asks.
    --  Every one of the getters below but the boolean one is wrong to
-   --  call on the wrong kind of value, and there used to be no way of
-   --  telling which was the right one: raven's own primitives ask
-   --  Raven.Objects directly, which a host cannot reach.
+   --  call on the wrong kind of value, and this says which is right.
    --
-   --  A string is a value of the host's rather than of the machine's,
+   --  A string is a foreign value rather than one of the machine's,
    --  and says so, because a host that is handed one almost always
-   --  wants its characters.  Any other one says Foreign_Kind and
-   --  wants To_Foreign_Value.
+   --  wants its characters.  Any other foreign value says Foreign_Kind
+   --  and wants To_Foreign_Value.
    --
-   --  Other_Kind is for what a program cannot hold and a host has no
-   --  business with -- an instruction, an undefined -- and is here so
-   --  that this is a total answer rather than an error of its own.
+   --  Integer_Kind is a fixnum and Float_Kind an immediate float.
+   --  Other_Kind is everything else: a bignum, a rational or a boxed
+   --  double; a record, several values or a continuation; and what a
+   --  program cannot hold, such as an instruction.  It is here so that
+   --  this is a total answer rather than an error of its own.
 
    type Value_Kind is
      (Nil_Kind,
@@ -191,12 +182,8 @@ package Raven is
 
    --  What the value in a slot would be written as, whatever kind it
    --  is.  Readable says which of the two renderings is wanted, the
-   --  way write and display differ.
-   --
-   --  Get_Slot returning a String used to do this for anything that
-   --  was not a string, so a host asking for a string and given a
-   --  list got a rendering of the list and no way to know.  It says
-   --  so now, and this is where the old answer went.
+   --  way write and display differ.  Get_Slot returning a String is
+   --  for a string, and refuses anything else.
 
    function Show_Slot
      (This     : Raven_VM;
@@ -241,10 +228,8 @@ package Raven is
       Index : Slot_Index;
       Value : Integer);
 
-   --  A string, which is what Get_Slot of one answers with.  This
-   --  used to make a symbol of the name, so the two were not each
-   --  other's opposite and there was no way at all to answer with a
-   --  string.  Set_Slot_Symbol is where the symbol went.
+   --  A string, which is what Get_Slot of one answers with.
+   --  Set_Slot_Symbol makes a symbol of a name.
 
    procedure Set_Slot
      (This  : Raven_VM;
@@ -321,9 +306,8 @@ package Raven is
       Index : Slot_Index;
       Name  : String);
 
-   --  Taking a pair apart.  Slot_Cons could build one and nothing
-   --  could read one, so a host handed a list could do nothing with
-   --  it whatever.  Into may be Index, which is how a list is walked.
+   --  Taking a pair apart, and changing one.  Into may be Index, which
+   --  is how a list is walked.
 
    procedure Slot_Car
      (This  : Raven_VM;
@@ -384,8 +368,8 @@ package Raven is
    --  whatever the procedure did with the slots while it ran.
    --
    --  It may collect, which moves every object.  One the host holds in
-   --  an Ada variable across the call is left naming where the object
-   --  used to be; hold it in a slot or a handle instead.
+   --  an Ada variable across the call is left naming a place the object
+   --  has moved from; hold it in a slot or a handle instead.
    --
    --  What goes wrong inside it is raised out of it, as it would be out
    --  of Evaluate, and the machine is put back first: a foreign function
@@ -423,9 +407,9 @@ package Raven is
       At_Index : Natural;
       Value    : Natural);
 
-   --  equal?, which walks what it is given.  A host had the equality
-   --  Ada gives a private type, which is eq?: two lists of the same
-   --  numbers were not equal by it.
+   --  equal?, which walks what it is given.  The = that Ada gives the
+   --  private type Object is eq?, by which two lists of the same
+   --  numbers are two lists.
 
    function Slot_Equal
      (This         : Raven_VM;
@@ -494,8 +478,8 @@ package Raven is
    --  Whether two values of the same kind are equal?.  Equal_Object is
    --  equal? on the objects they hold, so a value holding a pair is equal
    --  to one holding an equal pair rather than only to one holding the
-   --  same pair; equal? walks a structure with a foreign value in it all
-   --  the way down, where it used to stop there.
+   --  same pair, and equal? walks a structure with a foreign value in it
+   --  all the way down.
 
    function Equal
      (This         : Foreign_Value_Instance;
@@ -504,11 +488,8 @@ package Raven is
       return Boolean
       is abstract;
 
-   --  Making one of these values and getting it back.  Without them a
-   --  host could derive from Foreign_Value_Instance and override
-   --  every one of its operations and had no way to make one or to
-   --  reach one it had been handed: the type was public and the two
-   --  things to do with it were not.
+   --  Making an object of a foreign value, and getting the value back
+   --  from one.  To_Foreign_Value answers with a copy.
 
    function Create_Foreign_Value
      (This  : Raven_VM'Class;
@@ -530,9 +511,9 @@ package Raven is
       Process : not null access
         procedure (Item : Foreign_Value_Instance'Class));
 
-   --  Changing a value where it is (#158): Update changes what it
-   --  holds, under the same rule as Query, and Replace puts another
-   --  value of the same kind in its place.  Every object that is the
+   --  Changing a value where it is: Update changes what it holds,
+   --  under the same rule as Query, and Replace puts another value of
+   --  the same kind in its place.  Every object that is the
    --  value sees the change, because they are all the one value.
 
    procedure Update_Foreign_Value
@@ -640,9 +621,8 @@ private
                  Pair : Object)
                  return Object;
 
-   --  Writing a cell, which is what the machine has always done for
-   --  RAP and for set! on an argument.  Nothing is asked of what is
-   --  replaced.
+   --  Writing a cell, as RAP and set! on an argument do.  Nothing is
+   --  asked of what is replaced.
 
    procedure Set_Car (This  : Raven_VM'Class;
                       Pair  : Object;
@@ -672,7 +652,7 @@ private
       return Object;
 
    --  What the host reads, a character at a time, and whether there
-   --  was one.  Nothing could read at all before ports.
+   --  was one.
 
    procedure Read_Character
      (This      : Raven_VM'Class;
@@ -788,10 +768,9 @@ private
    --  Readable says which of the two is wanted: what the reader could
    --  read back, or what a person reads.  It is the first by default,
    --  because every caller but display wants a thing it can quote in a
-   --  message about what went wrong.
-
-   --  Shared labels every pair or vector reached more than once, as
-   --  write-shared does (#167).
+   --  message about what went wrong.  A pair or vector the value runs
+   --  back into is written with a datum label either way; Shared labels
+   --  every one reached more than once, as write-shared does.
 
    function Display
      (This     : Raven_VM'Class;
