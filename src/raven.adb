@@ -42,8 +42,8 @@ package body Raven is
    procedure Features_Of (VM : Raven_VM);
    procedure Holds_Requirement (VM : Raven_VM);
 
-   --  What the library's exceptions and dynamic-wind are written on
-   --  (#46, #47): the machine's dynamic registers, read and written by
+   --  What the library's exceptions and dynamic-wind are written on:
+   --  the machine's dynamic registers, read and written by
    --  their position in Raven.Target.Dynamic_Register; how many runs deep
    --  the machine is; and the way out for what was raised with no handler
    --  in this run to catch it, which keeps the object for a run further
@@ -54,14 +54,14 @@ package body Raven is
    procedure Set_Dynamic (VM : Raven_VM);
    procedure Uncaught (VM : Raven_VM);
 
-   --  syntax-error (#156): the form being expanded is refused, with the
+   --  syntax-error: the form being expanded is refused, with the
    --  text in slot 1, as the translator refuses a form it cannot read.
    --  It is raised while the form is expanded, before anything of it
    --  has run, so it reaches whoever asked for the form to be read.
 
    procedure Refuse_Syntax (VM : Raven_VM);
 
-   --  Aliases (#24).  raven-make-alias is what syntax-rules names a free
+   --  Aliases.  raven-make-alias is what syntax-rules names a free
    --  name of its template with: an alias of it in the library whose
    --  macro is being expanded, or the name itself outside an expansion.
    --  raven-syntax-name is the name an alias stands for, however many
@@ -70,13 +70,13 @@ package body Raven is
    procedure Make_Alias (VM : Raven_VM);
    procedure Syntax_Name (VM : Raven_VM);
 
-   --  raven-mark-hygienic is what syntax-rules says as it expands
-   --  (#178): that the names in what it makes are aliases or the
-   --  caller's.
+   --  raven-mark-hygienic is what syntax-rules says as it expands: that
+   --  the names in what it makes are aliases or the caller's.
 
    procedure Mark_Hygienic (VM : Raven_VM);
+
    --  raven-same-binding? is whether a name in the form a macro was used
-   --  on means what a literal of its rules means (#179): the same name,
+   --  on means what a literal of its rules means: the same name,
    --  and bound to the same thing or to nothing where each was written.
    --  A name bound in a scope of the form is not a literal of the macro.
 
@@ -197,15 +197,15 @@ package body Raven is
 
       --  The values go first, while everything they might reach is
       --  still standing.  Free is how a foreign value gives back what
-      --  it stood for, and a collection is what usually calls it --
-      --  there being none at shutdown is why an open port used to
-      --  stay open for the life of the process.
+      --  it stood for, and a collection is what usually calls it; this
+      --  calls it for every value still live, so an open port is
+      --  closed.
 
       This.Data.Memory.Close;
 
       --  Then what the engine made, then the engine, then the heap.
       --  The heap is the large one: Heap_Size cells, half a megabyte
-      --  at the default, and it was never given back.
+      --  at the default.
 
       This.Data.Evaluator.Close;
       Free (This.Data.Evaluator);
@@ -486,10 +486,7 @@ package body Raven is
       return String
    is
    begin
-      --  This used to answer with a rendering of whatever was there,
-      --  so a host that asked for a string and was given a list got
-      --  something that looked like an answer.  Show_Slot is where
-      --  that went, under a name that says what it does.
+      --  Only a string: Show_Slot is what renders anything else.
 
       if not Raven.Strings.Is_String (This, Index) then
          raise Constraint_Error with
@@ -544,10 +541,6 @@ package body Raven is
       --  machine runs again.  A handle on what is in one is how a
       --  host keeps it: the handle is a root, so what it names stays
       --  where it can be found and is moved with everything else.
-      --
-      --  This used to answer with nothing at all, so the only handle
-      --  a host could get was on a name it looked up -- which meant a
-      --  foreign value could not keep a value it was given.
 
       return Handle'
         (Position => This.Data.Evaluator.Hold (This.Get_Slot (Index)));
@@ -1168,10 +1161,7 @@ package body Raven is
       Value : String)
    is
    begin
-      --  A string, which is what Get_Slot of one answers with.  This
-      --  made a symbol of the name, so the two were not each other's
-      --  opposite and a foreign function had no way at all to answer
-      --  with a string.
+      --  A string, which is what Get_Slot of one answers with.
 
       Raven.Strings.Write_String (This, Index, Value);
    end Set_Slot;
@@ -1384,7 +1374,7 @@ package body Raven is
       Check_Kind (This, Index, Bytevector_Kind, "a bytevector");
 
       --  What tells a bytevector from a vector is what may go into
-      --  one, and this is a way in that did not exist before.
+      --  one.
 
       if Value not in 0 .. 255 then
          raise Constraint_Error with
@@ -1616,9 +1606,8 @@ package body Raven is
       Errors : Boolean)
    is
    begin
-      --  Which of the two the host is told apart by.  Before it had
-      --  somewhere else to put a character, an error went where
-      --  everything else went and this flag was thrown away.
+      --  Errors go where the host said errors go, and everything else
+      --  where it said output goes.
 
       if Errors then
          This.Data.IO.Put_Error (Ch);
