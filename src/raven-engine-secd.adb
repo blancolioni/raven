@@ -878,9 +878,6 @@ package body Raven.Engine.SECD is
       end if;
 
       This.Env.Define (Name, To_Object (Id));
-      Ada.Text_IO.Put_Line
-        ("foreign function '" & Name & "' bound to"
-         & Id'Image);
    end Bind_Foreign_Function;
 
    --------------------------
